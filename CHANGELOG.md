@@ -4,6 +4,14 @@
 
 ### Current Status (2026-11-07)
 
+- Current operational documentation is aligned with native Responses/v19,
+  typed reports, current-phase history and identity-based human admission.
+  Obsolete diagnostic setup is retained through historical evidence/Git, not
+  presented as a second runtime configuration. Documentation does not activate
+  skills, change model requests or close the outstanding PM acceptance gates.
+  Verification:15 documentation tests, changed-file local links and independent
+  source/document review passed. Diagnostic nested-field truncation and platform-
+  only diagnostic CLI access are documented as actual limitations, not guarantees.
 - Basef8e375c0 separates shared Workflow/Tracker/evidence skills from professional
   PM guidance. The complete Analyst-only procedure moved verbatim out of the
   requirements method shared with PM into the existing Analyst role. Phase order

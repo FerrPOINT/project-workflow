@@ -13,6 +13,12 @@
 
 ## Исторический Analyst Source Scope: 4 November 2026
 
+Все последующие датированные разделы сохраняют результаты и ограничения своих
+source-версий. Слова current/installed внутри них относятся к тому checkpoint,
+не к текущему runtime. Действующие [CLI/API](configured-cli-v1.md),
+[границы инструкций и Workflow](architecture.md#ответственность) и
+[установка/приёмка](ADVISOR_DIAGNOSIS_20261101.md) описаны отдельно.
+
 Analyst получает revision/hash требований и закреплённые координаты источника
 из Tracker; UUID репозитория разрешается через `cicd-cli repository get --id`,
 документы читаются на точном commit. Исследование не требует Forge delivery
@@ -30,7 +36,7 @@ Analyst, сохраняя IDs, задачи и историю. Прочие пр
 переход с 0027 на SQLite и PostgreSQL, повтор и сохранение истории. Проверка
 новых инструкций настоящим Hermes — отдельный этап от этих source/DB checks.
 
-## Configured CLI Content Review: 27 October 2026
+## Historical Configured CLI Content Review: 27 October 2026
 
 Source7d0576d corrects retained652a preparation wording, checks and evidence:
 complete, consistent briefs do not require invented questions or alternatives.
@@ -48,7 +54,7 @@ rebuild-free arbitrary Workflow edits. SOUL/skills activation is a separate Flee
 configuration lifecycle. Earlier native-file instructions below are historical
 and must not become prerequisites of configured CLI.
 
-## Current Content Qualification: 16 October 2026
+## Historical Content Qualification: 16 October 2026
 
 Текущий исходник dfb содержит инструкции typed backend image build, current
 catalog86e6/manifest652a и актуальные producer fixtures. Focused133 и producer31
