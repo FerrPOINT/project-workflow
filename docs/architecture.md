@@ -68,7 +68,7 @@ Workflow ведёт агента по сохранённым фазам: воз�
 
 1. Общие для всех агентов: работа через Workflow CLI, фактические доказательства,
    readback неизвестного исхода и правила повторов. Канонический пакет принадлежит
-   [Base agent-skills](https://github.com/FerrPOINT/services-base/blob/fc678c3c807a53316df0bfde3842f94b4dd4aece/agent-skills/README.md#инструкции-и-workflow).
+   [Base agent-skills](https://github.com/FerrPOINT/services-base/blob/f8e375c08ad9ecbc3da1adcf227f2ff827c7a65d/agent-skills/README.md#инструкции-и-workflow).
 2. Специфичные для профессии: её обязанности, инструкции и необходимые навыки.
 3. Независимо настроенный Workflow: порядок фаз, инструкции текущей фазы,
    checks и evidence. Этот маршрут не зашивается в роль или skill.
@@ -76,6 +76,12 @@ Workflow ведёт агента по сохранённым фазам: воз�
 Skills объясняют, как пользоваться инструментами, но не определяют бизнес-маршрут.
 Права, назначения и переходы проверяет сервер; инструкции и skills не дают
 полномочий. Критерии для Advisor задаёт текущий Workflow, не роль или skill.
+
+Общая основа Base — project-workflow-executor, tracker-operator и
+immutable-evidence-reporting. PM role описывает бизнес-уточнения, качество документа
+и согласие владельца; requirements-analysis — предметный метод PM/Analyst, без
+исследовательского процесса Analyst. Карта выше ссылается на source-версию,
+не переключает consumer pin или инструкции уже начатого исполнения.
 
 Требуемые навыки исполнителя определяются полями skills выбранной опубликованной
 редакции Workflow. Существующий внутренний namespace-binding response возвращает

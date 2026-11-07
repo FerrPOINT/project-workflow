@@ -4,6 +4,12 @@
 
 ### Current Status (2026-11-07)
 
+- Basef8e375c0 separates shared Workflow/Tracker/evidence skills from professional
+  PM guidance. The complete Analyst-only procedure moved verbatim out of the
+  requirements method shared with PM into the existing Analyst role. Phase order
+  and completion belong to Workflow, not duplicated role routes. Inventory,
+  allowlists and executable examples are preserved;51 offline tests and independent
+  review passed. Source is published, not activated on PM30; no Advisor change.
 - Architecture now separates common agent instructions/skills, profession-specific
   instructions/skills and independently configured Workflow phases/criteria.
   Skills explain tools, not business routing or server authority.
