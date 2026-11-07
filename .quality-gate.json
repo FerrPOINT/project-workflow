@@ -72,7 +72,12 @@
         "integration"
       ],
       "argv": [
-        "{python}",
+        "uv",
+        "run",
+        "--no-sync",
+        "--offline",
+        "--",
+        "python",
         "-B",
         "-m",
         "scripts.run_pytest",
@@ -95,7 +100,12 @@
         "integrated"
       ],
       "argv": [
-        "{python}",
+        "uv",
+        "run",
+        "--no-sync",
+        "--offline",
+        "--",
+        "python",
         "-B",
         "-m",
         "scripts.run_pytest",
@@ -129,7 +139,12 @@
         "build"
       ],
       "argv": [
-        "{python}",
+        "uv",
+        "run",
+        "--no-sync",
+        "--offline",
+        "--",
+        "python",
         "-B",
         "-m",
         "scripts.run_pytest",
@@ -155,7 +170,12 @@
         "integration"
       ],
       "argv": [
-        "{python}",
+        "uv",
+        "run",
+        "--no-sync",
+        "--offline",
+        "--",
+        "python",
         "-B",
         "-m",
         "scripts.run_pytest",
