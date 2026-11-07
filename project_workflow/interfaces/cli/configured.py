@@ -126,7 +126,7 @@ def step(task: str, report: str | None, operation_key: str | None, expected_vers
          start: bool = False, workflow_id: int | None = None, mode_key: str | None = None) -> dict:
     _, _, _, namespace = environment()
     if report == "-":
-        report = sys.stdin.read(32_001)
+        report = sys.stdin.read()
     if report is not None:
         PhaseReport.parse(report)
     if mode() == "standalone":

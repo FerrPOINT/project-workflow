@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     OPENAI_BASE_URL: str = "http://192.168.10.1:4000/v1"
     OPENAI_MODEL: str = "app-test"
     OPENAI_TIMEOUT: int = Field(default=1200, gt=0)
-    OPENAI_MAX_TOKENS: int = Field(default=4000, gt=0)
+    OPENAI_MAX_TOKENS: int | None = Field(default=None, gt=0)
     OPENAI_API_KEY: str = ""
     OPENAI_REASONING_EFFORT: str = "high"
 
@@ -66,6 +66,13 @@ class Settings(BaseSettings):
     # Read-only Tracker authority for configured PM completion, never supplied by the agent.
     PROJECT_WORKFLOW_CONFIGURED_TRACKER_URL: str = ""
     PROJECT_WORKFLOW_CONFIGURED_TRACKER_READ_TOKEN: str = ""
+
+    @field_validator("OPENAI_MAX_TOKENS", mode="before")
+    @classmethod
+    def _optional_max_tokens(cls, value: object) -> object:
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
 
     @field_validator("AUTH_BROWSER_ORIGINS")
     @classmethod

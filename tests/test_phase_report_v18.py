@@ -5,7 +5,6 @@ import json
 import pytest
 
 from project_workflow.domain.phase_report import (
-    MAX_REPORT_CHARACTERS,
     PHASE_REPORT_INSTRUCTIONS,
     PhaseReport,
     PhaseReportFormatError,
@@ -188,17 +187,14 @@ def test_invalid_json_shape_syntax_or_nesting_is_refused(raw):
         PhaseReport.parse(raw)
 
 
-def test_exact_character_limit_preserves_content_and_refuses_overflow():
-    payload = {"source": {"request": "", "decisions": []},
-               "result": {"artifacts": [{"name": "Document", "content": ""}], "assumptions": []},
-               "unresolved": []}
-    padding = MAX_REPORT_CHARACTERS - len(json.dumps(payload))
-    payload["result"]["artifacts"][0]["content"] = "x" * padding
-    raw = json.dumps(payload)
-    assert len(raw) == MAX_REPORT_CHARACTERS
+@pytest.mark.parametrize("object_content", [False, True])
+def test_large_string_and_object_artifacts_preserve_full_document(payload, object_content):
+    document = "Full saved document. " * 5000
+    payload["result"]["artifacts"][0]["content"] = {"document": document} if object_content else document
+    raw = json.dumps(payload, ensure_ascii=False)
+    assert len(raw) > 32000
     assert PhaseReport.parse(raw).model_dump(mode="json") == payload
-    with pytest.raises(PhaseReportFormatError, match="maximum 32000"):
-        PhaseReport.parse(raw + " ")
+    assert PhaseReport.parse(raw + " ").model_dump(mode="json") == payload
 
 
 def test_canonical_instructions_example_matches_the_new_contract():

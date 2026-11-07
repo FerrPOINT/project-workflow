@@ -58,7 +58,7 @@ class OpenAICompatibleClient:
         self.model = model or settings.OPENAI_MODEL
         self.timeout = timeout or settings.OPENAI_TIMEOUT
         self.max_tokens = settings.OPENAI_MAX_TOKENS if max_tokens is None else max_tokens
-        if self.max_tokens <= 0:
+        if self.max_tokens is not None and self.max_tokens <= 0:
             raise ValueError("max_tokens must be positive")
         self.api_key = (api_key if api_key is not None else settings.OPENAI_API_KEY).strip()
         self.reasoning_effort = (
@@ -139,10 +139,11 @@ class OpenAICompatibleClient:
                 "instructions": system,
                 "input": [{"role": "user", "content": user}],
                 "text": {"format": response_format},
-                "max_output_tokens": self.max_tokens,
                 "store": False,
                 "stream": False,
             }
+            if self.max_tokens is not None:
+                payload["max_output_tokens"] = self.max_tokens
             if self.reasoning_effort:
                 payload["reasoning"] = {"effort": self.reasoning_effort}
             resp = requests.post(
@@ -186,7 +187,7 @@ class OpenAICompatibleClient:
             if isinstance(usage, dict) and "output_tokens" in usage:
                 if type(usage["output_tokens"]) is not int or usage["output_tokens"] < 0:
                     raise ValueError("Invalid evaluator output token usage")
-                if usage["output_tokens"] > self.max_tokens:
+                if self.max_tokens is not None and usage["output_tokens"] > self.max_tokens:
                     diagnostics["outcome"] = "limit_exceeded"
                     raise ValueError("Evaluator provider exceeded the output token limit")
             if not content.strip():

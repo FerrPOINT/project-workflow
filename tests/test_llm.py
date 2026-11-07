@@ -73,9 +73,30 @@ class TestOpenAICompatibleClient:
         assert client.base_url == "http://192.168.10.1:4000/v1"
         assert client.model == "app-test"
         assert client.timeout == 1200
-        assert client.max_tokens == 4000
+        assert client.max_tokens is None
         assert client.api_key == ""
         assert client.reasoning_effort == "high"
+
+    @pytest.mark.parametrize("value,expected", [(None, None), ("", None), ("  ", None), ("1200", 1200)])
+    def test_optional_max_tokens_setting(self, monkeypatch, value, expected):
+        from project_workflow.config import Settings
+
+        if value is None:
+            monkeypatch.delenv("OPENAI_MAX_TOKENS", raising=False)
+        else:
+            monkeypatch.setenv("OPENAI_MAX_TOKENS", value)
+        settings = Settings(_env_file=None, DATABASE_URL="sqlite://")
+        assert settings.OPENAI_MAX_TOKENS == expected
+
+    @pytest.mark.parametrize("value", ["0", "-1", "not-a-number"])
+    def test_explicit_max_tokens_setting_requires_positive_integer(self, monkeypatch, value):
+        from pydantic import ValidationError
+
+        from project_workflow.config import Settings
+
+        monkeypatch.setenv("OPENAI_MAX_TOKENS", value)
+        with pytest.raises(ValidationError):
+            Settings(_env_file=None, DATABASE_URL="sqlite://")
 
     def test_env_overrides(self, monkeypatch):
         from project_workflow.config import get_settings
@@ -155,7 +176,7 @@ class TestOpenAICompatibleClient:
             payload = kwargs["json"]
             assert payload["model"] == "test-model"
             assert "temperature" not in payload
-            assert payload["max_output_tokens"] == 4000
+            assert "max_output_tokens" not in payload
             assert payload["reasoning"] == {"effort": "high"}
             assert payload["text"]["format"] == PromptBuilder.response_schema([])
             assert payload["instructions"] == "sys"
@@ -571,6 +592,60 @@ class TestSupervisorEngineLLMIntegrationDB:
 
         task = engine.db.tasks.get_by_id(engine.task["id"]).to_dict()
         assert task["current_phase_code"] == "2.REQUIREMENTS"
+
+    @pytest.mark.parametrize("cap", [None, 4000])
+    def test_large_completed_response_advances_only_without_explicit_cap(self, engine, monkeypatch, cap):
+        from project_workflow.config import get_settings
+
+        monkeypatch.setenv("OPENAI_MAX_TOKENS", "" if cap is None else str(cap))
+        get_settings.cache_clear()
+
+        def respond(_url, **kwargs):
+            criteria = json.loads(kwargs["json"]["input"][0]["content"])["criteria"]
+            raw = {
+                "verdict": "PASS",
+                "assessments": {item["id"]: {
+                    "covered": True, "reason": "The reported result meets this criterion", "required_change": None,
+                } for item in criteria},
+                "blockers": [], "confidence": 0.9,
+            }
+            data = response_body(json.dumps(raw))
+            data["usage"] = {"output_tokens": 4501}
+            return MagicMock(status_code=200, headers={}, json=lambda **_kwargs: data)
+
+        with patch("project_workflow.infrastructure.llm.requests.post", side_effect=respond) as post:
+            result = engine.evaluate(report_json("Reported result"))
+        post.assert_called_once()
+        payload = post.call_args.kwargs["json"]
+        task = engine.db.tasks.get_by_id(engine.task["id"]).to_dict()
+        if cap is None:
+            assert "max_output_tokens" not in payload
+            assert result["verdict"] == "PASS"
+            assert task["current_phase_code"] == "2.REQUIREMENTS"
+        else:
+            assert payload["max_output_tokens"] == cap
+            assert result["verdict"] == "BLOCKED" and result["retryable"] is True
+            assert task["current_phase_code"] == "1.INTAKE"
+
+    @pytest.mark.parametrize("failure", ["incomplete", "refusal"])
+    def test_uncapped_provider_failure_cannot_advance_phase(self, engine, monkeypatch, failure):
+        from project_workflow.config import get_settings
+
+        monkeypatch.setenv("OPENAI_MAX_TOKENS", "")
+        get_settings.cache_clear()
+        data = response_body('{"verdict":"PASS"}')
+        if failure == "incomplete":
+            data.update(status="incomplete", incomplete_details={"reason": "max_output_tokens"})
+        else:
+            data["output"][0]["content"].append({"type": "refusal", "refusal": "Unavailable"})
+        with patch("project_workflow.infrastructure.llm.requests.post") as post:
+            post.return_value = MagicMock(status_code=200, headers={}, json=lambda **_kwargs: data)
+            result = engine.evaluate(report_json("Reported result"))
+        post.assert_called_once()
+        assert "max_output_tokens" not in post.call_args.kwargs["json"]
+        assert result["verdict"] == "BLOCKED" and result["retryable"] is True
+        task = engine.db.tasks.get_by_id(engine.task["id"]).to_dict()
+        assert task["current_phase_code"] == "1.INTAKE"
 
     def test_task_blocked_after_llm_blocked(self, engine, supervisor_llm):
         supervisor_llm("BLOCKED", blockers=["No access"])

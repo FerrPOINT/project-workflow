@@ -4,6 +4,25 @@
 
 ### Current Status (2026-11-07)
 
+- Removed the arbitrary32000-character report ceiling from the parser, platform,
+  standalone and UI request schemas, stdin reading and current format instructions.
+  The current runtime OpenAPI is regenerated; archived schemas are unchanged.
+  Strict input validation remains. Input regressions:256 PASS; full candidate
+  gates, installation and live acceptance remain pending. Base standards and
+  local engineering guidance now require justified limits and behavioral
+  completeness regressions rather than silent truncation or replacement caps.
+
+- Removed the arbitrary default generation cap from Settings and Compose.
+  Unset/blank `OPENAI_MAX_TOKENS` omits `max_output_tokens` from the native
+  Responses request; an explicitly configured positive operator cap remains
+  supported. Completed responses above4000 tokens are accepted without that
+  cap. Provider/model limits remain; incomplete/refused responses are still
+  technical failures without advancement or automatic retry. Model, reasoning,
+  schema, criteria and timeouts are unchanged. Targeted client/HTTP/diagnostics
+  checks:166 PASS. This is a source change, not yet installed or accepted live;
+  previous qualification with an explicit4000 setting is historical evidence,
+  not qualification of the changed request. No new model calls were made.
+
 - Fleet792 diagnostic timing is now installed by normal Apply, journal156ed66f,
   imagec85; smoke completed with cleanup. That Apply retained PM CID0966/image699/config31.
   Receipt: `Q/readiness-timing-fleet-apply-792b963d-20261107.json`, phase=complete,

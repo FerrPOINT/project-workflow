@@ -22,8 +22,8 @@ from project_workflow.infrastructure.llm import OpenAICompatibleClient, PromptBu
 from project_workflow.interfaces.cli import ui  # noqa: F401 -- register commands
 from project_workflow.interfaces.cli.core import cli
 from project_workflow.interfaces.ui.routes.configured_cli_api import error
+from tests.test_configured_cli import WRITER, enroll, step
 from tests.test_configured_cli import configured as configured
-from tests.test_configured_cli import enroll, step
 from tests.test_configured_cli_transport import agent_env as agent_env
 
 
@@ -148,8 +148,8 @@ def test_unknown_secret_field_names_and_values_never_appear_in_errors(location):
     ('{"private-secret-key":1,"private-secret-key":2}', "duplicate"),
     ('{"source":{"request":"","decisions":[]},"result":{"artifacts":[{"name":"d",'
      '"content":{"private-secret-key":NaN}}],"assumptions":[]},"unresolved":[]}', "non-finite"),
-    (" " * 32001, "32000"),
-], ids=["duplicate", "nonfinite", "size"])
+    (" " * 32001, "syntax"),
+], ids=["duplicate", "nonfinite", "whitespace"])
 def test_boundary_failures_are_distinct_safe_and_never_repaired(raw, description):
     message = reason(raw).lower()
     assert description in message
@@ -215,6 +215,45 @@ def test_configured_http_422_preserves_same_safe_error_without_model_or_transiti
     assert (after["version"], after["phase_code"], after["status"]) == (
         before["version"], before["phase_code"], before["status"])
     advisor.assert_not_called()
+
+
+def test_large_configured_http_report_preserves_document_through_advisor_and_history(configured, monkeypatch):
+    enroll(configured)
+    before = step(configured).json()["result"]
+    value = packet()
+    value["result"]["artifacts"][0]["content"] = {
+        "document": "Полный сохранённый документ без сокращений. " * 4000,
+        "tail": "Final document field must survive",
+    }
+    raw = json.dumps(value, ensure_ascii=False)
+    assert len(raw) > 32000
+
+    def respond(*_args, **kwargs):
+        request = json.loads(kwargs["user"])
+        assert request["report"] == value
+        return {
+            "verdict": "PARTIAL",
+            "assessments": {item["id"]: {
+                "covered": False, "reason": "Controlled criterion evaluation", "required_change": "Continue work",
+            } for item in request["criteria"]},
+            "blockers": [], "confidence": 1.0,
+        }
+
+    advisor = Mock(side_effect=respond)
+    monkeypatch.setattr(OpenAICompatibleClient, "respond", advisor)
+    response = step(configured, report=raw, operation_key="large-report", expected_version=before["version"])
+    assert response.status_code == 200, response.text
+    assert response.json()["result"]["verdict"] == "PARTIAL"
+    advisor.assert_called_once()
+    client, assignment = configured
+    history = client.get("/internal/runtime/history", headers=WRITER, params={
+        "interaction_protocol": "configured-cli-v1", "task": assignment["task"],
+        "namespace_id": assignment["namespace_id"],
+    })
+    assert history.status_code == 200, history.text
+    records = history.json()["result"]["records"]
+    assert len(records) == 1 and records[0]["worker_report"] == raw
+    assert json.loads(records[0]["worker_report"]) == value
 
 
 def test_correct_serialization_preserves_quotes_newlines_unicode_and_nested_content():

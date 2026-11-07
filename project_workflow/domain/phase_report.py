@@ -10,9 +10,8 @@ from typing import Any, Literal, Union, get_args, get_origin
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, ValidationError
 
-MAX_REPORT_CHARACTERS = 32_000
 PHASE_REPORT_INSTRUCTIONS = (
-    'Send one JSON object of at most 32000 characters on stdin to --report - with exactly these fields: '
+    'Send one JSON object on stdin to --report - with exactly these fields: '
     'source is an object with request (string) and decisions (array of objects, each with '
     'subject (nonempty string) and value (any JSON value)); '
     'result is an object with artifacts (array of objects, each with name (nonempty string) and '
@@ -186,8 +185,6 @@ class PhaseReport(BaseModel):
 
     @classmethod
     def parse(cls, raw: str) -> PhaseReport:
-        if len(raw) > MAX_REPORT_CHARACTERS:
-            raise _invalid_report("$", f"maximum 32000 characters; received {len(raw)} characters")
         try:
             data = json.loads(raw, object_pairs_hook=_unique_object,
                               parse_float=_finite_float, parse_constant=_invalid_constant)

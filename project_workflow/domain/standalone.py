@@ -19,7 +19,7 @@ class StandaloneStep(BaseModel):
     mode_key: str | None = Field(default=None, min_length=1, max_length=128)
     operation_key: str | None = Field(default=None, min_length=1, max_length=128)
     expected_version: int | None = Field(default=None, ge=1)
-    report: str | None = Field(default=None, min_length=1, max_length=32_000)
+    report: str | None = Field(default=None, min_length=1)
 
     @model_validator(mode="after")
     def validate_operation(self) -> "StandaloneStep":

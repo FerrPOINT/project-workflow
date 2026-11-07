@@ -333,6 +333,20 @@ def test_optional_metadata_is_not_required_by_existing_mocks(client, provider):
     assert client.last_call_diagnostics["usage"] == {}
 
 
+def test_uncapped_diagnostics_keep_null_limit_and_valid_large_usage(client, provider):
+    post, _, data = provider
+    client.max_tokens = None
+    data["usage"] = {"input_tokens": 11, "output_tokens": 4501, "total_tokens": 4512}
+    assert client.respond("sys", "usr", response_format=PromptBuilder.response_schema([])) == {
+        "value": "raw-content-secret",
+    }
+    post.assert_called_once()
+    assert "max_output_tokens" not in post.call_args.kwargs["json"]
+    assert client.last_call_diagnostics["max_tokens"] is None
+    assert client.last_call_diagnostics["usage"] == data["usage"]
+    assert client.last_call_diagnostics["outcome"] == "success"
+
+
 def test_untrusted_labels_are_not_metadata(client, provider):
     _, _, data = provider
     client.model = "https://private.invalid/secret"

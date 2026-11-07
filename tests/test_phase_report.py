@@ -72,13 +72,11 @@ def test_error_does_not_echo_secret_values_or_arbitrary_field_names():
     assert response.headers["cache-control"] == "no-store"
 
 
-def test_report_limit_is_enforced_without_truncating_content():
+def test_report_above_former_character_limit_preserves_full_content():
     template = {"source": {"request": "", "decisions": []},
                 "result": {"artifacts": [{"name": "document", "content": ""}], "assumptions": []}, "unresolved": []}
-    padding = 32000 - len(json.dumps(template))
-    template["result"]["artifacts"][0]["content"] = "x" * padding
+    template["result"]["artifacts"][0]["content"] = "x" * 64000
     raw = json.dumps(template)
-    assert len(raw) == 32000
+    assert len(raw) > 32000
     assert PhaseReport.parse(raw).model_dump(mode="json") == template
-    with pytest.raises(PhaseReportFormatError, match="maximum 32000"):
-        PhaseReport.parse(raw + " ")
+    assert PhaseReport.parse(raw + " ").model_dump(mode="json") == template

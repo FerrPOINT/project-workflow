@@ -67,7 +67,7 @@ class ConfiguredStep(BaseModel):
     namespace_id: int = Field(gt=0, strict=True)
     operation_key: str | None = Field(default=None, min_length=1, max_length=128)
     expected_version: int | None = Field(default=None, ge=1, strict=True)
-    report: str | None = Field(default=None, min_length=1, max_length=32_000)
+    report: str | None = Field(default=None, min_length=1)
     requirements_revision: int | None = Field(default=None, ge=1, strict=True)
     requirements_sha256: Sha256 | None = None
 

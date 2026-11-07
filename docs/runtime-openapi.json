@@ -206,7 +206,6 @@
           "report": {
             "anyOf": [
               {
-                "maxLength": 32000,
                 "minLength": 1,
                 "type": "string"
               },
@@ -610,7 +609,6 @@
           "report": {
             "anyOf": [
               {
-                "maxLength": 32000,
                 "minLength": 1,
                 "type": "string"
               },

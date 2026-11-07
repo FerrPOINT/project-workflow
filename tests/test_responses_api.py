@@ -90,6 +90,32 @@ def test_provider_output_over_budget_is_not_an_accepted_evaluation(monkeypatch):
     post.assert_called_once()
 
 
+@pytest.mark.parametrize("cap", [None, 4000, 4501])
+def test_completed_output_above_old_default_requires_only_explicit_cap(monkeypatch, cap):
+    from project_workflow.config import get_settings
+
+    monkeypatch.setenv("OPENAI_MAX_TOKENS", "")
+    get_settings.cache_clear()
+    data = envelope('{"verdict":"PASS"}')
+    data["usage"] = {"output_tokens": 4501}
+    post = Mock(return_value=raw_response(json.dumps(data)))
+    monkeypatch.setattr("project_workflow.infrastructure.llm.requests.post", post)
+    client = OpenAICompatibleClient(max_tokens=cap)
+    if cap == 4000:
+        with pytest.raises(ValueError, match="exceeded the output token limit"):
+            client.respond("sys", "usr", response_format=PromptBuilder.response_schema([]))
+        assert client.last_call_diagnostics["outcome"] == "limit_exceeded"
+    else:
+        assert client.respond("sys", "usr", response_format=PromptBuilder.response_schema([])) == {"verdict": "PASS"}
+        assert client.last_call_diagnostics["outcome"] == "success"
+    assert client.last_call_diagnostics["max_tokens"] == cap
+    post.assert_called_once()
+    if cap is None:
+        assert "max_output_tokens" not in post.call_args.kwargs["json"]
+    else:
+        assert post.call_args.kwargs["json"]["max_output_tokens"] == cap
+
+
 def test_reasoning_is_not_evaluator_content(monkeypatch):
     data = envelope("{}")
     data["output"].insert(0, {"type": "reasoning", "summary": [{"type": "summary_text", "text": "private"}]})

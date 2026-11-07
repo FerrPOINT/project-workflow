@@ -276,14 +276,16 @@ def test_large_unicode_history_preserves_reports_without_retry(agent_env, monkey
     assert len(calls) == 1 and calls[0]["params"]["n"] == 20
 
 
-def test_report_stdin_preserves_exact_key_version_and_text(agent_env, monkeypatch):
+@pytest.mark.parametrize("text", ["Real report\n", "Полный документ. " * 5000], ids=["small", "large-unicode"])
+def test_report_stdin_preserves_exact_key_version_and_text(agent_env, monkeypatch, text):
     calls = fake_transport(monkeypatch)
     result = CliRunner().invoke(cli, ["--json", "step", "--task", "SDLC-31", "--report", "-",
                                     "--operation-key", "report-a", "--expected-version", "4"],
-                               input=report_json("Real report\n"))
+                               input=report_json(text))
     assert result.exit_code == 0, result.output
     body = calls[0][1]["json"]
-    assert body["report"] == report_json("Real report\n")
+    assert len(calls) == 1
+    assert body["report"] == report_json(text)
     assert body["operation_key"] == "report-a" and body["expected_version"] == 4
     assert "hermes_run_ref" not in body and "execution_token" not in body
 
