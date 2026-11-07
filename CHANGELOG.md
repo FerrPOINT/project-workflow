@@ -4,6 +4,15 @@
 
 ### Current Status (2026-11-07)
 
+- Architecture now separates common agent instructions/skills, profession-specific
+  instructions/skills and independently configured Workflow phases/criteria.
+  Skills explain tools, not business routing or server authority.
+- The shared Base executor guidance now explicitly collects substantive work,
+  performed actions and verified outcomes against the current phase criteria.
+  Reads, PARTIAL and technical failures do not discard unreported facts. Its
+  example uses existing result.artifacts for the work account and unchanged
+  document; all seven default roles share the skill. This source-only package
+  does not change Advisor, report fields, catalog phases or runtime by itself.
 - Read-only PM audit separates document quality, report omissions, tool errors,
   Fleet admission and test-harness limitations. SDLC35 saved/presented the exact
   requirements, but report202 omitted the presentation account; its PARTIAL is
