@@ -20,8 +20,16 @@ publish проверенного полного target-текста через �
 Первый полный native-прогон сохранён как4708 PASS/32 FAIL: это не успешный gate.
 Адресные исправления исторических ожиданий и cutover дали50 PASS, затем25 PASS
 на финальном cutover/replay-пакете; результаты пересекаются и не суммируются.
-Ruff, mypy177 и generator PASS. PostgreSQL и новый полный native gate ещё открыты.
-Evidence: `Q/workflow-stage-start-cutover-20261107-1a1b6801900/result.json`.
+Итоговый native gate:4763 PASS,75 subtests,15 optional skips, coverage94.1116%;
+исходники до и после прогона совпали. Все183 PostgreSQL cases прошли:24 исходных,
+23 cutover,4 concurrent publication,4 исходных history и128 оставшихся проверок.
+Ruff, mypy177 и generator PASS. Единственная последующая тестовая коррекция
+берёт catalog version из фактического readback вместо константы; product code
+не изменился. Установка и новая живая приёмка остаются открытыми.
+Evidence: `Q/workflow-native-start-cutover-83343c24-20261107-1a1b6999561/handoff.json`,
+`Q/workflow-stage-status-pg-cas-followup-20261107/result.json` и
+`Q/workflow-stage-status-pg-isolated-remaining-20261107/result.json`;
+последний receipt явно ссылается на четыре переиспользованных успешных случая.
 
 Независимое структурное сравнение всех33 фаз подтвердило неизменность checks,
 evidence, scopes и переходов. Prompt, context builder, evaluator и typed report

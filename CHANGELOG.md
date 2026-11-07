@@ -12,8 +12,11 @@
   Exact enrollment readback precedes new-execution admission and performs no
   Tracker/Advisor call. Changed payload and unauthorized callers are refused.
   Targeted correction50 and final cutover/replay25 tests pass; counts overlap.
-  Ruff, mypy177 and the reproducible catalog generator pass. PostgreSQL, the
-  final full native gate, installation and live PM acceptance remain open.
+  Final native qualification passes4763 tests and75 subtests with94.1116%
+  coverage;15 optional skips are not passes. All183 PostgreSQL cases pass,
+  including concurrent publication and preserved history. Ruff, mypy177 and
+  the reproducible catalog generator pass. Installation and live PM acceptance
+  remain open; Advisor inputs and the model have not changed.
 
 - Initial instruction admission now accepts the exact assigned agent in Ready
   for all seven professions. Reports and the precommit authority check require
