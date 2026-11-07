@@ -1,6 +1,41 @@
 # Advisor: сквозной диагноз и границы выпуска
 
-## 2026-11-07: Исправленный Skill Не Равен Выполненной Публикации
+## 2026-11-07: Установленный Комплект, Приёмка PM Открыта
+
+Normal Apply завершён для Fleet6a98/imageb55 и Workflowe0b8/imagef985.
+Точный DATABASE_PROOF, сохранённая история и публикации каталога не изменились.
+Установлен контракт required_skills из выбранной публикации Workflow и его
+проверка при подготовке/readiness Fleet. Общая инструкция исполнителю читать
+эти файлы не меняет Advisor input, authority или формат бизнес-отчёта.
+
+Native pytest: **4661 PASS,15 skip,160 deselected,75 subtests PASS**;
+coverage **94.097%**. Wrapper завершился **FAILED по HEAD guard**: после pytest
+был создан commit e0b8. Независимо подтверждено равенство его tree
+`337858e042a51a1ffaee13ea88555e4485dd6971` фактически проверенному tree;
+это не превращает результат wrapper в PASS. PG160 — составное покрытие:
+91 первоначальный PASS,1 отдельный retake и68 оставшихся PASS. Исходный
+connection timeout сохранён; чистого единого прогона160 PASS не заявляется.
+Base host guard имеет49 финальных targeted PASS; supplementary274 не является
+проверкой финальных байтов.
+
+Прямой реальный Workflow CLI ранее завершил три фазы: **6 calls,34 assessments**,
+включая ожидаемые PARTIAL, исправления, supplement/revocation и exact replay.
+Это только **Developer/initial**, не семь профессий и не приёмка живого PM.
+
+Канонические skills подготовлены из Basee308. Обычная config-only активация
+PM30 принята на стадии plan; effective пока29. Физический readback ещё ожидается.
+Ошибочный image intent699→699 приватного оператора был отклонён до выбора образа;
+после проверки он исправлен на нормальный запрос `{}`. Workflow и Advisor ради
+этого не менялись. Далее открыты SDLC34 (только note2000→1000, rev2, полный показ,
+отказ старого подтверждения, новое согласие и финал), новый full PM case и три
+браузера. **PM live не принят.** Бюджет Advisor153/163, осталось10.
+
+Evidence: Q/workflow-required-skills-native-long-20261107/full.json,
+Q/workflow-required-skills-pg-20261107/result.json,
+Q/workflow-required-skills-pg-connect-diagnostic-20261107/result.json,
+Q/workflow-required-skills-pg-remaining-20261107/result.json.
+
+## Исторический Checkpoint PM29: Исправленный Skill Не Равен Публикации
 
 Base1c37b2f1 добавил исполняемый пример публикации из parsed context.assignment,
 без ручной подстановки ID и без автоматических повторов. Пример, отрицательные
@@ -20,11 +55,11 @@ requirements. Exit0/error=null; свежий правильный assignment и 
 Это ошибочный отчёт PM о новой попытке, не новый отказ Tracker и не ошибка Advisor.
 Report после199 отсутствует; бюджет Advisor остаётся153/163.
 
-Выявлен отдельный механический разрыв подготовки:
+На checkpoint PM29 выявлен отдельный механический разрыв подготовки:
 
 | Граница | Фактическое состояние |
 |---|---|
-| Текущая phase_contract.skills | project-workflow-executor, tracker-operator |
+| phase_contract.skills на PM29 checkpoint | project-workflow-executor, tracker-operator |
 | Managed enabled PM29 | project-workflow, task-tracker, requirements-clarification |
 | Файлы требуемых имён | Оба отсутствуют; полный read-only inventory не находит их и в bundled skills |
 | Фактический native config | platform_toolsets.api_server=[terminal], skills config отсутствует |
@@ -37,16 +72,17 @@ System prompt и tool_names в существующей native session имею�
 Внутренняя причина ложного заявления PM не установлена; механический разрыв
 имён/доставки воспроизведён отдельно и не выдаётся за единственную причину модели.
 
-Следующий пакет устраняет именно этот разрыв: существующий внутренний response
+Подготовленный тогда пакет устранял именно этот разрыв: существующий внутренний response
 binding дополняется списком required_skills из выбранной публикации; сам binding,
 authority, fingerprints, публичный business API и БД не меняются. Fleet использует
 тот же список для подготовки и readiness вместо независимой нормы из трёх defaults.
 Base остаётся источником текста; установка — явной конфигурацией между runs.
 Исполнитель получает одну общую инструкцию прочитать названные файлы из своего
 настроенного каталога через terminal. Alias mapping, новые инструменты, auto-load
-всего корпуса и изменение Advisor не нужны. Этот пакет ещё не установлен и не принят.
+всего корпуса и изменение Advisor не нужны. На момент PM29 этот пакет ещё не был
+установлен; текущая установка и незавершённая приёмка указаны выше.
 
-После него нужна одна проверка того же SDLC34 по прежней разметке: только note
+Для этого checkpoint была запланирована проверка того же SDLC34 по прежней разметке: только note
 2000→1000, rev2, полный показ, отказ старого подтверждения, отдельное согласие и
 самостоятельный финал. Повтор без изменившегося входа не запускается. Подтверждение
 rev1 и публикация документа вместо PM не выполнялись. UI helper дополнен DOM

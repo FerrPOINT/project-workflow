@@ -1,25 +1,31 @@
 # Changelog
 
-## Unreleased — Advisor V19 Candidate, Not Accepted
+## Unreleased — Advisor V19 Installed, PM Acceptance Pending
 
 ### Current Status (2026-11-07)
 
-- PM29 explicitly activated only the reviewed TaskTracker serializer skill from
-  Base1c37b2f1; physical files, image699, CLI, SOUL and other settings were verified.
-  Live continuation was not accepted: one successful terminal call read context,
-  step and requirements, without publish or a new409, yet PM claimed a repeated
-  publication refusal. No Advisor call occurred;153/163 campaign budget is used.
-- Confirmed delivery gap: Workflow requires canonical names that are absent on
-  PM, while Fleet readiness checks its own defaults. Candidate internal binding
-  response exposes required_skills from the selected publication beside the
-  unchanged authority binding. Matching Fleet preparation/readiness checks this
-  set; no aliases, new routes, tables, model changes or new tools are introduced.
-  Worker-only guidance explicitly requests reading the installed skill files;
-  captured HTTP regression confirms it does not enter the Advisor request.
-- Source checks include136 targeted Workflow tests and the actual HTTP boundary;
-  full local gates, coordinated installation, SDLC34 amendment/consent/completion
-  and three browsers remain open. Current runtime remains Workflow4bf/image20ad
-  and Fleet eae18fd3/image7f4; this candidate is not installed or accepted live.
+- Normal Apply completed for Fleet6a98/imageb55 and Workflowe0b8/imagef985.
+  The exact DATABASE_PROOF, saved history and catalog publications are unchanged.
+  Required skill names now come from the selected Workflow publication; Fleet
+  preparation/readiness uses that set. Worker-only file-reading guidance does
+  not change the Advisor request or introduce aliases, tools or authority.
+- Native pytest:4661 passed,15 skipped,160 deselected,75 subtests passed;
+  coverage94.097%. The wrapper FAILED its HEAD guard after the tested tree was
+  committed; independent comparison proves commit e0b8 has exactly that tree.
+  This is not a wrapper PASS. PostgreSQL160 cases are covered by91 initial
+  passes,1 isolated retake and68 remaining passes; the original connection
+  timeout failure is retained, not a clean single-run160 PASS. Base host guard:
+  49 final targeted tests PASS; supplementary274 is not a final-byte gate.
+- Historical direct real CLI acceptance:6 calls,34 assessments, all three phases
+  completed, including intended PARTIAL/correction and history revocation.
+  This qualifies only Developer/initial, not all seven professions or live PM.
+- Canonical skills use Basee308. PM30 normal config-only activation is accepted
+  at plan stage; effective configuration remains29 pending physical proof.
+  A private operator's mistaken image intent699→699 was rejected before selection;
+  after proof it was corrected to the normal `{}` request, without Workflow or
+  Advisor changes. SDLC34 amendment/consent/completion, a new full PM case and
+  three browsers remain open. PM live acceptance is not declared. Advisor budget:
+  153/163 used,10 remaining; historical failures and unknown causes are retained.
 
 ### Historical Checkpoint (2026-11-06)
 
