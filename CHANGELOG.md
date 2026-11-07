@@ -4,6 +4,12 @@
 
 ### Current Status (2026-11-07)
 
+- Prepared a one-field PM worker-instruction publication separating the immutable
+  completion receipt (Backlog / Ready) from the system's current stage, which may
+  already be Analysis. All phase criteria, IDs, skills and Advisor policy remain
+  unchanged;18 reporting-instruction tests and independent review passed. This
+  source artifact is not yet published and does not resolve Fleet admission403.
+
 - Canonical Basef8e375 instructions are now active on the same PM31, with physical
   SOUL/four-skill and readiness proof; image699/CLI/Hermes/model/credentials/PM13
   are unchanged. New full QA stopped before PM/Advisor: create and one explicit

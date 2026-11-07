@@ -1,5 +1,6 @@
 """Current PM reporting guidance; historical publications remain immutable."""
 
+import hashlib
 import json
 import subprocess
 import sys
@@ -8,7 +9,10 @@ from pathlib import Path
 import pytest
 
 from docs.evidence.pm_structured_workflow_20261103 import render, render_skill
+from project_workflow.application.catalog_publication import _normalize
 from project_workflow.domain.phase_report import PHASE_REPORT_INSTRUCTIONS
+from project_workflow.domain.runtime_assignment import payload_sha256
+from project_workflow.infrastructure.single_task_delivery_instructions import PM_COMPLETION_INSTRUCTION
 
 pytestmark = pytest.mark.unit
 ROOT = Path(__file__).resolve().parents[1]
@@ -93,3 +97,50 @@ def test_exporter_stdout_matches_rendered_publication_or_skill(arguments):
         assert completed.stdout == render_skill() + "\n"
     else:
         assert json.loads(completed.stdout) == render()
+
+
+def test_receipt_completion_publication_changes_only_final_worker_description(tmp_path):
+    historical = EVIDENCE / "pm-business-workflow-20261102.json"
+    historical_text = historical.read_text(encoding="utf-8")
+    historical_digest = "488ff7d32904c9f86a1be5ffa01ef297b63525ee4a39e6081bc86d6d70168272"
+    assert hashlib.sha256(historical_text.encode("utf-8")).hexdigest() == historical_digest
+    for name, newline in (("lf", "\n"), ("crlf", "\r\n")):
+        fixture = tmp_path / f"historical-{name}.json"
+        fixture.write_bytes(historical_text.replace("\n", newline).encode("utf-8"))
+        assert hashlib.sha256(fixture.read_text(encoding="utf-8").encode("utf-8")).hexdigest() == historical_digest
+    baseline = render()
+    # Exact content of the independently saved, accepted PM publication 13.
+    assert payload_sha256(baseline["modes"]) == (
+        "614c39c7d79e1373549b3b211718840acac3da85e61963090a7fac127326d372"
+    )
+    candidate = json.loads((EVIDENCE / "pm-receipt-completion-20261107.json").read_text(encoding="utf-8"))
+    assert set(candidate) == {"workflow_key", "role_key", "modes"}
+    assert json.loads(json.dumps(candidate, ensure_ascii=False, allow_nan=False)) == candidate
+    assert _normalize(candidate["modes"]) == candidate["modes"]
+    final = candidate["modes"][0]["phases"][2]["instructions"][4]
+    old = baseline["modes"][0]["phases"][2]["instructions"][4]["description"]
+    assert final["description"] != old
+    assert final["description"].split("Read the same-key completion operation", 1)[0] == (
+        old.split("Read the same-key completion operation", 1)[0]
+    )
+    final["description"] = old
+    assert candidate == baseline  # Every criterion, ID, skill, phase and other instruction is retained.
+
+
+def test_receipt_completion_guidance_matches_server_receipt_and_current_stage_contract():
+    candidate = json.loads((EVIDENCE / "pm-receipt-completion-20261107.json").read_text(encoding="utf-8"))
+    text = candidate["modes"][0]["phases"][2]["instructions"][4]["description"]
+    assert "follow its completion_instructions" in text
+    assert "Read the same-key completion operation and task-tracker sdlc pm completion read" in text
+    assert "immutable PM completion receipt matches the confirmed task/revision/hash" in text
+    assert "records stage=Backlog and status=Ready" in text
+    assert "Fresh sdlc context may already show system-queued Analysis rather than Backlog / Ready" in text
+    assert "Reading the next profession's current context is not required to finish PM" in text
+    assert "Do not dispatch Analyst or claim completion before the saved receipt readback" in text
+    assert "reconcile unknown acceptance with the original operation" in text
+    assert "The immutable PM receipt records Backlog / Ready" in PM_COMPLETION_INSTRUCTION
+    assert "current human/server context can already show system-queued Analysis" in PM_COMPLETION_INSTRUCTION
+    assert "completed PM need not read the next profession's current context" in PM_COMPLETION_INSTRUCTION
+    assert "Finish after verifying the saved PM receipt; the system owns Analysis intent and dispatch" in (
+        PM_COMPLETION_INSTRUCTION
+    )
