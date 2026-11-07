@@ -7,8 +7,9 @@
 - Read-only PM audit separates document quality, report omissions, tool errors,
   Fleet admission and test-harness limitations. SDLC35 saved/presented the exact
   requirements, but report202 omitted the presentation account; its PARTIAL is
-  justified. The harness injected explicit Workflow/Tracker instructions after
-  consent, so this case is not no-hint autonomous acceptance. SOUL still exposes
+  justified. Source tracing corrects the initial audit attribution: Fleet itself
+  creates the post-consent Workflow/Tracker notification; it is not manual harness
+  coaching and does not itself invalidate autonomous acceptance. SOUL still has
   hash/obsolete lease wording. See the existing diagnosis for evidence and the
   minimal instruction/test correction; no Advisor prompt/model change or new
   inference was made for this audit.
