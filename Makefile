@@ -1,7 +1,7 @@
 # project-workflow — Makefile
 
 UV ?= uv run --isolated --with-requirements constraints.txt --all-extras
-PYTEST ?= $(UV) pytest
+PYTEST ?= $(UV) python -B -m scripts.run_pytest
 
 .PHONY: test test-verbose test-integration coverage coverage-html lint lint-fix quality warnings compose-ready clean install-dev
 
@@ -34,7 +34,7 @@ lint:
 lint-fix:
 	$(UV) ruff check --fix .
 
-quality: repository-hygiene test test-integration coverage lint
+quality: repository-hygiene coverage test-integration lint
 
 compose-ready:
 	docker compose up --build -d --wait

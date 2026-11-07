@@ -22,6 +22,15 @@ Source/omit, порог 94%, состав тестов и их индивиду�
 
 ## Базовый gate
 
+Штатные команды pytest используют `python -B -m scripts.run_pytest`.
+Каждый запуск получает отдельный `--basetemp`. При запуске внутри
+зарегистрированной операции Base временное дерево находится в её `tmp`.
+Самостоятельный запуск хранит его рядом с квитанцией в `.local/pytest-runs`.
+После завершения остаётся `result.json`, а при ошибке или отмене также
+JUnit-отчёт до 4 МиБ. Незавершённая квитанция `active` и её временное дерево
+требуют сверки владельца перед очисткой. `make quality` и `quality.ps1 quality`
+выполняют полный Unit/UI один раз вместе с coverage, а PostgreSQL отдельно.
+
 Перед тестами проверить экспорт общего namespace из чистого sibling Base,
 закреплённого в `.base-revision`:
 
@@ -77,9 +86,8 @@ uv run --isolated --with-requirements constraints.txt --all-extras pytest -q tes
 ```
 
 ```bash
-uv run --isolated --with-requirements constraints.txt --all-extras pytest -q --timeout=60
-uv run --isolated --with-requirements constraints.txt --all-extras pytest -q -m integration --timeout=120
-uv run --isolated --with-requirements constraints.txt --all-extras pytest --cov=project_workflow --cov-report=term --timeout=60
+uv run --isolated --with-requirements constraints.txt --all-extras python -B -m scripts.run_pytest --cov=project_workflow --cov-report=term --timeout=60
+uv run --isolated --with-requirements constraints.txt --all-extras python -B -m scripts.run_pytest -q -m integration --timeout=120
 uv run --isolated --with-requirements constraints.txt --all-extras ruff check .
 uv run --isolated --with-requirements constraints.txt --all-extras mypy project_workflow scripts
 git diff --check
