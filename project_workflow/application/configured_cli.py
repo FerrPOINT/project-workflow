@@ -135,9 +135,6 @@ def enroll(uow: SAUnitOfWork, request: ConfiguredAssignment) -> dict[str, Any]:
     from project_workflow.interfaces.cli.core import _require_valid_key
 
     _require_valid_key(request.task)
-    project, workflow, mode = _catalog(uow, request.namespace_id,
-                                     workflow_key=request.workflow_key, workflow_id=request.workflow_id,
-                                     mode_key=request.mode_key, execution=True)
     request_data = request.model_dump(mode="json", exclude_none=True)
     saved = uow.session.scalar(select(m.TaskRuntimeAssignment).where(
         m.TaskRuntimeAssignment.operation_key == request.operation_key,
@@ -153,6 +150,9 @@ def enroll(uow: SAUnitOfWork, request: ConfiguredAssignment) -> dict[str, Any]:
         if not isinstance(original, dict):
             raise ConflictError("Historical enrollment has no original cursor; use history readback")
         return original
+    project, workflow, mode = _catalog(uow, request.namespace_id,
+                                     workflow_key=request.workflow_key, workflow_id=request.workflow_id,
+                                     mode_key=request.mode_key, execution=True)
     configured_cli_tracker.assignment(request_data, purpose="initial_read")
     phases = list(uow.phases.list(workflow.id, mode_id=mode.id))
     if not phases:

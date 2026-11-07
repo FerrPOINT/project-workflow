@@ -97,8 +97,8 @@ def test_architect_structure_keeps_identity_and_permission_guards(configured, in
     assert response.status_code == 409, response.text
     assert active(client, base["workflow_id"]) == base
     with SAUnitOfWork() as uow:
-        assert len(uow.workflows.list_modes(base["workflow_id"], catalog_version=1)) == 1
-        assert not uow.workflows.list_modes(base["workflow_id"], catalog_version=2)
+        assert len(uow.workflows.list_modes(base["workflow_id"], catalog_version=base["catalog_version"])) == 1
+        assert not uow.workflows.list_modes(base["workflow_id"], catalog_version=base["catalog_version"] + 1)
 
 
 def operator_publication_count(uow):
@@ -302,7 +302,7 @@ def test_draft_reload_readback_and_save_dedup_do_not_activate_or_append_duplicat
     with SAUnitOfWork() as uow:
         versions = uow.session.scalars(select(m.WorkflowMode.catalog_version).where(
             m.WorkflowMode.workflow_id == base["workflow_id"])).all()
-        assert sorted(versions) == [1, 2, 3]
+        assert sorted(versions) == [base["catalog_version"], saved["catalog_version"], newer["catalog_version"]]
         assert operator_publication_count(uow) == 0
     # Publish only the persisted version/hash recovered by GET, not the local JSON.
     published = publication(client, base, recovered)
@@ -322,19 +322,20 @@ def test_republish_after_newer_publication_returns_original_without_pointer_roll
     second_draft, _ = draft(client, second_base)
     second = publication(client, second_base, second_draft)
     assert second.status_code == 200, second.text
-    assert second.json()["revision"]["catalog_version"] == 3
+    assert second.json()["revision"]["catalog_version"] == base["catalog_version"] + 2
     with SAUnitOfWork() as uow:
         before = [m.model_to_dict(row) for row in uow.session.scalars(
             select(m.WorkflowCatalogPublication).order_by(m.WorkflowCatalogPublication.catalog_version))]
     replay = publication(client, base, first_draft)
     assert replay.status_code == 200 and replay.json() == first.json()
-    readback = client.get(f"/api/workflows/{base['workflow_id']}/catalog/publications/operations/publish-2")
+    readback = client.get(
+        f"/api/workflows/{base['workflow_id']}/catalog/publications/operations/publish-{first_draft['catalog_version']}")
     assert readback.status_code == 200 and readback.json() == first.json()
     assert active(client, enrollment["workflow_id"]) == {
         key: value for key, value in second.json()["revision"].items() if key != "published"}
     assert step(configured).json() == old_step
     with SAUnitOfWork() as uow:
-        assert uow.workflows.get_by_id(base["workflow_id"]).active_catalog_version == 3
+        assert uow.workflows.get_by_id(base["workflow_id"]).active_catalog_version == base["catalog_version"] + 2
         assert [m.model_to_dict(row) for row in uow.session.scalars(
             select(m.WorkflowCatalogPublication).order_by(m.WorkflowCatalogPublication.catalog_version))] == before
 
@@ -364,13 +365,13 @@ def test_startup_restart_keeps_v2_and_old_assigned_execution(migrated_configured
         assert active(restarted, enrollment["workflow_id"]) == expected
         assert step((restarted, assignment)).json() == original
         readback = restarted.get(
-            f"/api/workflows/{base['workflow_id']}/catalog/publications/operations/publish-2")
+            f"/api/workflows/{base['workflow_id']}/catalog/publications/operations/publish-{saved['catalog_version']}")
         assert readback.status_code == 200 and readback.json() == published.json()
     with SAUnitOfWork() as uow:
         task = uow.tasks.get_by_key(assignment["task"], project_id=assignment["namespace_id"])
         assert task.mode_id == enrollment["mode_id"]
-        assert uow.workflows.get_mode(task.mode_id).catalog_version == 1
-        assert uow.workflows.get_by_id(base["workflow_id"]).active_catalog_version == 2
+        assert uow.workflows.get_mode(task.mode_id).catalog_version == base["catalog_version"]
+        assert uow.workflows.get_by_id(base["workflow_id"]).active_catalog_version == saved["catalog_version"]
 
 
 def test_publish_requires_verified_subject_not_a_client_header(configured):
@@ -413,8 +414,8 @@ def test_real_sso_admin_subject_and_server_time_are_retained_on_replay(configure
 
     monkeypatch.setattr(sso.httpx, "AsyncClient", lambda **kwargs: original_client(
         transport=httpx.MockTransport(verified), **kwargs))
-    path = f"/api/workflows/{base['workflow_id']}/catalog/drafts/2/publication"
-    command = {"expected_version": 1, "expected_sha256": base["content_sha256"],
+    path = f"/api/workflows/{base['workflow_id']}/catalog/drafts/{saved['catalog_version']}/publication"
+    command = {"expected_version": base["catalog_version"], "expected_sha256": base["content_sha256"],
                "draft_sha256": saved["content_sha256"], "operation_key": "verified-publish"}
     headers = {"Authorization": "Bearer " + human_token(identity["subject"], issuer=settings.AUTH_ISSUER),
                "X-Publisher-Subject": "forged-admin"}
@@ -440,7 +441,7 @@ def test_real_sso_admin_subject_and_server_time_are_retained_on_replay(configure
             f"/api/workflows/{base['workflow_id']}/catalog/publications/operations/verified-publish", headers=headers)
         assert operation.status_code == 200 and operation.json() == first.json()
     with SAUnitOfWork() as uow:
-        receipt = uow.session.get(m.WorkflowCatalogPublication, (base["workflow_id"], 2))
+        receipt = uow.session.get(m.WorkflowCatalogPublication, (base["workflow_id"], saved["catalog_version"]))
         assert receipt.published_by_subject == "verified-admin-A"
         assert receipt.published_at is not None
         assert operator_publication_count(uow) == 1
@@ -465,7 +466,7 @@ def test_draft_rejects_any_non_text_change(configured, change):
     else:
         phase["checks"].append("New behavior")
     response = client.post(f"/api/workflows/{base['workflow_id']}/catalog/drafts", json={
-        "expected_version": 1, "expected_sha256": base["content_sha256"], "modes": modes})
+        "expected_version": base["catalog_version"], "expected_sha256": base["content_sha256"], "modes": modes})
     assert response.status_code == 409, response.text
     assert active(client, base["workflow_id"]) == base
 
@@ -484,7 +485,7 @@ def test_tampering_fails_closed_without_repair_or_activation(configured, tamper)
             row = uow.session.get(m.WorkflowCatalogPublication, (base["workflow_id"], saved["catalog_version"]))
             row.content_sha256 = "0" * 64
         else:
-            version = 1 if tamper == "baseline" else saved["catalog_version"]
+            version = base["catalog_version"] if tamper == "baseline" else saved["catalog_version"]
             mode = uow.workflows.list_modes(base["workflow_id"], catalog_version=version)[0]
             phase = uow.phases.list(base["workflow_id"], mode_id=mode.id)[0]
             instruction = uow.phase_instructions.list(phase.id)[0]
@@ -493,7 +494,9 @@ def test_tampering_fails_closed_without_repair_or_activation(configured, tamper)
     if tamper != "draft":
         assert client.get(f"/api/workflows/{base['workflow_id']}/catalog").status_code == 409
     with SAUnitOfWork() as uow:
-        expected = saved["catalog_version"] if tamper in {"published", "receipt"} else 1
+        expected = saved["catalog_version"] if tamper in {"published", "receipt"} else base["catalog_version"]
+        if tamper == "pointer":
+            expected = 1  # The rejected operation must not repair the deliberately corrupted pointer.
         assert uow.workflows.get_by_id(base["workflow_id"]).active_catalog_version == expected
 
 
@@ -512,7 +515,7 @@ def test_old_active_execution_can_report_after_publication(configured, superviso
     assert response.json()["result"]["execution_ref"] == enrollment["execution_ref"]
     with SAUnitOfWork() as uow:
         task = uow.tasks.get_by_key(configured[1]["task"], project_id=configured[1]["namespace_id"])
-        assert uow.workflows.get_mode(task.mode_id).catalog_version == 1
+        assert uow.workflows.get_mode(task.mode_id).catalog_version == base["catalog_version"]
         rows = uow.step_history.list(task_id=task.id)
         assert rows[0].phase_id is not None
         assert uow.phases.get_by_id(rows[0].phase_id).code == before["result"]["phase_code"]
@@ -541,7 +544,7 @@ def test_published_pm_phase_read_matches_selected_snapshot_without_effects(confi
     saved, _ = draft(client, base)
     assert publication(client, base, saved).status_code == 200
     with SAUnitOfWork() as uow:
-        old_mode = uow.workflows.list_modes(workflow_id, catalog_version=1)[0]
+        old_mode = uow.workflows.list_modes(workflow_id, catalog_version=base["catalog_version"])[0]
         new_mode = uow.workflows.list_modes(workflow_id)[0]
         old_phase = uow.phases.list(workflow_id, mode_id=old_mode.id)[0].id
         new_phase = uow.phases.list(workflow_id, mode_id=new_mode.id)[0].id
@@ -555,13 +558,17 @@ def test_published_pm_phase_read_matches_selected_snapshot_without_effects(confi
         assert operator_publication_count(uow) == before
 
 
-def test_publication_migration_is_additive_on_synthetic_filled_history(tmp_path):
+def test_publication_migration_is_additive_on_synthetic_filled_history(tmp_path, monkeypatch):
     from sqlalchemy import create_engine, text
 
     from project_workflow.application import catalog_publication
     from project_workflow.domain.catalog_publication import CatalogDraft, CatalogPublish
     from project_workflow.infrastructure.db.session import run_alembic_command
 
+    definition = catalog_publication._definition
+    # Exercise the historical publication producer against its actual sealed source.
+    monkeypatch.setattr(catalog_publication, "_definition", lambda key, manifest=None: definition(
+        key, manifest or "62762bf58f337d9e063226aef58ea6c89cdfb2e87159056f1a6b2b6c4d1ddf3a"))
     engine = create_engine(f"sqlite:///{tmp_path / 'filled.sqlite'}")
     try:
         run_alembic_command("upgrade", engine, "0021_profession_task_workflows")
@@ -602,7 +609,7 @@ def test_publication_migration_is_additive_on_synthetic_filled_history(tmp_path)
         engine.dispose()
 
 
-def test_author_upgrade_preserves_pre_audit_publication_without_invented_identity(tmp_path):
+def test_author_upgrade_preserves_pre_audit_publication_without_invented_identity(tmp_path, monkeypatch):
     from sqlalchemy import create_engine, text
 
     from project_workflow.application import catalog_publication
@@ -610,6 +617,9 @@ def test_author_upgrade_preserves_pre_audit_publication_without_invented_identit
     from project_workflow.domain.runtime_assignment import canonical_json, payload_sha256
     from project_workflow.infrastructure.db.session import run_alembic_command
 
+    definition = catalog_publication._definition
+    monkeypatch.setattr(catalog_publication, "_definition", lambda key, manifest=None: definition(
+        key, manifest or "62762bf58f337d9e063226aef58ea6c89cdfb2e87159056f1a6b2b6c4d1ddf3a"))
     engine = create_engine(f"sqlite:///{tmp_path / 'pre-audit.sqlite'}")
     try:
         run_alembic_command("upgrade", engine, "0022_catalog_publication")

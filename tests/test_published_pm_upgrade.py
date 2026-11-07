@@ -154,7 +154,7 @@ def assert_published_pm_upgrade_preserves_published_content_and_history(engine, 
             return
 
         with initialization_transaction(engine) as connection:
-            ensure_migrated(connection)
+            run_alembic_command("upgrade", connection, HEAD)
         assert database_revisions(engine) == {HEAD}
         after = _snapshot(engine)
 
@@ -205,7 +205,7 @@ def assert_published_pm_upgrade_preserves_published_content_and_history(engine, 
             assert receipt["published_by_subject"] is None and receipt["published_at"] is None
 
         with SAUnitOfWork(engine) as uow:
-            catalog._observe_profile(uow, *reader())
+            catalog._observe_profile(uow, *reader("2f16635c0f588d1f285393b4ad8c163119b4dba4b9918335c821f295e88a4f64"))
             assert editor.read_active(uow, workflow_id) == active_pm
             for version, published in publications.items():
                 assert editor.read_operation(uow, workflow_id, f"published-pm-{version}") == published
@@ -214,7 +214,7 @@ def assert_published_pm_upgrade_preserves_published_content_and_history(engine, 
 
         # Repeating the same upgrade must not append publications or change history.
         with initialization_transaction(engine) as connection:
-            ensure_migrated(connection)
+            run_alembic_command("upgrade", connection, HEAD)
         assert database_revisions(engine) == {HEAD}
         assert _snapshot(engine) == after
     finally:
@@ -306,7 +306,7 @@ def assert_published_analyst_upgrade_preserves_active_revision_and_history(engin
         assert _snapshot(engine) == after
 
         with initialization_transaction(engine) as connection:
-            ensure_migrated(connection)
+            run_alembic_command("upgrade", connection, HEAD)
         assert database_revisions(engine) == {HEAD}
         final = _snapshot(engine)
         additive_tables = content_tables | {"workflow_modes", "workflow_catalog_publications"}
@@ -340,14 +340,14 @@ def assert_published_analyst_upgrade_preserves_active_revision_and_history(engin
             assert receipt["operation_key"] == f"{editor.BASELINE_OPERATION}{workflow_id}:{digest}"
             assert receipt["published_by_subject"] is None and receipt["published_at"] is None
         with SAUnitOfWork(engine) as uow:
-            catalog._observe_profile(uow, *reader())
+            catalog._observe_profile(uow, *reader("2f16635c0f588d1f285393b4ad8c163119b4dba4b9918335c821f295e88a4f64"))
             assert editor.read_active(uow, workflow_id)["catalog_version"] == 4
             assert editor.read_revision(uow, uow.workflows.get_by_id(workflow_id), 2) == active
             assert editor.read_operation(uow, workflow_id, "published-analyst-2") == published
             for new_mode in new_modes:
                 assert len(uow.phases.list(workflow_id, mode_id=new_mode["id"])) == 12
         with initialization_transaction(engine) as connection:
-            ensure_migrated(connection)
+            run_alembic_command("upgrade", connection, HEAD)
         assert database_revisions(engine) == {HEAD}
         assert _snapshot(engine) == final
     finally:

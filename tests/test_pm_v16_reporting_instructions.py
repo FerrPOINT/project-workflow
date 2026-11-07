@@ -138,8 +138,8 @@ def test_receipt_completion_guidance_matches_server_receipt_and_current_stage_co
     assert "Reading the next profession's current context is not required to finish PM" in text
     assert "Do not dispatch Analyst or claim completion before the saved receipt readback" in text
     assert "reconcile unknown acceptance with the original operation" in text
-    assert "The immutable PM receipt records Backlog / Ready" in PM_COMPLETION_INSTRUCTION
-    assert "current human/server context can already show system-queued Analysis" in PM_COMPLETION_INSTRUCTION
+    assert "The immutable PM receipt records Draft / Completed" in PM_COMPLETION_INSTRUCTION
+    assert "current human/server context can already show system-queued Analysis / Ready" in PM_COMPLETION_INSTRUCTION
     assert "completed PM need not read the next profession's current context" in PM_COMPLETION_INSTRUCTION
     assert "Finish after verifying the saved PM receipt; the system owns Analysis intent and dispatch" in (
         PM_COMPLETION_INSTRUCTION

@@ -140,7 +140,7 @@ def test_report_command_uses_the_same_existing_step_and_namespace(professions, m
 
 
 @pytest.mark.parametrize("role,target", [
-    ("project_manager","Backlog / Ready"),("analyst","Architecture / Ready"),
+    ("project_manager","Draft / Completed"),("analyst","Architecture / Ready"),
     ("architect","Development / Ready"),("developer","Review / Ready"),
     ("reviewer","Testing / Ready"),("tester","Deployment / Ready"),("devops","Deployment / Completed")])
 def test_handoff_is_after_phase_acceptance_and_uses_the_real_owner_contract(professions, role, target):

@@ -47,7 +47,7 @@ def test_unchanged_operator_revision_survives_migration_and_remains_discoverable
     ensure_migrated(database)
     with SAUnitOfWork(database) as uow:
         active = editor.read_active(uow, workflow_id)
-        assert active["catalog_version"] == 4 and len(active["modes"][0]["phases"]) == 12
+        assert active["catalog_version"] == 5 and len(active["modes"][0]["phases"]) == 12
         for mode_id, phase_ids in old_rows.items():
             assert [p.id for p in uow.phases.list(workflow_id, mode_id=mode_id)] == phase_ids
         old_revision = editor.read_draft(uow, workflow_id, 2)
@@ -62,7 +62,7 @@ def test_unchanged_operator_revision_survives_migration_and_remains_discoverable
         new_modes[0]["name"] += " next edit"
         next_draft = editor.save_draft(uow, workflow_id, CatalogDraft(
             expected_version=active["catalog_version"], expected_sha256=active["content_sha256"], modes=new_modes))
-        assert next_draft["catalog_version"] == 5
+        assert next_draft["catalog_version"] == active["catalog_version"] + 1 == 6
 
 
 @pytest.mark.parametrize("rollback", [1, 2])
@@ -172,5 +172,5 @@ def test_already_applied_0029_is_sealed_without_rewriting_its_modes(database, mo
         ensure_migrated(database)
         with SAUnitOfWork(database) as uow:
             assert [p.id for p in uow.phases.list(workflow_id, mode_id=mode.id)] == old_ids
-            assert editor.read_active(uow, workflow_id)["catalog_version"] == 3
+            assert editor.read_active(uow, workflow_id)["catalog_version"] == 4
             assert len(editor.read_revision(uow, uow.workflows.get_by_id(workflow_id), 2)["modes"][0]["phases"]) == 12

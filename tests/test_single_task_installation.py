@@ -142,9 +142,9 @@ def test_repeat_bootstrap_rejects_drift_without_repair(database, drift):
 
 
 def test_installation_rolls_back_partial_failure(database, monkeypatch):
-    from project_workflow.infrastructure.db import single_task_catalog as installer
+    from project_workflow.application import catalog_publication as publisher
 
-    original = installer._persist_mode
+    original = publisher._persist_mode
     calls = 0
 
     def failing(*args, **kwargs):
@@ -154,7 +154,7 @@ def test_installation_rolls_back_partial_failure(database, monkeypatch):
             raise ValueError("injected persistence failure")
         return original(*args, **kwargs)
 
-    monkeypatch.setattr(installer, "_persist_mode", failing)
+    monkeypatch.setattr(publisher, "_persist_mode", failing)
     with pytest.raises(ValueError, match="injected"):
         with SAUnitOfWork(database) as uow:
             ensure_single_task_catalog(uow)
@@ -392,7 +392,7 @@ def test_actual_catalog_hashes_and_cli_publication_semantics():
             after = completion_instruction(role)
             assert "discussion publish" in after
             if role == "project_manager":
-                assert "pm completion submit" in after and "Backlog / Ready" in after
+                assert "pm completion submit" in after and "Draft / Completed" in after
             else:
                 assert "sdlc result propose" in after and "Fleet verifies real terminal" in after
 

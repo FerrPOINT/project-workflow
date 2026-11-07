@@ -4,6 +4,17 @@
 
 ### Current Status (2026-11-07)
 
+- Coordinated Start/Completed instructions now cover all seven professions and
+  all33 phases, without changing phase criteria, Advisor policy or model inputs.
+  Registered0031 appends the new source baseline atomically and retains saved
+  tasks, modes, publications and reports. Active operator content is not silently
+  replaced: it must first be explicitly published as the exact reviewed target.
+  Exact enrollment readback precedes new-execution admission and performs no
+  Tracker/Advisor call. Changed payload and unauthorized callers are refused.
+  Targeted correction50 and final cutover/replay25 tests pass; counts overlap.
+  Ruff, mypy177 and the reproducible catalog generator pass. PostgreSQL, the
+  final full native gate, installation and live PM acceptance remain open.
+
 - Initial instruction admission now accepts the exact assigned agent in Ready
   for all seven professions. Reports and the precommit authority check require
   InProgress; later active-phase reads cannot reuse Ready, including PM. Exact

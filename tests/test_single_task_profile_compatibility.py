@@ -109,6 +109,18 @@ def test_current_bootstrap_preserves_every_retained_row_and_reports_original_has
         assert all_rows(uow) == before
 
 
+def test_pre_start_profile_bootstrap_preserves_rows_and_original_binding_without_relabeling(monkeypatch):
+    manifest = "2f16635c0f588d1f285393b4ad8c163119b4dba4b9918335c821f295e88a4f64"
+    original = install_retained(monkeypatch, manifest)
+    with SAUnitOfWork() as uow:
+        before = all_rows(uow)
+        assert catalog.ensure_single_task_catalog(uow) == original
+        assert catalog.observe_installation(uow) == original
+        assert original.instruction_manifest_sha256 == manifest
+        assert original.workflow_catalog_sha256 == RETAINED_PROFILE_CATALOGS[manifest]
+        assert all_rows(uow) == before
+
+
 def test_pre_backlog_profile_is_retained_without_rewriting_existing_instructions(monkeypatch):
     manifest = "19d3228270bc76959f91a06f3b946a39b4509b14a2c29b62acc8762dd5cc3fe2"
     original = install_retained(monkeypatch, manifest)
