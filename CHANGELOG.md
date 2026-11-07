@@ -1,5 +1,770 @@
 # Changelog
 
+## Unreleased — Advisor V19 Installed, PM Acceptance Pending
+
+### Current Status (2026-11-07)
+
+- Coordinated Start/Completed instructions now cover all seven professions and
+  all33 phases, without changing phase criteria, Advisor policy or model inputs.
+  Registered0031 appends the new source baseline atomically and retains saved
+  tasks, modes, publications and reports. Active operator content is not silently
+  replaced: it must first be explicitly published as the exact reviewed target.
+  Exact enrollment readback precedes new-execution admission and performs no
+  Tracker/Advisor call. Changed payload and unauthorized callers are refused.
+  Targeted correction50 and final cutover/replay25 tests pass; counts overlap.
+  Final native qualification passes4763 tests and75 subtests with94.1116%
+  coverage;15 optional skips are not passes. All183 PostgreSQL cases pass,
+  including concurrent publication and preserved history. Ruff, mypy177 and
+  the reproducible catalog generator pass. Installation and live PM acceptance
+  remain open; Advisor inputs and the model have not changed.
+
+- Initial instruction admission now accepts the exact assigned agent in Ready
+  for all seven professions. Reports and the precommit authority check require
+  InProgress; later active-phase reads cannot reuse Ready, including PM. Exact
+  historical readback remains read-only.185 targeted tests, Ruff and mypy pass
+  after independent review. Advisor, criteria and model settings are unchanged.
+  This is a source checkpoint, not installation or complete handoff acceptance.
+
+- Owner clarified the stage/status contract for every profession: the agent
+  explicitly starts with InProgress and finishes with Completed; the application
+  alone advances the stage, resets status to Ready and hands off to the next agent.
+  The next agent starts InProgress; the final stage stays Completed. Architecture and
+  developer instructions now state this target without calling Ready a completion.
+  Installed BindRun-driven start and PM Backlog/Ready completion differ from it;
+  these are open implementation gaps, not fixed or activated by documentation.
+
+- Removed the arbitrary32000-character report ceiling from the parser, platform,
+  standalone and UI request schemas, stdin reading and current format instructions.
+  The current runtime OpenAPI is regenerated; archived schemas are unchanged.
+  Strict input validation remains. Input regressions:256 PASS. Frozen source
+  fb6ce930/tree1d6ee432 passed4690 native tests plus75 subtests and160 PostgreSQL
+  tests; coverage94.0992%, Ruff/mypy/namespace export passed. The15 native skips
+  (11 Playwright unavailable,3 private-source opt-ins,1 NTFS executable bit)
+  are not passes. A separately built ef7b82e2 image passed18 image-smoke stages;
+  installation and live acceptance remain pending.
+  Base standards and
+  local engineering guidance now require justified limits and behavioral
+  completeness regressions rather than silent truncation or replacement caps.
+
+- Removed the arbitrary default generation cap from Settings and Compose.
+  Unset/blank `OPENAI_MAX_TOKENS` omits `max_output_tokens` from the native
+  Responses request; an explicitly configured positive operator cap remains
+  supported. Completed responses above4000 tokens are accepted without that
+  cap. Provider/model limits remain; incomplete/refused responses are still
+  technical failures without advancement or automatic retry. Model, reasoning,
+  schema, criteria and timeouts are unchanged. Targeted client/HTTP/diagnostics
+  checks:166 PASS. This is a source change, not yet installed or accepted live;
+  previous qualification with an explicit4000 setting is historical evidence,
+  not qualification of the changed request. No new model calls were made.
+
+- Fleet792 diagnostic timing is now installed by normal Apply, journal156ed66f,
+  imagec85; smoke completed with cleanup. That Apply retained PM CID0966/image699/config31.
+  Receipt: `Q/readiness-timing-fleet-apply-792b963d-20261107.json`, phase=complete,
+  model_calls=0. The first readiness GET returned503 UNAVAILABLE in3.047s:
+  `original Docker operation requires reconciliation; no automatic resend`.
+  Stages: lock0/config47/binding447/launch7/health2416ms. PM31 subsequently adopted;
+  its prior readiness returned200 in17981ms, not proof of current config32 readiness.
+  A transient Fleet accepted-context read failure
+  self-recovered without an established native execution hold. SDLC36 proceeded
+  on the saved operation: reports203/204/205 PASS, Workflow done/version4, saved
+  requirements rev1 fully presented and separately confirmed by the owner.
+  All16 marks/reasons were reviewed;203/C1 has imprecise absence-of-decisions wording,
+  and204/205 duplicate the full document without losing facts. The final native run
+  completed, but Tracker completion read.current=null; business completion is not
+  implied by Workflow/native done. Explicit user policy now grants autonomous
+  technical operations without human popup, retaining necessary PM clarification
+  and exact owner requirements confirmation. Canonical Basead7dddb8 is published,
+  with52 offline tests PASS; server rights, pipeline gates and data/history guards
+  remain. Config32 approvals.mode=off is validated but NOT effective: activation
+  held at PREPLAN because original-operation evidence is unavailable. No new stop
+  is proven; policy activation/readiness32 are not claimed. Workflow core, criteria
+  and Advisor are unchanged. Budget159/163,
+  remaining4; diagnostic installation itself made no model calls. The exact await
+  and cause of the historical60s403 remain unproven; no cause fix is claimed.
+
+- Published PM worker instruction revision14 through the existing catalog CAS,
+  from source a2c4b2d8, separating the immutable
+  completion receipt (Backlog / Ready) from the system's current stage, which may
+  already be Analysis. Receipt content SHA256 is
+  `8b16196492ec0510c13d9e93412a63abb4cef697517490aa209ccc8ec08377d7`;
+  its modes exactly match the committed artifact with only the final worker
+  description changed from frozen13. Historical13 is preserved. Config31/binding,
+  image699, skills and Advisor criteria/policy are unchanged;18 reporting-instruction
+  tests and independent review passed. Publication made no Advisor calls and is
+  neither a fix for Fleet admission403 nor new PM live acceptance.
+
+- Canonical Basef8e375 instructions are now active on the same PM31, with physical
+  SOUL/four-skill and readiness proof; image699/CLI/Hermes/model/credentials
+  are unchanged. Catalog13 was retained at activation; publication14 is recorded
+  above. Initially, full QA stopped before PM/Advisor: create and one explicit
+  continue403 around60s, an incomplete operation, Tracker original-key404;
+  budget was156/163. That historical slice is preserved, not the current status
+  of the subsequently resumed SDLC36 operation. Fleet792 is installed as recorded
+  above; the historical interrupted await and complete business acceptance remain open.
+
+- Current operational documentation is aligned with native Responses/v19,
+  typed reports, current-phase history and identity-based human admission.
+  Obsolete diagnostic setup is retained through historical evidence/Git, not
+  presented as a second runtime configuration. Documentation does not activate
+  skills, change model requests or close the outstanding PM acceptance gates.
+  Verification:15 documentation tests, changed-file local links and independent
+  source/document review passed. Diagnostic nested-field truncation and platform-
+  only diagnostic CLI access are documented as actual limitations, not guarantees.
+- Basef8e375c0 separates shared Workflow/Tracker/evidence skills from professional
+  PM guidance. The complete Analyst-only procedure moved verbatim out of the
+  requirements method shared with PM into the existing Analyst role. Phase order
+  and completion belong to Workflow, not duplicated role routes. Inventory,
+  allowlists and executable examples are preserved;51 offline tests and independent
+  review passed. This was source-only on PM30; activation31 is recorded above.
+  No Advisor change.
+- Architecture now separates common agent instructions/skills, profession-specific
+  instructions/skills and independently configured Workflow phases/criteria.
+  Skills explain tools, not business routing or server authority.
+- The shared Base executor guidance now explicitly collects substantive work,
+  performed actions and verified outcomes against the current phase criteria.
+  Reads, PARTIAL and technical failures do not discard unreported facts. Its
+  example uses existing result.artifacts for the work account and unchanged
+  document; all seven default roles share the skill. This source-only package
+  does not change Advisor, report fields, catalog phases or runtime by itself.
+- Read-only PM audit separates document quality, report omissions, tool errors,
+  Fleet admission and test-harness limitations. SDLC35 saved/presented the exact
+  requirements, but report202 omitted the presentation account; its PARTIAL is
+  justified. Source tracing corrects the initial audit attribution: Fleet itself
+  creates the post-consent Workflow/Tracker notification; it is not manual harness
+  coaching and does not itself invalidate autonomous acceptance. SOUL still has
+  hash/obsolete lease wording. See the existing diagnosis for evidence and the
+  minimal instruction/test correction; no Advisor prompt/model change or new
+  inference was made for this audit.
+- Normal Apply completed for Fleet4240a850/image4b16e9a9 and Workflowe0b8/imagef985.
+  The approval-custody package passed871 unit/22 PG functions, Clippy/fmt and
+  exact-image smoke with cleanup; Applya096c7b8 completed. PM/Hermes/CLI are
+  unchanged. Delivery is not new PM business acceptance.
+  PM control recovered: one POST403 was followed by pending then adopted on
+  original-key GETs, without resend. Physical verify confirms the same ready
+  PM30/container/image/CLI/skills; no new business dispatch or inference.
+  The exact DATABASE_PROOF, saved history and catalog publications are unchanged.
+  Required skill names now come from the selected Workflow publication; Fleet
+  preparation/readiness uses that set. Worker-only file-reading guidance does
+  not change the Advisor request or introduce aliases, tools or authority.
+- Native pytest:4661 passed,15 skipped,160 deselected,75 subtests passed;
+  coverage94.097%. The wrapper FAILED its HEAD guard after the tested tree was
+  committed; independent comparison proves commit e0b8 has exactly that tree.
+  This is not a wrapper PASS. PostgreSQL160 cases are covered by91 initial
+  passes,1 isolated retake and68 remaining passes; the original connection
+  timeout failure is retained, not a clean single-run160 PASS. Base host guard:
+  49 final targeted tests PASS; supplementary274 is not a final-byte gate.
+- Historical direct real CLI acceptance:6 calls,34 assessments, all three phases
+  completed, including intended PARTIAL/correction and history revocation.
+  This qualifies only Developer/initial, not all seven professions or live PM.
+- Canonical skills use Basee308. PM30 is active/effective, generationf19,
+  CID0846 on unchanged image699; physical skill/SOUL files match the snapshot.
+  A private operator's mistaken image intent699→699 was rejected before selection;
+  after proof it was corrected to the normal `{}` request, without Workflow or
+  Advisor changes.
+- Resolved native prompt snapshots prove old SDLC34 retained old SOUL guidance
+  (hash490), while fresh SDLC35 uses the new guidance (hashc12). Raw system_prompt
+  NULL alone hid this distinction; the snapshots require hash resolution and are
+  not captured provider HTTP. No supported in-place native prompt refresh API
+  preserving context/history was found. The owner selected preserving SDLC34
+  unchanged and accepting fresh full SDLC35 plus a new sparse task, without
+  aliases, DB surgery or hidden session rotation.
+- Fresh full SDLC35 saved revision1 matching all10 document fields, without
+  artificial questions. Advisor200/201 PASS covers9 assessments, not9 flawless
+  reasons:200 C1/E1 inaccurately says owner decisions are absent, although choices
+  are present in the request and only the separate decisions array is empty.
+  Reports contain no hash; final message1941 adds an unnecessary SHA. Owner
+  confirmation31ec84 was saved separately at00:55:16Z. Native run33e2 completed
+  at01:01:48.742Z with error=null, not business completion:1946 records human
+  approval timeout before command execution;1947 accurately reports that block.
+  Task35 remained Draft/InProgress in that turn, without report202.
+  Planned stop read already_terminal[completed,completed]; no stop POST or
+  cancellation occurred. Subsequent GET approvals still returns a82389 pending,
+  resolved_at=null, with failed NotDispatched decision75f98 unchanged after the
+  terminal run. Source review confirms the shared settlement requires failed
+  native state; completed is intentionally excluded, including in a regression.
+  Explicit reconciliation's alternative accepts uncertain decisions, not this
+  failed one. The lifecycle gap is distinct from the unresolved original503.
+  Fleet736807bd implements the shared verified-terminal settlement with its
+  original proof/audit guards. The core package passed869 unit/14 real PG,
+  Clippy/fmt and independent review with cleanup. Subsequent084 qualification and
+  normal schema-first/backend Apply installed25feca25, preserving decisions and
+  history. The same PM30/CLI/image699 is ready after original-key controller recovery.
+  Historical current-generation Known ACK refused23514 on the retained pending request;
+  registered084 now has PostgreSQL and compiled-runtime qualification.
+  Historical083 and the failed decision are not rewritten; Advisor is unchanged.
+- Native trace has19 terminal calls:4 empty-object calls refused before command
+  execution and1 read_file shell127, followed by successful recovery. Raw wire is
+  missing, so neither model nor adapter data loss is established; the conditional
+  streaming risk is not a patch justification. Create403 recovered through the
+  existing same-operation continue to task35; its cause remains unknown. A
+  transient accepted-context hold also resolved without a product change.
+  SDLC34, full PM completion and complete UI acceptance remain open; PM live is not
+  accepted. Advisor budget156/163 used,7 remaining. Historical evidence is retained.
+- Continued SDLC35 produced202 PARTIAL. Independent review accepts all7 item
+  assessments: the complete saved document is exact, but the report omits the
+  account of its presentation. Input has only phase3 facts, no service receipts,
+  no truncation and one model attempt. The PM prepared its own full correction;
+  Fleet approval409 blocked it before reservation despite an accepted journal.
+  A scoped Fleet source candidate separates assignment read from current custody
+  and serializes approval with existing owner control. Historical heartbeat
+  causality is unproven; no Advisor change or live business completion occurred.
+- Chromium/Firefox/WebKit read the accepted SDLC33 baseline:7 business messages,
+  full document1, saved confirmation and Backlog/Ready match the real API.
+  This does not accept SDLC35 or raw grouped tool-event details. All three remain
+  overall FAIL: the settled login returns `/` instead of the chat; page_error
+  and a visible Request timed out remain, with their source not yet established.
+  An initial QA guard wrongly blocked catalog GETs on7771. After allowing only
+  those two read endpoints, blocked requests are0; the symptoms persist.
+  No business writes, HTTP mocks or response substitutions were used.
+
+### Historical Checkpoint (2026-11-06)
+
+- Candidate image20ad7dd0/source4bf3f926 is installed through normal Workflow-only
+  migration/Apply. All31 tasks,196 history rows and12 PM publications (active13) with
+  their physical rows were preserved; no Fleet/Hermes rebuild or DB rollback.
+  The changed sealed catalog makes PM27's prepared binding stale, despite
+  unchanged PM13. Explicit config28 refresh preserves every other snapshot
+  field and is active/effective with verified runtime readiness, unchanged CLI
+  and generated skill. Same SDLC33 now completes autonomously: report197 PASS,
+  exact saved document/confirmation, Workflow done and fresh Tracker Backlog/Ready;
+  initial create replay preserves all IDs/messages/runs. Fresh sparse SDLC34
+  context198 also passes, but its final is open. Creation403/readiness delays
+  and transient Fleet presentation holds are recorded separately, not masked
+  by Advisor changes. The documented request continuation recovered the same
+  partial creation operation, without another create or duplicate.
+  Diagnosis separates local report errors, intentional
+  probe194, justified195/196 decisions and the unresolved native timeout cause.
+- Sparse amendment exposed a separate Tracker tool-call defect before Advisor:
+  PM copied task_id into execution_id, while actual assignment metadata remained
+  correct. Tracker correctly refused409 and retained revision1; no new evaluation
+  or false completion occurred. The installed skill states the right mapping but
+  lacks an executable fence-copy example; the generic stale-fence error obscures
+  the mismatched field. Diagnosis records the minimal instruction/error package.
+  Revision2, stale-confirm rejection and the sparse final remain open.
+- Real installed-CLI standalone acceptance on image20ad7dd0/source4bf3f926
+  completed three phases with native Responses and no Fleet/Hermes: six calls,
+  three intended PARTIALs and three PASSes, done/version7. Independent review
+  accepted all34 criterion assessments and corrections. Supplement history,
+  revocation of covered, exact replay, changed-payload409 and restart preservation
+  passed; owned QA resources were cleaned. Phase-local inputs grew to5489 tokens
+  and reset at the next phase, without truncation or retries. This single
+  Developer/initial scenario does not qualify all roles or live PM. CLI409
+  details and standalone actor metadata remain separate findings; see diagnosis.
+- With explicit owner approval,0024/0027 select their already verified predecessor
+  bindings rather than active operator publications. Migration identities,
+  catalog locks, target validation and drift rejection remain intact. Independent
+  source review and65 existing catalog checks pass. Final PostgreSQL160 passes
+  without skips, with verified cleanup/source integrity; image/live remain open.
+  New role-neutral HTTP regressions cover7 professions/8 modes:8 PASS,105 with
+  existing prompt/history/profession checks. They verify one call, strict schema,
+  retained assessments on technical refusal, phase isolation and exact replay;
+  they do not claim live semantic qualification of every role. No model call,
+  prompt, model, criterion, credential or installed runtime change.
+- Separate archive read integrity from new-publication structural admission.
+  Older Analyst publications differed in instruction/check counts and failed
+  readback before migration when compared with a later source policy. Retain
+  exact saved-content/row checks, trusted mode identity/scopes, role/workspace
+  restrictions, hashes and selected pointer. Explicitly validate current policy
+  for a new publish after replay and before writing authority; never guess origin
+  or reinterpret an accepted publication. Five initial preservation cases and
+  four new tampered-draft negatives pass, including a correct recomputed hash.
+  Final374 targeted native and15 docs cases pass. All three changed production
+  modules were purged from prior coverage before117-case remeasurement:
+  12842/13652=94.0668%; unchanged production matches the earlier full baseline.
+  Ruff, mypy176, hygiene and independent review pass. Installation is unchanged.
+- Зафиксировано разделение Tracker stage/status и Workflow completion.
+  PM завершает исполнение профессии; дальнейшая Analysis относится к Tracker.
+  Текущий source lifecycle выставляет InProgress при подтверждённом bind_run,
+  а не командой первой фазы; дублирующий status patch не добавлен.
+  Историческая PM-only приёмка сохранена.89 CLI/confirmation/docs checks проходят,
+  включая две новые регрессии внешнего read-only состояния и допуска Analyst.
+  Model/prompt/runtime не менялись; безопасный catalog upgrade остаётся открытым.
+- Native Responses image93af2ee5 was built and passed exact-image Compose smoke,
+  including synthetic archive preservation and standalone mechanics. Normal
+  Workflow-only Apply stopped at schema readiness: live database0023 was not
+  migrated to the image's0030. Incoming0024 selects an operator-published PM's
+  active rows instead of its baseline; the archive-only fixture does not qualify
+  this transition. The original Workflow image was restored by normal image-only
+  rollback, with healthy service, unchanged DB/Fleet and ready PM27. No new model
+  call or business transition occurred. Source is published; installation and
+  live acceptance remain blocked, not complete. A new regression with genuine
+  PM publications up to revision13, an unfinished task and nonempty history
+  reproduces0024 refusal on SQLite and PostgreSQL; full snapshots and publication
+  readback remain unchanged. PG1/1 passes with zero skips and verified cleanup.
+  Safe refusal is not successful-upgrade acceptance.
+- Reconcile master d0ec576c and native Responses with v19, without importing
+  the v15 report/prompt/retry contract. Keep typed reports, current-phase facts,
+  required_change, one call, high, connect30/read1200 and redirect refusal.
+  The strict response schema is mandatory; there is no format selector or Chat
+  fallback. New fingerprint format is responses-json_schema; historical results
+  stay read-only. Source integration is not installation or new model acceptance.
+  The previous36/36 does not independently qualify the changed HTTP transport.
+  One approved real Responses call matches all6 negative153 marks and independent
+  reason/correction review: HTTP200/completed, high/4000, one POST,15.004s.
+  PostgreSQL157 passes without skips, with cleanup. Full native4615 PASS/2 FAIL,
+  15 explicit skips/75 subtests, coverage94.1034%. Both failures are anonymous
+  platform theme-edit fixtures; after adding controlled human Auth and retaining
+  anonymous401,73 installation/SSO/editor tests pass. Production bytes are unchanged;
+  unaffected full-run results are explicitly reused, not presented as a new full run.
+  Ruff, mypy176 and hygiene pass. Image/install/live gates remain separate.
+- Fleet f8/imageb07 handoff is installed and genuine native recovery completed;
+  the same PM now uses revision27/qualified CLI699 and generated serializer skill.
+  Live preparation195 passes with the exact saved document; independent review
+  confirms all criteria. Consent1 is saved separately. PARTIAL196 is valid and PM
+  prepared its own correction. The failed/not-dispatched terminal approval was
+  cancelled by registered083 after972 unit/32 scoped PG tests, binary checks
+  and independent review. Original decision/history are unchanged; no command
+  was resent. Actual known-ACK/retained-inventory preflight now passes. The new
+  Fleet image passed canonical Compose smoke/cleanup and normal Applybe4e6abc
+  after the common resource was released. Original-key recovery confirms adoption;
+  separate proof verifies stable readiness and unchanged PM27/CLI699/skill.
+  Campaign144/163,19 remain; both
+  business finals and release are open.
+
+### Historical Delivery Evidence Before PM27
+
+- Report-construction follow-up: local syntax errors now include the standard
+  decoder reason and EOF location; schema errors name declared nested fields,
+  expected types and received types without exposing report values or unknown
+  keys. Human CLI explicitly marks a local report as not sent. Canonical worker
+  instructions and generated runtime skill show object serialization and exact
+  readback reuse, not hand-written nested JSON or placeholder probes. Report/API
+  schema, Advisor v19, successful evaluation requests and historical decisions
+  are unchanged. Isolated native4457/75 subtests and PostgreSQL132 pass;15 native
+  skips are explicit, PG cleanup is verified. Final320f9670 adds8 depth/error
+  regressions without changing accepted input or limits;258 targeted checks,
+  Ruff and mypy169 pass. Incremental coverage94.0823913208406% reuses unchanged
+  production measurements and remeasures the changed module with182 cases.
+  Final CLI699b79eb passes qualification, retaining Hermes and other CLI bytes;
+  earlierc02b52f9 is uninstalled and superseded. Base37c8b88f supports publication
+  through existing configuration refresh without rebuilding Fleet. Publication,
+  PM activation and both business finals remain separate acceptance steps.
+  CLI default publication81354d43 and Workflow Buildd97/Applyc684 are complete;
+  imageb4b11d7b is healthy and its actual decoder error is verified. Image smoke
+  preserves19 synthetic historical records and passes platform/standalone with
+  cleanup. Same PM26 still uses150f650c; native controller recovery delays its
+  explicit activation. No new Advisor calls or accepted business finals yet.
+- Live transition blocker is isolated to Fleet: SDLC-33's completed UI run has
+  zero verified native terminal observations; known-ACK recovery rejects it with
+  SQLSTATE23514. Existing one-shot reconcile-run returns native_readback/unavailable.
+  Exact installed-export read-only diagnosis now resolves that refusal: original
+  namespace/start checks pass; attached_membership fails because the replacement
+  backend is disconnected from the retained PM network. Recovery needs the native
+  proof before attachment, while strong readback needs that missing connection.
+  A pre-stop admission guard prevents repetition but does not repair this already
+  disconnected runtime. No host-connect workaround or weaker custody is accepted.
+  No proof is fabricated and no recovery POST or replacement task is issued.
+  Both PM finals and browser acceptance remain open; Advisor stays141/163.
+- Normal Apply729, journal de836101, is complete: exact Workflow936a4b80 and
+  web1e264d20 are installed. Human admin catalog GET returns200 without changes
+  to Auth application grants. Catalog12 matched the baseline before explicit
+  publication13 of the prepared report instructions; phase criteria are unchanged.
+  Actual container get_settings confirms app-test/high/1200s/4000/json_schema
+  and platform. Auth identity, subject rights and machine scopes remain enforced.
+  W899 production qualification describes the installed baseline, before the
+  report-construction follow-up. Native4421/75 subtests, PostgreSQL132, Ruff and
+  mypy169 passed; coverage94.0612151667428%,15 explicit skips, PG cleanup verified.
+- Previous Fleet6c/image9a0f was installed through normal Build32d82/Applyc52, complete
+  with controller refresh and PM bridge. All67 PG qualification checks are closed
+  (43 reused,24 new), with Clippy passed. Witness GET200 confirms original start
+  ACK for the same ce8e generation/effective25. Before081, a recovery POST with key
+  workflow-delivery-080-recover-pm11-20261106 returned generic503; exact-key
+  readback is NotRequested, with no accepted intent. PG reports42501
+  fleet_request_authority_expired at COMMIT; the fixed60s human scope is unchanged.
+- NativeState readback (84 runs/1.09MiB) takes23.125s; the state query spends19.6
+  of21.3s on2345 validator calls, unnecessarily validating other audit rows.
+  Read-only query comparison: old35 calls/325.931ms versus exact-target MATERIALIZED
+  1 call/47.757ms.081/sourcee4d59e7f is installed as imagef3e1fa5e through normal
+  Build227b/Applye9f4. Migration108, diagnostics2, scoped PG11, fmt/Clippy and
+  exact-image smoke pass. Final planner PG2 proves19-to1/equal packets in both
+  lineages;58 unchanged PG results reused. New witness200 takes10.804s; recovery
+  now saves the intent and genuine native/lease ACKs, but late HTTP-authority expiry
+  leaves publication pending. An explicit original-key/body resume reaches
+  attach_controller/utility_exit. A write-blocked exact-export probe proves
+  Unclaimed controller attachment before native claim: the unnecessary host bridge
+  pre-connected the backend. Remove that release step; release only its sealed
+  owned connection, then use normal native claim-before-connect. No fabricated
+  native receipt or weakened guard. Owned release and genuine native handoff are
+  complete; same PM11 is healthy/ready at effective26 with qualified CLI150f650c.
+  Basec4be9860 passes19 release tests/15 subtests. One full QA task is reserved,
+  but chat/dispatch did not occur: PG55P03 on the operation UPDATE proves a Fleet
+  producer lock-order defect. Its parent-first repair passes4 new PG/2 fence/1 CLI/
+  5 API replay and full Clippy/fmt. Fleet3a2feea6/image56304d14 is installed through
+  normal Build76e4/Applyb15a after exact-image smoke. One recovery POST saves both
+  ACKs; worker/readback reaches adopted after HTTP503, without bridge or resend.
+  Same PM26 is healthy/ready; original creation continues in10.984s with the same
+  task and one chat/run. SDLC-33 context PASS193 consumes the first new Advisor
+  call; valid incomplete probe194 makes141/163,22 left. Five manually composed
+  full reports fail local JSON parsing before HTTP, reproduced at identical error
+  positions; no transport loss or Advisor error is established. A one-paragraph
+  serializer skill change passes39 package tests and exact document roundtrip,
+  but is not activated yet. Earlier readiness500 remains unexplained. Advisor v19 policy and accepted
+  revised qualification36/36 are unchanged; PM live acceptance remains pending.
+
+### Historical Deployment Attempt (2026-11-05)
+
+- Attempt the qualified deployment without new Advisor calls. Fleet6eab59ad is
+  installed; Workflow79964f6 boots healthy with explicit platform/single-task-v1,
+  app-test/high/1200s/4000/json_schema. Integration is not accepted: human access
+  is blocked by an unnecessary app-grant dependency, and PM CLI activation26 is
+  held by missing native provenance in historical runtime generations. Retain PM25,
+  credentials and all history; complete explicit image-only Workflow/web rollback
+  after confirming unchanged migrations/models and zero new history records.
+  No new PM acceptance or merge is claimed. Evidence and next scope are recorded
+  in the existing [diagnosis](docs/ADVISOR_DIAGNOSIS_20261101.md).
+
+- Qualify an explicit revised dataset without changing production prompt or old
+  evidence:17 unchanged cases plus the predeclared unambiguous storage/access
+  control. Retain the original disputed case as unresolved, never relabel its
+  result. Two fixture regressions pass; qualification contract file29 PASS,
+  Ruff PASS. No new evaluator, retry or keyword grading.
+- Seven prospective single-attempt calls, each independently reviewed before the
+  next, complete revised qualification36/36:168 assessments and44 corrections
+  accepted;22 PASS/12 PARTIAL/2 BLOCKED. Raw/wire/schema/settings are exact.
+  Reuse28 accepted old replies and exact D2sample1; the old series is not completed.
+  Campaign139/163 leaves24 live calls. This is model qualification, not PM live.
+- Human API inventory succeeds:30 tasks,11 done/19 active. Owner explicitly
+  selects updates for new tasks while preserving incompatible old executions
+  read-only in effect: no continuation, automatic close or rebind. No runtime
+  install or business transition follows from that decision alone.
+- Apply the approved release-admission gate before spending the seven remaining
+  qualification calls. Two independent reviews cover all29 replies,134 assessments
+  and30 corrections:28 replies fully accepted; one C2 correction remains ambiguous,
+  not a proven evaluator defect. Matching marks do not accept an unresolved reason.
+  No new model calls, prompt/product changes, install or merge. Campaign132/163;
+  seven qualification and24 live calls remain unused. Preserve old inputs/gold.
+  Verify reusable gate artifacts by SHA and unchanged production/runner/config
+  sources; do not describe this as a fresh full run. Correct the CLI contract's
+  stale format description: candidate qualification explicitly selects json_schema,
+  without activating the installed runtime or changing defaults. Document both
+  direct Workflow and Base-prefixed environment settings, including explicit high:
+  Base's none default otherwise overrides Workflow's high default. Historical
+  qualification requests already used high; no semantic cause is attributed to this.
+  Offline preflight validates all18 frozen cases/36 slots against exact typed
+  reports, label digests and production builder; no model client or HTTP call.
+- Continue cause investigation rather than declaring the earlier inventory complete.
+  Real SDLC-32 inputs prove a prior owner fact was omitted from source190 while v15
+  supplied marks without prior report facts. Add an HTTP/storage regression using
+  preserved historical facts only as explicit typed test fixtures: file8 PASS,
+  Ruff PASS, temporary resources cleaned. Production code/policy remain unchanged.
+- Offline final HTTPX serialization capture passes11 checks: exact system/user,
+  high and schema retained; cap absent. Two real190-derived calls are PASS/PASS,
+  non-discriminating. Four predeclared opposite-history controls demonstrate CSV2/2
+  PASS and JSON2/2 PARTIAL with sufficient corrections, not full qualification.
+  Six new calls bring the campaign to132/156 after explicit owner approval;24 live
+  calls stay reserved. No image/update/merge or new PM live acceptance.
+- Consolidate all18 qualification cases/36 slots, the four counterfactual controls
+  and historical discrepancies in [the case report](docs/ADVISOR_CASE_REPORT_20261105.md).
+  The original158 item assessments retain their literal reasons/corrections;
+  unknown and unrun slots remain explicit. Documentation only, no new inference.
+- Two universal content-versus-availability sentences correct the disputed E2
+  interpretation without changing phase criteria, report shape or parser.
+  A first four-call experiment matched19 marks but exposed one insufficient
+  correction. The final candidate explicitly binds required_change to satisfying
+  that same criterion. Its four controls pass independent review of all19 marks,
+  reasons and corrections; this is not full qualification.
+- Preserve mandatory phase-context proof for both v18 and v19 readback.
+  Frozen v18 inputs/labels remain byte-identical; the existing QA runner selects
+  explicit v19 metadata and strict schema, with no reuse of old-policy responses.
+  Its paused budget now also blocks route probes and protects the live reserve.
+- Qualification stopped on independent semantic review after26 new attempts:
+  25 complete replies match all115 marks, but one C2 reason/correction was
+  disputed. Later red-team review found the original trimming wording ambiguous;
+  calling it a proven forbidden-versus-unspecified error was too categorical.
+  The real access defect still justifies PARTIAL. No gold change, repair or retry.
+  Together with four controls,29/36 evaluations and134 marks were reviewed;
+  one interrupted response is unknown and six slots were not called.
+- Four predeclared counterfactual cells keep product prompt/schema/settings
+  unchanged and explicitly allow/forbid trimmed storage, independently toggling
+  an access contradiction. All24 marks are grounded; six corrections suffice in
+  their response context. Wording caveats remain recorded, not hidden. One sample
+  per cell does not establish the original internal cause or complete qualification.
+  Source/constraint policy is changed together; history is empty. No new fix follows.
+- Campaign limit152 was explicitly approved;126 calls are counted, including
+  the interrupted call and four diagnostics. Reserve24 remains untouched, with
+  two further slots unused. Workflow install/merge and new PM live acceptance remain
+  blocked. LiteLLM stays fixed on Octo; installed Workflow79976adb stays healthy.
+  Native4326 PASS plus75 subtests, coverage94.0751%;15 skips are explicit:
+  private opt-in3, NTFS executable-mode1, missing Playwright11. PostgreSQL132
+  PASS without skips; owned Compose resources cleaned. HTTP history regression
+  adds one unique PASS: v18 replay/readback after v19 uses no inference and leaves
+  saved data unchanged. Ruff and mypy169 PASS on pinned dependencies. Own native
+  temporary files were retained after cleanup was rejected by execution policy;
+  no alternate deletion was attempted. This is not full release readiness.
+
+### Historical V18 Checkpoint Before Prompt Clarification
+
+- Strict qualification stopped after13 new single-attempt calls:12 exact matches,
+  one disputed E2 mark on explicit replacement of the old document and source.
+  All13 responses have the complete schema; transport/format errors are absent.
+  Independent review validates56 of57 assessments and isolates E2 sufficiency
+  ambiguity; the overall PARTIAL is correct. Gold and prompt were not changed.
+  Campaign88/134,22 slots unrun and24 live calls still reserved. No Workflow
+  install/merge or new PM acceptance is claimed; no unchanged-series retry occurred.
+- Qualification helper now explicitly requests the current per-case strict schema
+  and records prepared HTTP bodies, literal replies and the campaign counter.
+  Frozen reports, labels and engine prompt are unchanged. Focused52 tests, Ruff
+  and mypy169 PASS; independent preflight accepts the35 remaining slots and the
+  exact reuse of153/sample1. Preparation is accepted; the series result is above.
+- LiteLLM #3 merged as8fc705e2ab with reviewed head50ccf52. Full local make lint,
+  frozen lock, secret scan and coverage5 PASS; existing244 targeted tests and5
+  staged-runtime regressions remain applicable. No caps or rules were weakened.
+  Actions were excluded by the owner, not reported as passing. QA setup failures
+  remain recorded; owned temporary resources were cleaned and external cache retained.
+- Octo now runs the verified immutable schema-forwarding bundle, PID2264636,
+  after confirmed stop and atomic pointer activation. Config/env, dependencies,
+  UI and inherited runtime fixes are unchanged; both health endpoints return200.
+- Three actual calls match: JSON-mode compatibility, the identical strict request
+  that formerly returned unexpected42, and frozen missing-C4/153 with all six
+  assessments, PARTIAL and concrete corrections. Route checkpoint used75/134;
+  the subsequent qualification stop and current budget are recorded above.
+  Workflow/Fleet/Hermes and the installed PM were not rebuilt or upgraded.
+
+### Historical CP1 Before Adapter Activation (2026-11-04)
+
+- Current CP1 is stopped on a reproduced provider-contract defect. The active
+  LiteLLM1.109.0 ChatGPT adapter (source1403f0dc2ebd) removes text.format and
+  max_output_tokens after the actual parent transform retained them. Offline
+  reproduction denies network and uses no mocks. High is preserved; temperature
+  is explicitly dropped. The effective added instruction is neutral, not the
+  bundled coding prompt; upstream output-limit support remains unverified.
+- Workflow and Base Compose now forward the explicit evaluator format. Rendered
+  config regressions pass for both settings; defaults and installed profiles are
+  unchanged. Base source fix855eb2e9 is published, not merged or activated.
+- Four route probes were frozen in64e00d2. The current route passed the compliant
+  probe, then returned {"unexpected":42} despite the strict one-field schema.
+  HTTP200/stop, actual prepared bodies and literal assistant replies are retained.
+  Execution stopped after2 calls without retry/downgrade. Campaign72/134; remaining
+  route probes,36 qualification calls and24 live calls were not executed.
+- Fix the existing adapter in its canonical source/release, not by editing the
+  active immutable bundle or weakening Workflow. No image/build/install/PM live
+  acceptance or merge was performed. Current evidence supersedes the older
+  untested-schema hypothesis below without rewriting historical results.
+- Current checks:63 focused Workflow tests,15 Base config-render tests,9 reliability
+  tests with the explicit Base SDK, Ruff and mypy169 PASS. The initial recovery test
+  failed before transport when that SDK was absent; the corrected-input retake did
+  not alter source. Production tree and installed image remain unchanged/healthy.
+
+- Base #458 is merged at6868579e without runtime activation. Shared rules now
+  explicitly prohibit weakening accepted regression expectations to pass a candidate.
+  Workflow is consolidated with master9c199ee but remains Draft: review confirms
+  an unfinished consumer/active-history/configuration cutover, not safe transparent
+  upgrade. No legacy execution fallback or guessed history authority was added.
+  Consolidation checks pass236, production tree is unchanged. Workflow master now
+  requires PRs and forbids force-push/deletion, including admins; Actions are disabled,
+  so these branch guards are not a claim of automated qualification.
+- One typed report contract, complete current-phase/group reports and latest compatible
+  assessments. Original group provenance survives concurrent catalog changes; exact
+  context is rechecked after inference. Technical failures preserve prior assessments.
+- Accepted readback precedes new-report parsing and never reexecutes a transition.
+  CLI supports explicit archived history without impersonating an executing agent.
+  Owner authorization and exact confirmation checks remain server-side.
+- Python defaults now match Compose's reasoning high. The configured app-test/high/
+  4000/json_object experiment and installed PM credentials/model are unchanged.
+- Full native plus coverage at b200f21:4296 passed,75 subtests passed,15 skipped,
+  132 PostgreSQL cases deselected; coverage94.0675% against94%. Ruff and mypy169 pass.
+  Later prompt-only changes are checked separately, not misreported as that exact run.
+- Independent model review covered17 cases/18 evaluations of system e56940d0:
+  all85 item assessments were supported. One result exposed an underspecified
+  BLOCKED/PARTIAL boundary, not lost context or a false acceptance.
+- The candidate replaces only that general verdict definition: incomplete phase
+  work or an unanswered question alone is not an external obstacle. No enum/keyword
+  grading, verdict repair, extra model or phase-criterion change was added.
+  Current prompt/client/runner tests pass160.
+- One flat typed qualification dataset retains all17 cases and adds a synthetic
+  mandatory-source HTTP403 counterexample. Its18x2 plan uses36 slots, replacing
+  arbitrary extra retention repeats. Free-form blocker wording requires manual
+  review, not literal sentence matching; automatic matching never sets qualified=true.
+- The user explicitly extended the campaign limit to55. The journal verifies44
+  attempted calls, leaving11, not the31 stated in the earlier asynchronous question.
+  The predeclared11-slot plan covers four negative cases, owner approval and all six
+  other professions. All11 matched (7 PASS/4 PARTIAL); independent review accepted
+  all53 assessments,16 required changes and empty blockers. HTTP200/stop throughout,
+  no format/transport failures or retries. Raw evidence is retained unchanged.
+  That stage ended at55/55 and froze15/36 canonical slots for exact reuse.
+  Its qualification/budget regressions passed38; no production change.
+  The separate kind-mislabel control is not counted as a canonical slot.
+  This bounded series does not complete qualification or authorize installation.
+- Reliability checkpoint96ee3a1 accepted an additional45-call Advisor budget:
+  21 qualification calls plus24 reserved for live PM. Exact reuse of15 slots is
+  verified by immutable journal/payload/policy/settings/label checks. The new batch
+  stopped at15 attempts:14 matched, then PM153 sample2 omitted assessmentC4.
+  HTTP200/stop, empty phase history and an untruncated1996-character user prompt
+  do not support context-growth or output-truncation explanations. The five returned
+  assessments were supported, but cannot replace the required sixth assessment.
+  Strict parsing correctly rejected the response; no repair or retry occurred.
+  Independent review accepted all60 assessments of the14 valid new responses.
+  Current coverage is29/36 valid slots, one format error and six not run. Campaign70/100;
+  further qualification is paused, and the24-call live reserve remains unused.
+  Evidence stays in the existing protected QA directory, not a second tracked raw-log archive.
+- Nine new offline regressions cover1/10/100 complete scoped reports, revocation
+  across technical errors, storage failure before COMMIT, lost response after COMMIT,
+  omittedC4 and provider429/500 without retries or advancement. The related suite
+  passes300; the final new file passes9 after adding the two HTTP controls. Counts
+  overlap and are not summed. Updated qualification checks pass40, Ruff/mypy169 pass.
+  Production tree remains identical to the132-case PostgreSQL proof, whose artifacts
+  were reverified; no redundant PG run, image build, install or live PM acceptance.
+- Read-only installed readiness confirms catalog env legacy, old untyped CLI and
+  timeout120 versus the candidate CLI1500. Global active inventory is denied403;
+  permitted readback still shows SDLC26/27 active. Cutover is not ready and no
+  credentials, assignments, runtime or history were changed. The next hypothesis is
+  to verify the existing opt-in provider schema mode against the omitted-label case;
+  provider enforcement is unproven and was not enabled during this qualification.
+- The preceding44 calls are retained, including stopped/ambiguous cases. Four bounded
+  question/real-obstacle evaluations passed independent reason review; one additional
+  single-field kind-mislabel control also passed. No unchanged retry-to-PASS.
+  A changed system invalidates old exact-result reuse.
+- PostgreSQL16.15 initial gate:68 passed, then an obsolete implicit-mode fixture
+  returned403. Temporary resources were cleaned. Fix9505bb6 makes modes explicit
+  and updates current response/history fixtures. Retake passed103 cases, then exposed
+  an obsolete unbound-workflow phase-delete expectation. Its test-only correction
+  retains namespace protection. All29 failed/unrun cases then passed with0 skips.
+  Verified PG coverage is132 unique cases (103 reused+29 retested), with identical
+  production trees and disjoint JUnit identities. Original failed invocations remain
+  recorded as failures; this is not claimed as a single132-case successful invocation.
+  Every temporary container/network/volume and retake scratch was removed.
+- Base skills a25c4ef4 pass39 offline tests and use typed business facts, without
+  service hashes/receipts in Advisor reports. README documents HTTP-only CLI setup.
+- Changes stay in this PR; the redundant experiment branch is removed, source and
+  evidence remain in Git. Installed v15, PM, Hermes and accepted FLEETQA-30/31/32
+  remain unchanged. Qualification, image/update, browser/live acceptance and merge
+  are still open; this is not a release.
+
+### Historical CP0 And Rejected Representation Experiment
+
+- CP0 records source09e123d/Base93bf43c9 and the unchanged healthy installed v15
+  image. Candidate experiments retain app-test/high/4000/json_object and1200s,
+  while the installed v15 still uses120s. Neither runtime configuration was changed.
+- The installed receipt verifier rejects unknown policy versions. A downgrade
+  cannot be assumed compatible with v18 receipts; old-reader/new-history tests
+  remain a pre-install gate. No database rollback is authorized by this work.
+- CP1/CP2/CP3 are not accepted yet. The new campaign is capped at48 model calls:
+  8 format comparisons,4 context comparisons,36 final qualification calls.
+- CP1 stopped after6 calls. New189 matches both marks and reason basis;
+  new190 matches marks but cites manual status transitions instead of the missing
+  Closed decision. Old/new191 reject the same assumption against the frozen PASS
+  label; the materiality of that assumption remains disputed, not a proven schema
+  regression. No input loss, truncation, format error or transport error observed.
+- All36 item explanations were independently reviewed. The experiment is rejected:
+  classification alone did not demonstrate the intended improvement.42 slots remain
+  not_run; CP2/CP3, installation and live PM acceptance did not start.
+- Candidate source/tests are retained at f34bbbe in this branch's history.
+  Explicit reverts5bf3de2/c7d4bf1 return the active source contract to CP0; no second
+  production parser or fallback was retained. Raw requests/responses remain in
+  docs/evidence/advisor-v18-checkpoints-20261104.json; old labels are unchanged.
+- Next analysis: resolve the criterion's boundary between material owner decisions
+  and permitted implementation assumptions before any new model series. Do not
+  relabel191 after the result or prescribe a task-specific status exception.
+- Post-revert validation:79 focused report/archive/qualification/mechanics tests,
+  Ruff and mypy169 files pass. Product source and owner architecture/CLI docs
+  match CP0; installed image/configuration remain unchanged. Full release gates
+  are not newly claimed by these checks.
+
+## Unreleased — Clean Workflow Candidate (Not Installed)
+
+- Explicit platform/standalone admission around one evaluator. Standalone uses
+  local namespaces, workflow/mode selection, operation ledger and PostgreSQL,
+  without external identity or Tracker receipts. Direct mode checks loopback
+  bind/peer; container mode explicitly relies on isolated network and loopback publication.
+- One model call per new report; no format/transport/semantic automatic retries.
+  Model wait1200s, connect30s, CLI read1500s. Readback does not repair transitions.
+- Removed textual coverage inheritance, retired assignment adoption, old report
+  normalization authority, default-workflow reassignment and fabricated service links.
+- Base SDK producer25b0b2a supports explicit token-free loopback transport;
+  default authenticated clients are unchanged. Common policy is in Base PR458.
+- Mechanical review additionally closed standalone workflow/task lock inversion,
+  ambiguous start/report keys and history projection/cursor mismatches. Ordinary
+  history has an explicit64MiB CLI transport budget without truncation/retry;
+  step and diagnostics retain1MiB. Internal API errors remain JSON, not UI pages.
+- The ASGI factory and SSO use the same resolved Settings, including .env-only
+  configuration. Platform requires explicit Auth and enforced application access;
+  standalone cannot be selected by missing identity or dependency settings.
+- Checked separately: affected configured/CLI/Advisor suites176 tests; SSO/CLI/local
+  group163; prompt/qualification/local regression group125; current API surface15;
+  installation/publication/editor group59. These overlap and are not a full-suite
+  count. Ruff, mypy169 files and generated OpenAPI check pass. Independent source
+  review of the latest admission/locking/history/API-error changes found no P1/P2.
+- The earlier full native run failed on obsolete fixtures; a subsequent coverage
+  run was interrupted at4% and is not a passed gate. Full native/PostgreSQL/94%
+  coverage/image/browser gates remain open. No Fleet/Hermes rebuild or runtime update.
+- Model qualification stopped after16 calls:15 classifications matched, then
+  case190 falsely passed C3/E2. All75 explanations independently reviewed;
+  case189 additionally requests an unestablished closure decision. V17 rejected;
+  20 planned calls remain not_run. No re-run, installation, live PM acceptance or merge.
+- Context recheck: current task/phase/mode/cycle only; the model receives current
+  marks and report, not the full stored history. Case190 has5739 user characters,
+  1886 provider-reported prompt tokens, finish=stop and no diagnostic truncation.
+  Context overflow is not established. Four focused coverage/scope regressions pass;
+  no new model calls or product-code changes were made for this recheck.
+- Remaining cleanup includes the PDLC/SDLC environment-alias contract and offline
+  seed helpers retained in product source. Unfinished old assignments require an
+  explicit consumer transition before removing their authority readers. Archive
+  data, applied migrations and valid current Auth token prefixes are not garbage.
+- Saved as a source checkpoint at the user's explicit request with the known
+  qualification failure and open mandatory gates. This is not a release candidate
+  accepted for installation or merge. Base is published in Draft PR458; the
+  working installed PM remains unchanged.
+- Checkpoint validation:143 targeted local/CLI/API/Advisor regressions pass;
+  Ruff and mypy169 files pass. This does not replace the open full release gates.
+- Next: qualify one independently justified instruction correction, close the
+  remaining contract cleanup and final gates. No release or merge readiness is claimed.
+
+## Advisor V16 Candidate - 2026-11-04 (Rejected; Not Installed)
+
+- Cause: evaluation189 accepted E2 despite a source gap identified under C3;
+  report190 independently omitted an earlier owner decision. These are different
+  causes, not a JSON-builder data-loss defect. FLEETQA-30/31/32 remain the baseline.
+- The universal prompt now requires cross-criterion consistency over all supplied
+  facts. PM reporting instructions retain relevant earlier decisions and embed the
+  saved document unchanged; confirmation reports contain the business fact only.
+- Four mechanical fixes: configured agents cannot DELEGATE; parallel groups use
+  one delegation permission for prompt/schema/parser/fingerprint; empty rubrics
+  fail technically before client creation; deeply nested provider JSON becomes a
+  bounded format error. Historical v15 proofs retain exact raw-report identity.
+- Frozen comparison completed:17 cases,38 evaluations,39 HTTP /40 cap. v15:
+  16/19 matching classifications,2 false PASS,1 false PARTIAL. v16:18/19 final
+  classifications match, but189/sample3 is a false PASS and Tester needed one
+  format repair (PARTIAL with all criteria covered). The candidate is rejected.
+- Independent review of all93 final candidate item assessments also found wrong
+  reasons behind matching marks in190 and an unestablished extra closure demand
+  in189/sample2. Aggregate classification improvement is not release acceptance.
+- All39 responses are HTTP200/finish=stop; max completion1310 of4000 tokens.
+  Safe GET /model/info identifies three configured chatgpt/gpt-6-luna/high routes;
+  this is configuration metadata, not proof of per-request upstream execution.
+- Code validation:3830 native cases (3827 suite cases plus3 evidence checks) pass
+  after correcting two obsolete empty-rubric fixture sets;15 skips and75 subtests
+  remain explicit. Coverage94.2788%, PG132/132
+  with dedicated clock fixture and cleanup, Ruff/mypy/namespace checks pass.
+  Original failed XML and both full-run outcomes are retained; no product assertions
+  or negative guards were relaxed. Model requests/answers and rejected status are
+  preserved in docs/evidence/advisor-v16-comparison-20261103.json.
+- No installation, instruction activation, new live PM cases or merge: quality gate
+  failed. FLEETQA-30/31/32 remain unchanged. Image/readiness release gate is not yet
+  claimed. No Hermes/Fleet/model/credentials/phases/criteria changes.
+- Next hypothesis only: replace repeated assessment prose with criterion -> supplied
+  fact -> mark/reason -> verdict, requiring the exact missing fact without substituting
+  another obligation. It needs a separately controlled test; no extra model series ran.
+
+## Follow-Up Workflow / Advisor Audit - 2026-11-03
+
+- Reviewed the report, prompt, response, coverage, persistence, transition and CLI
+  chain. Four mechanical P2 edges are documented with local repros; none is a
+  demonstrated security bypass. Source-only findings are not claimed as live incidents.
+- Three new Fleet cases SDLC-30/31/32 reached Backlog/Ready on the same PM/config25
+  and catalog12. The PM performed all requirements/report/completion operations.
+  Eleven actual evaluations:9 PASS,2 PARTIAL, one provider attempt each, no format repair.
+- Cause of an extra cycle: PM omitted an earlier owner decision from source in190;
+  the builder did not lose it. PM restored it in191 without republishing requirements.
+  A separate incorrect E2-covered mark in189 remains a confirmed model item error;
+  the overall PARTIAL was correct. No blanket error-free Advisor claim is made.
+- All three initial-operation replays retain IDs/messages/runs; stale consent is409.
+  Direct Tracker reads retain PM assignment1. Chromium/Firefox/WebKit show complete
+  requirements and Backlog/Ready; prior-message loading preserves the conversation.
+  Auth hex, persisted-confirmation display and misleading null-state UI remain open.
+  Fleet#162 already contains confirmation readback; do not implement it twice.
+- No application rebuild, install, credential change or Hermes modification was
+  needed for this audit. Existing code gates are reused, not presented as new runs.
+  Full findings, limits and next narrow package: docs/ADVISOR_AUDIT_20261103.md.
 ## Analyst: Baseline Publication And Conditional Research - 2026-11-06
 
 - Source baselines append to the existing publication ledger at a free revision.
@@ -65,8 +830,10 @@
   Replayed initial requests keep task/chat/run/message IDs; changed payload and stale
   confirmation are rejected409. SDLC-27 history is byte-identical across install and
   the normal skill-activation runtime replacement.
-- Browser checks are NOT passed: all three engines report a separate Fleet UI hex
-  ReferenceError. Captured chat/requirements/stage screenshots do not establish a clean
+- Browser checks are NOT passed: all three engines report a hex ReferenceError while
+  logging into Fleet. Follow-up stack identifies Auth /oidc/authorize normalizeBranding,
+  not Fleet or Advisor. Base e4f73d8 already fixes the lost SSR import alias; its
+  delivery to the installed Auth remains separate. Captured screenshots do not establish a clean
   UI gate. Persisted-confirmation display and installed CLI human output remain separate
   delivery gaps. No Fleet/Base/Hermes source changes are added to this package.
 - Real live model inputs/responses and outcome: docs/evidence/advisor-v15-live-pm-20261103.json.

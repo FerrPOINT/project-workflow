@@ -3,7 +3,7 @@
 import json
 import re
 import time
-from typing import Any
+from typing import Any, Literal
 
 import httpx
 
@@ -22,6 +22,7 @@ STAGES = {
     ("tester", "delivery"): {"Testing"},
     ("devops", "delivery"): {"Deployment"},
 }
+AssignmentPurpose = Literal["current", "initial_read", "report"]
 
 
 def read(request: dict[str, Any], suffix: str) -> dict[str, Any]:
@@ -53,21 +54,20 @@ def read(request: dict[str, Any], suffix: str) -> dict[str, Any]:
         raise RuntimeError("Tracker authority readback unavailable") from None
 
 
-def assignment(request: dict[str, Any], *, allow_completed_read: bool = False) -> None:
+def assignment(request: dict[str, Any], *, allow_completed_read: bool = False,
+               purpose: AssignmentPurpose = "current") -> None:
     context = read(request, "context")
     expected = {"assignment_id": request["assignment_ref"], "execution_id": request["tracker_execution_id"],
                 "agent_id": request["concrete_agent_ref"], "version": request["assignment_version"],
                 "machine_subject": request["machine_subject"]}
     actual = context.get("assignment")
     stages = STAGES.get((request["role_key"], request["mode_key"]), set())
-    completed_pm = (allow_completed_read and request["role_key"] == "project_manager"
+    completed_pm = (purpose == "current" and allow_completed_read and request["role_key"] == "project_manager"
                     and request["mode_key"] == "draft" and context.get("stage") == "Backlog"
                     and context.get("status") == "Ready")
-    # Tracker reserves PM before work/owner consent, and publishes questions or
-    # revisions in Ready too. Those business waits must not prevent reading the
-    # next Workflow instruction. Final PM commit separately proves exact consent.
-    active = (context.get("status") in ({"Ready", "InProgress"}
-              if request["role_key"] == "project_manager" else {"InProgress"})
+    # Initial instruction admission cannot authorize reports before the agent's Start.
+    ready = context.get("status") == "Ready" and purpose == "initial_read"
+    active = ((context.get("status") == "InProgress" or ready)
               and (request["role_key"] != "project_manager" or context.get("stage") == "Draft"))
     if (type(context.get("contract_version")) is not int or context.get("contract_version") != 1
             or context.get("interaction_protocol") != PROTOCOL

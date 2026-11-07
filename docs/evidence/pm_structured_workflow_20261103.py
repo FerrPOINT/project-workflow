@@ -11,6 +11,16 @@ from pathlib import Path
 
 from project_workflow.domain.phase_report import PHASE_REPORT_INSTRUCTIONS
 
+_REPORTING_GUIDANCE = (
+    "When correcting or supplementing a report, retain in source the current owner request and all "
+    "still-applicable owner decisions needed to assess the artifact, including relevant earlier discussion, "
+    "not only the latest message. When a full document is required, embed the FULL saved readback document "
+    "in result without retyping, reconstructing or summarizing it. When describing owner confirmation in "
+    "reports or user replies, state only the business confirmation fact, without technical hashes, receipts "
+    "or authority/verification prose; keep machine values in existing CLI arguments and tool history. "
+    "Preserve the document's domain wording; do not clean or filter its content."
+)
+
 
 def render() -> dict:
     source = Path(__file__).with_name("pm-business-workflow-20261102.json")
@@ -29,13 +39,15 @@ def render() -> dict:
     reporting["description"] = reporting["description"].replace(
         "submit one business-only report", "submit one structured business-only phase report",
     ).replace("with business text on stdin", "with structured phase report JSON on stdin")
+    for reporting in (first["instructions"][-1], preparation["instructions"][-1], final["instructions"][-2]):
+        reporting["description"] += " " + _REPORTING_GUIDANCE
     return publication
 
 
 def render_skill() -> str:
     historical = Path(__file__).with_name("pm-project-workflow-skill-20261103.md").read_text(encoding="utf-8")
     header = historical.split("## Reports and stdin", 1)[0]
-    return header + "## Reports and stdin\n\n" + PHASE_REPORT_INSTRUCTIONS + (
+    return header + "## Reports and stdin\n\n" + PHASE_REPORT_INSTRUCTIONS + "\n\n" + _REPORTING_GUIDANCE + (
         "\n\nFollow the current phase criteria. Report actual work and include complete documents when required. "
         "A supplement may refer to unchanged previous assessments, but those marks do not supply unseen facts "
         "or a missing required document. Read the concrete reason for PARTIAL and address it. "

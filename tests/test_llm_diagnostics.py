@@ -2,6 +2,7 @@
 
 import json
 from itertools import count
+from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
@@ -9,9 +10,50 @@ import requests
 
 from project_workflow.infrastructure import llm
 from project_workflow.infrastructure.llm import PromptBuilder
-from tests._report_helpers import response_body
+from project_workflow.supervisor.evaluate import _evaluate_strict_response
+from tests._report_helpers import report_json, response_body
 
 pytestmark = pytest.mark.unit
+
+
+@pytest.mark.parametrize("boundary", ["envelope", "content"])
+@pytest.mark.parametrize("queued_valid", [False, True])
+def test_deep_provider_json_fails_without_retry_even_if_next_response_would_be_valid(
+    client, monkeypatch, boundary, queued_valid,
+):
+    valid = {"verdict": "PASS", "assessments": {
+        "C1": {"covered": True, "reason": "The required result is supplied", "required_change": None},
+    }, "blockers": [], "confidence": 0.9}
+    deep = '{"nested":' + '[' * 3000 + '0' + ']' * 3000 + '}'
+
+    def response(bad):
+        value = Mock(status_code=200, headers={})
+        if bad and boundary == "envelope":
+            value.json.side_effect = RecursionError("private provider content")
+        else:
+            value.json.return_value = response_body(deep if bad else json.dumps(valid))
+        return value
+
+    post = Mock(side_effect=[response(True), response(not queued_valid)])
+    monkeypatch.setattr(llm.requests, "post", post)
+    attempts = []
+    phase = SimpleNamespace(name="Review", delegate=None)
+    items = [("P:check:1", "Required result")]
+    user = llm.PromptBuilder.build_user_prompt(
+        "not-transmitted", phase, json.loads(report_json("Actual unchanged report")), items,
+    )
+    with pytest.raises(ValueError, match="nesting") as failure:
+        _evaluate_strict_response(
+            client, user=user, evaluation_items=items, phase=phase, attempts=attempts,
+            response_format=llm.PromptBuilder.response_schema(items),
+        )
+    assert "private provider content" not in str(failure.value)
+    assert post.call_count == len(attempts) == 1
+    bodies = [call.kwargs["json"] for call in post.call_args_list]
+    assert bodies[0]["instructions"] == llm.PromptBuilder.SYSTEM_PROMPT
+    assert bodies[0]["input"] == [{"role": "user", "content": user}]
+    assert attempts[0]["error"]["category"] == "response_contract"
+    assert all(attempt["provider"]["outcome"] == "invalid_json" for attempt in attempts[:1])
 
 
 @pytest.fixture
@@ -87,7 +129,7 @@ def test_success_is_bounded_and_preserves_wire_request(client, provider, capsys,
             "store": False,
             "stream": False,
         },
-        timeout=17,
+        timeout=(30, 17), allow_redirects=False,
     )
     metadata = json.dumps(client.last_call_diagnostics, allow_nan=False)
     for secret in (
@@ -201,7 +243,7 @@ def test_truncated_content_is_incomplete_before_json_parsing(client, provider, c
     post, _, data = provider
     data.update(status="incomplete", incomplete_details={"reason": "max_output_tokens"})
     data["output"][0]["content"][0]["text"] = content
-    with pytest.raises(ValueError, match="token limit"):
+    with pytest.raises(ValueError, match="response is incomplete"):
         client.respond("sys", "usr", response_format=PromptBuilder.response_schema([]))
     post.assert_called_once()
     diagnostics = client.last_call_diagnostics
@@ -272,7 +314,8 @@ def test_usage_is_numeric_nonnegative_bounded_and_whitelisted(client, provider, 
         with pytest.raises(ValueError, match="output token limit"):
             client.respond("sys", "usr", response_format=PromptBuilder.response_schema([]))
     else:
-        client.respond("sys", "usr", response_format=PromptBuilder.response_schema([]))
+        with pytest.raises(ValueError, match="Invalid evaluator output token usage"):
+            client.respond("sys", "usr", response_format=PromptBuilder.response_schema([]))
     assert client.last_call_diagnostics["usage"] == {}
     json.dumps(client.last_call_diagnostics, allow_nan=False)
 
@@ -288,6 +331,20 @@ def test_optional_metadata_is_not_required_by_existing_mocks(client, provider):
     assert client.last_call_diagnostics["finish_reason"] == "completed"
     assert client.last_call_diagnostics["returned_model"] is None
     assert client.last_call_diagnostics["usage"] == {}
+
+
+def test_uncapped_diagnostics_keep_null_limit_and_valid_large_usage(client, provider):
+    post, _, data = provider
+    client.max_tokens = None
+    data["usage"] = {"input_tokens": 11, "output_tokens": 4501, "total_tokens": 4512}
+    assert client.respond("sys", "usr", response_format=PromptBuilder.response_schema([])) == {
+        "value": "raw-content-secret",
+    }
+    post.assert_called_once()
+    assert "max_output_tokens" not in post.call_args.kwargs["json"]
+    assert client.last_call_diagnostics["max_tokens"] is None
+    assert client.last_call_diagnostics["usage"] == data["usage"]
+    assert client.last_call_diagnostics["outcome"] == "success"
 
 
 def test_untrusted_labels_are_not_metadata(client, provider):

@@ -10,13 +10,21 @@ from fastapi.testclient import TestClient
 
 pytestmark = [pytest.mark.ui]
 
+from project_workflow import config
 from project_workflow.application.project import ProjectService
 from project_workflow.application.task import TaskService
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
-from project_workflow.interfaces.ui import app
+from project_workflow.interfaces.ui.app import create_app
 from tests._db_helpers import phase_by_code, prepare_sqlite_uow
 
-client = TestClient(app)
+
+@pytest.fixture
+def client(monkeypatch):
+    monkeypatch.setenv("PROJECT_WORKFLOW_MODE", "standalone")
+    monkeypatch.setenv("PROJECT_WORKFLOW_STANDALONE_CONTAINER_NETWORK", "false")
+    config.get_settings.cache_clear()
+    with TestClient(create_app(), base_url="http://127.0.0.1", client=("127.0.0.1", 50000)) as browser_client:
+        yield browser_client
 
 
 class TestEndToEndWorkflow:
@@ -62,7 +70,7 @@ class TestEndToEndWorkflow:
         assert [event["event_type"] for event in hist] == ["entered", "completed"]
 
 
-    def test_api_serves_phases(self):
+    def test_api_serves_phases(self, client):
         """GET /api/phases отдаёт JSON объект с phases."""
         resp = client.get("/api/phases")
         assert resp.status_code == 200

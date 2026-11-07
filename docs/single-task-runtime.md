@@ -1,6 +1,12 @@
-# Single-Task Runtime Packet
+# Historical Single-Task Runtime Packet
 
-The current source permits later PM review executions without rewriting the
+This document preserves dated source/qualification checkpoints, not a current
+execution or rollout guide. Current execution uses the [configured CLI/API](configured-cli-v1.md)
+and [architecture](architecture.md); retained native/legacy receipts do not grant
+new execution authority. Installed and accepted states are recorded in the
+[current diagnosis](ADVISOR_DIAGNOSIS_20261101.md).
+
+The historical source packet permits later PM review executions without rewriting the
 completed first execution. Its consolidated0015 and preserved legacy agent/phase
 metadata have [separate qualification and rollout boundaries](critical-pm-review-migrations.md).
 Source/component passes are not proof of a populated PostgreSQL upgrade or live PM.

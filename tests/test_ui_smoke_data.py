@@ -138,6 +138,8 @@ def test_prepare_ui_smoke_data_rejects_non_smoke_database_url(tmp_path, monkeypa
 def test_ui_smoke_pages_render_neutral_screenshot_fixture(tmp_path, monkeypatch) -> None:
     database_url = f"sqlite:///{tmp_path / 'ui-smoke.db'}"
     monkeypatch.setenv("DATABASE_URL", database_url)
+    monkeypatch.setenv("PROJECT_WORKFLOW_MODE", "standalone")
+    monkeypatch.setenv("PROJECT_WORKFLOW_STANDALONE_CONTAINER_NETWORK", "false")
     monkeypatch.setattr(app_state, "_app_state", _AppState(database_url=database_url))
     config.get_settings.cache_clear()
     reset_engine()
@@ -152,7 +154,7 @@ def test_ui_smoke_pages_render_neutral_screenshot_fixture(tmp_path, monkeypatch)
                 phase for phase in uow.phases.list(workflow_id=dev["workflow_id"]) if phase.phase_order == 1
             )
 
-        with TestClient(create_app()) as client:
+        with TestClient(create_app(), base_url="http://127.0.0.1", client=("127.0.0.1", 50000)) as client:
             dashboard = client.get(f"/?namespace_id={dev['id']}")
             assert dashboard.status_code == 200
             dev_open_task_keys = {

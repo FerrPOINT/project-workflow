@@ -1,0 +1,806 @@
+{
+  "schema": "advisor-v18-reviewed-controls-v1",
+  "status": "prospective_labels_frozen_not_run",
+  "date": "2026-11-04",
+  "source": {
+    "file": "docs/evidence/clean-workflow-case-labels-20261104.json",
+    "sha256": "0fbc357de5ec2f26d1636f319025c5f20aab61250fc396be353537e0475eefce",
+    "original_cases": 17,
+    "immutable": true,
+    "original_gold": {
+      "file": "docs/evidence/advisor-v16-case-labels-20261103.json",
+      "sha256": "1ef1f4590b1242a35c6423189c8774ed844e15fec98821248d7c9631d0bfdeb3",
+      "immutable": true
+    }
+  },
+  "settings": {
+    "model": "app-test",
+    "reasoning_effort": "high",
+    "max_tokens": 4000,
+    "temperature": 0.1,
+    "timeout": 1200,
+    "response_format": {
+      "type": "json_object"
+    },
+    "max_model_calls_per_evaluation": 1,
+    "format_retry": false,
+    "transport_retry": false,
+    "semantic_retry": false
+  },
+  "quarantine": [
+    {
+      "id": "actual-pm-189",
+      "status": "quarantined_from_new_strict_qualification_only",
+      "old_labels_preserved": true,
+      "expected": {
+        "verdict": "PARTIAL",
+        "covered": [
+          "PM-DRAFT-02:check:312",
+          "PM-DRAFT-02:check:313",
+          "PM-DRAFT-02:check:315",
+          "PM-DRAFT-02:evidence:189"
+        ],
+        "missing": [
+          "PM-DRAFT-02:check:314",
+          "PM-DRAFT-02:evidence:190"
+        ],
+        "blockers": []
+      },
+      "expected_assessments": {
+        "C1": {
+          "covered": true,
+          "reason_basis": "Reported source and document agree on the requested manual personal list, channels, fields, dates and allowable statuses. An unsupported initial default is a missing owner choice under C3, not an explicit contrary owner decision."
+        },
+        "C2": {
+          "covered": true,
+          "reason_basis": "The entire document states clear scope, explicit status/default rules and testable acceptance criteria without an internal contradiction. Missing owner authority for the default is evaluated under C3."
+        },
+        "C3": {
+          "covered": false,
+          "reason_basis": "Source names allowable statuses but supplies no owner decision for the initial status. The artifact assigns the initial status without that source decision; this material business choice remains unanswered."
+        },
+        "C4": {
+          "covered": true,
+          "reason_basis": "The complete structured requirements document is present in result.document, including its scenarios, acceptance criteria, constraints and checklist."
+        },
+        "E1": {
+          "covered": true,
+          "reason_basis": "Source is a readable substantive summary of the user request and its relevant scope."
+        },
+        "E2": {
+          "covered": false,
+          "reason_basis": "The material initial-status question identified under C3 is not included in the account. Instead clarification denies further questions and unresolved is empty. A claim that no questions remain does not satisfy the account of any unanswered material questions."
+        }
+      },
+      "labels_sha256": "0f55c8bf51bd22625f8403848a7e5c49cd3691a9b129317627873bf417b595f9",
+      "origin_user_payload_sha256": "d0c8464483628a33367c0716c1c78326f5ae95c6c88a81d3c90941e152f4e0e6",
+      "reason": "Source explicitly names only Needs Reply and Closed and asks for manual entry with a nonclosed working list. Needs Reply on creation can be an ordinary compatible implication. The criterion does not explicitly require a separately quoted owner decision for every routine default; lack of that literal sentence alone does not prove a material unresolved choice.",
+      "interpretation": "Historical classification mismatches and all raw responses remain archived. This is a gold-ambiguity finding, not a post-result relabel to PASS and not a qualification credit."
+    },
+    {
+      "id": "actual-pm-190",
+      "status": "quarantined_from_new_strict_qualification_only",
+      "old_labels_preserved": true,
+      "expected": {
+        "verdict": "PARTIAL",
+        "covered": [
+          "PM-DRAFT-02:check:312",
+          "PM-DRAFT-02:check:313",
+          "PM-DRAFT-02:check:315",
+          "PM-DRAFT-02:evidence:189"
+        ],
+        "missing": [
+          "PM-DRAFT-02:check:314",
+          "PM-DRAFT-02:evidence:190"
+        ],
+        "blockers": []
+      },
+      "expected_assessments": {
+        "C1": {
+          "covered": true,
+          "reason_basis": "Reported new decisions on initial status, waiting status and persistence are reflected in the document. The omitted Closed source decision is not replaced by an explicit contrary owner decision; completeness is the C3/E2 defect."
+        },
+        "C2": {
+          "covered": true,
+          "reason_basis": "The document provides coherent scope, explicit status behavior, persistence and testable acceptance criteria. No internal document contradiction is identified by this case."
+        },
+        "C3": {
+          "covered": false,
+          "reason_basis": "This actual report source omits the owner decision about Closed while the document uses Closed. Prior marks are assessments, not the missing source facts; current source completeness is not established. The omission is in the PM report, not an extraction loss by the builder."
+        },
+        "C4": {
+          "covered": true,
+          "reason_basis": "The full structured document is included in result.document; its source-account omission does not negate document presence."
+        },
+        "E1": {
+          "covered": true,
+          "reason_basis": "Source readably summarizes the request and the new waiting-status/persistence feedback."
+        },
+        "E2": {
+          "covered": false,
+          "reason_basis": "The owner decision on Closed is absent from the current account and is not listed as an unanswered material question. unresolved is empty. The prior E2 mark must be revoked rather than accepted as a substitute for current facts."
+        }
+      },
+      "labels_sha256": "c28305e98cd257911495b3fa78f19b9578a9b948131bd4bb89fa8cf5f6ccaf74",
+      "origin_user_payload_sha256": "3fead0701d9d3f30902f7c479bf84551006827ec342ed627b53c6e94f679bd7c",
+      "reason": "Source asks for a nonclosed list, which can semantically imply a closed business state. The criterion does not require the literal name Closed or separately approved spelling of each conventional state. Missing that literal source name alone is insufficient to establish a semantic owner-decision gap.",
+      "interpretation": "Historical classification mismatches and all raw responses remain archived. This is a gold-ambiguity finding, not a post-result relabel to PASS and not a qualification credit."
+    }
+  ],
+  "cases": [
+    {
+      "id": "pm-unresolved-retention-policy",
+      "role": "project_manager",
+      "mode": "draft",
+      "phase": "PM-DRAFT-02",
+      "phase_name": "Requirements preparation",
+      "allowed_verdicts": [
+        "PASS",
+        "PARTIAL",
+        "BLOCKED"
+      ],
+      "criteria": [
+        {
+          "id": "PM-DRAFT-02:check:312",
+          "text": "The requirements agree with the user request and decisions described in this report."
+        },
+        {
+          "id": "PM-DRAFT-02:check:313",
+          "text": "The requirements document defines clear scope, unambiguous material rules and objectively testable acceptance criteria, without contradictions."
+        },
+        {
+          "id": "PM-DRAFT-02:check:314",
+          "text": "The source account contains the owner's current decision for every material business choice needed for the requirements, with no such choice left unanswered or replaced by a PM assumption."
+        },
+        {
+          "id": "PM-DRAFT-02:check:315",
+          "text": "The current report includes the entire saved requirements document, not a summary, inventory of sections or reference to an earlier report."
+        },
+        {
+          "id": "PM-DRAFT-02:evidence:189",
+          "text": "A readable summary of the user request."
+        },
+        {
+          "id": "PM-DRAFT-02:evidence:190",
+          "text": "A readable account of the owner's decisions and any unanswered material questions."
+        }
+      ],
+      "items": [
+        [
+          "PM-DRAFT-02:check:312",
+          "The requirements agree with the user request and decisions described in this report."
+        ],
+        [
+          "PM-DRAFT-02:check:313",
+          "The requirements document defines clear scope, unambiguous material rules and objectively testable acceptance criteria, without contradictions."
+        ],
+        [
+          "PM-DRAFT-02:check:314",
+          "The source account contains the owner's current decision for every material business choice needed for the requirements, with no such choice left unanswered or replaced by a PM assumption."
+        ],
+        [
+          "PM-DRAFT-02:check:315",
+          "The current report includes the entire saved requirements document, not a summary, inventory of sections or reference to an earlier report."
+        ],
+        [
+          "PM-DRAFT-02:evidence:189",
+          "A readable summary of the user request."
+        ],
+        [
+          "PM-DRAFT-02:evidence:190",
+          "A readable account of the owner's decisions and any unanswered material questions."
+        ]
+      ],
+      "aliases": {
+        "C1": "PM-DRAFT-02:check:312",
+        "C2": "PM-DRAFT-02:check:313",
+        "C3": "PM-DRAFT-02:check:314",
+        "C4": "PM-DRAFT-02:check:315",
+        "E1": "PM-DRAFT-02:evidence:189",
+        "E2": "PM-DRAFT-02:evidence:190"
+      },
+      "previously_covered": [],
+      "previous_reports": [],
+      "report": {
+        "source": {
+          "request": "The owner requests v1 of a personal browser notebook for customer requests, used by one owner. Only that owner may view, create, edit or close records; strangers may neither read nor write them. Each record contains contact and request text, both required after trimming leading and trailing whitespace; reject an empty field without saving and preserve the entered values for correction. The owner manually creates and edits records. The only statuses are Open and Closed; creation sets Open. Show Open records in the working list, newest-created first; editing must not change creation order. Closing a request is required in v1. Preserve every record that still exists, its text, status and creation order across browser restart; restarting alone must not delete or close anything. There are no notifications, integrations, shared users or automatic closure in v1.",
+          "decisions": [
+            {
+              "subject": "Private owner-only access",
+              "value": "Only the owner may view, create, edit or close records. Strangers have no read or write access."
+            },
+            {
+              "subject": "Required v1 closure-retention decision",
+              "value": {
+                "required_for": "v1",
+                "selected_policy": null,
+                "question": "For v1, when an Open request is closed, must its record be retained in an archive or deliberately and irreversibly deleted? The owner requires this policy to be decided for v1 but has not selected either option."
+              }
+            }
+          ]
+        },
+        "result": {
+          "artifacts": [
+            {
+              "name": "requirements_document",
+              "content": {
+                "goal": "Give one owner a private personal browser notebook for manually recording and tracking customer requests.",
+                "scope": [
+                  "Create and edit customer-request records manually with contact and request text.",
+                  "Require both fields to be nonempty after trimming; reject invalid input without saving and preserve entered values for correction.",
+                  "Use exactly Open and Closed statuses; every new record starts Open.",
+                  "Show only Open records in the working list, newest-created first; editing does not change creation order.",
+                  "Provide the v1 action for closing an Open request.",
+                  "Allow only the owner to view, create, edit or close records; deny read and write access to strangers.",
+                  "Preserve the fields, status and creation order of every existing record across browser restart; restarting is not a closure or deletion action.",
+                  "The data effect of closing a request is required for v1 but remains explicitly unresolved between archive retention and deliberate irreversible deletion."
+                ],
+                "exclusions": [
+                  "Notifications, integrations, shared users and automatic closure.",
+                  "Status values other than Open and Closed."
+                ],
+                "scenarios": [
+                  "The owner creates a record with nonempty contact and request text. Both values are trimmed, the record starts Open and appears first in the working list.",
+                  "The owner submits an empty contact or request text after trimming. No record is saved and the entered values remain available for correction.",
+                  "The owner edits an existing record's contact or request text using the same validation; its original creation order is unchanged.",
+                  "A stranger attempts to read or modify a record. Owner-only access denies both attempts.",
+                  "The owner restarts the browser. Every record that still exists keeps its text, status and creation order; the restart itself neither closes nor deletes records.",
+                  "The v1 Close scenario is required, but its final data effect cannot yet be specified because the owner has not selected archive retention or deliberate irreversible deletion."
+                ],
+                "acceptance_criteria": [
+                  "Only the owner can read, create, edit or close records. Every stranger read or write attempt is denied.",
+                  "Creating or editing requires nonempty trimmed contact and request text. An empty field causes no save and does not discard the entered values.",
+                  "Each newly created record has status Open; the only allowed status values are Open and Closed.",
+                  "The working list contains Open records only, ordered newest-created first. Editing does not change their creation order.",
+                  "After browser restart, every existing record retains its text, status and creation order. Restart alone does not close or delete a record.",
+                  "Final acceptance of the Close data effect is pending the owner's archive-versus-irreversible-deletion decision. This document does not select either policy."
+                ],
+                "constraints": [
+                  "One owner uses the v1 notebook; strangers may neither read nor write records.",
+                  "Data persistence across browser restart is distinct from a deliberate request-closing action.",
+                  "Only the source-defined manual actions and the two declared statuses are in v1."
+                ],
+                "dependencies": [],
+                "assumptions": [],
+                "checklist": [
+                  "Check valid creation, rejected empty fields and preservation of invalid input.",
+                  "Check Open as the initial status, working-list filtering and stable creation order on edit.",
+                  "Check that strangers cannot read or modify records.",
+                  "Restart the browser and verify existing record contents, statuses and order.",
+                  "Record the explicit unresolved closure-retention question; no Close data-effect acceptance result or selected policy is claimed."
+                ],
+                "prerequisites": [],
+                "unresolved_questions": [
+                  "For v1, when an Open request is closed, must its record be retained in an archive or deliberately and irreversibly deleted? The owner requires this policy to be decided for v1 but has not selected either option."
+                ]
+              }
+            },
+            {
+              "name": "clarification",
+              "content": "The common v1 requirements are specified. The required closure-retention policy remains explicitly unanswered; neither archive retention nor irreversible deletion has been selected."
+            }
+          ],
+          "assumptions": []
+        },
+        "unresolved": [
+          {
+            "kind": "question",
+            "text": "For v1, when an Open request is closed, must its record be retained in an archive or deliberately and irreversibly deleted? The owner requires this policy to be decided for v1 but has not selected either option."
+          }
+        ]
+      },
+      "expected_assessments": {
+        "C1": {
+          "covered": true,
+          "reason_basis": "The source explicitly leaves the required v1 closure policy unanswered. The document records exactly that pending choice and selects neither outcome; all common source rules are reflected without a contrary choice."
+        },
+        "C2": {
+          "covered": false,
+          "reason_basis": "A required v1 material rule remains undefined: closing a request may retain its record or irreversibly delete it. The document explicitly identifies this pending acceptance condition. The defect is incomplete material rules, not an invented contradiction or a missing UI detail."
+        },
+        "C3": {
+          "covered": false,
+          "reason_basis": "The owner explicitly requires a current-v1 archive-versus-deliberate-irreversible-deletion decision but has selected neither option. Restart persistence does not answer what a deliberate Close action does."
+        },
+        "C4": {
+          "covered": true,
+          "reason_basis": "The report includes the entire current requirements document, with goal, scope, scenarios, constraints, acceptance criteria, checklist and the explicit unresolved question; it is not a summary or a reference."
+        },
+        "E1": {
+          "covered": true,
+          "reason_basis": "Source request readably states the personal notebook, owner-only access, fields, validation, statuses, working list, manual actions, persistence and exclusions."
+        },
+        "E2": {
+          "covered": true,
+          "reason_basis": "The exact unanswered material question is present in the owner's source decision, in document.unresolved_questions and in top-level unresolved. No assessment or empty-question claim substitutes for this account."
+        }
+      },
+      "expected": {
+        "verdict": "PARTIAL",
+        "covered": [
+          "PM-DRAFT-02:check:312",
+          "PM-DRAFT-02:check:315",
+          "PM-DRAFT-02:evidence:189",
+          "PM-DRAFT-02:evidence:190"
+        ],
+        "missing": [
+          "PM-DRAFT-02:check:313",
+          "PM-DRAFT-02:check:314"
+        ],
+        "blockers": []
+      },
+      "provenance": {
+        "synthetic": true,
+        "created_before_any_calls_for_this_case": true,
+        "source": "Prospective fictional owner requirements authored from scratch as test input; not actual owner consent, API proof, live history or a rewrite of case191.",
+        "criteria_source": {
+          "file": "docs/evidence/clean-workflow-case-labels-20261104.json",
+          "case_id": "actual-pm-191",
+          "copied": "exact criterion IDs and texts, items and aliases only"
+        },
+        "fact_authority": "source.request and source.decisions contain the fictional owner facts; result is the artifact under evaluation and supplies no additional owner authority.",
+        "prior_assessments": "None; no previous model result or synthetic prior mark is supplied.",
+        "construction_notes": [
+          "The identical question string occurs in source.decisions[1].value.question, result.artifacts[0].content.unresolved_questions[0] and unresolved[0].text.",
+          "Persistence concerns records that still exist across browser restart. It does not select the outcome of the separate deliberate Close action.",
+          "No archive or deletion policy is selected anywhere in this report. Unanswered policy is current v1 scope, not an invented future feature or external obstacle."
+        ]
+      }
+    },
+    {
+      "id": "pm-private-access-contradiction",
+      "role": "project_manager",
+      "mode": "draft",
+      "phase": "PM-DRAFT-02",
+      "phase_name": "Requirements preparation",
+      "allowed_verdicts": [
+        "PASS",
+        "PARTIAL",
+        "BLOCKED"
+      ],
+      "criteria": [
+        {
+          "id": "PM-DRAFT-02:check:312",
+          "text": "The requirements agree with the user request and decisions described in this report."
+        },
+        {
+          "id": "PM-DRAFT-02:check:313",
+          "text": "The requirements document defines clear scope, unambiguous material rules and objectively testable acceptance criteria, without contradictions."
+        },
+        {
+          "id": "PM-DRAFT-02:check:314",
+          "text": "The source account contains the owner's current decision for every material business choice needed for the requirements, with no such choice left unanswered or replaced by a PM assumption."
+        },
+        {
+          "id": "PM-DRAFT-02:check:315",
+          "text": "The current report includes the entire saved requirements document, not a summary, inventory of sections or reference to an earlier report."
+        },
+        {
+          "id": "PM-DRAFT-02:evidence:189",
+          "text": "A readable summary of the user request."
+        },
+        {
+          "id": "PM-DRAFT-02:evidence:190",
+          "text": "A readable account of the owner's decisions and any unanswered material questions."
+        }
+      ],
+      "items": [
+        [
+          "PM-DRAFT-02:check:312",
+          "The requirements agree with the user request and decisions described in this report."
+        ],
+        [
+          "PM-DRAFT-02:check:313",
+          "The requirements document defines clear scope, unambiguous material rules and objectively testable acceptance criteria, without contradictions."
+        ],
+        [
+          "PM-DRAFT-02:check:314",
+          "The source account contains the owner's current decision for every material business choice needed for the requirements, with no such choice left unanswered or replaced by a PM assumption."
+        ],
+        [
+          "PM-DRAFT-02:check:315",
+          "The current report includes the entire saved requirements document, not a summary, inventory of sections or reference to an earlier report."
+        ],
+        [
+          "PM-DRAFT-02:evidence:189",
+          "A readable summary of the user request."
+        ],
+        [
+          "PM-DRAFT-02:evidence:190",
+          "A readable account of the owner's decisions and any unanswered material questions."
+        ]
+      ],
+      "aliases": {
+        "C1": "PM-DRAFT-02:check:312",
+        "C2": "PM-DRAFT-02:check:313",
+        "C3": "PM-DRAFT-02:check:314",
+        "C4": "PM-DRAFT-02:check:315",
+        "E1": "PM-DRAFT-02:evidence:189",
+        "E2": "PM-DRAFT-02:evidence:190"
+      },
+      "previously_covered": [],
+      "previous_reports": [],
+      "report": {
+        "source": {
+          "request": "The owner requests v1 of a personal browser notebook for customer requests, used by one owner. Only that owner may view, create, edit or close records; strangers may neither read nor write them. Each record contains contact and request text, both required after trimming leading and trailing whitespace; reject an empty field without saving and preserve the entered values for correction. The owner manually creates and edits records. The only statuses are Open and Closed; creation sets Open. Show Open records in the working list, newest-created first; editing must not change creation order. Closing a request is required in v1. Preserve every record that still exists, its text, status and creation order across browser restart; restarting alone must not delete or close anything. There are no notifications, integrations, shared users or automatic closure in v1.",
+          "decisions": [
+            {
+              "subject": "Private owner-only access",
+              "value": "Only the owner may view, create, edit or close records. Strangers have no read or write access."
+            },
+            {
+              "subject": "Selected v1 archive policy",
+              "value": "In v1, closing an Open request sets its status to Closed and retains its complete record in an archive that the owner can view. It is removed from the Open working list, not irreversibly deleted. Archived records remain saved across browser restart."
+            }
+          ]
+        },
+        "result": {
+          "artifacts": [
+            {
+              "name": "requirements_document",
+              "content": {
+                "goal": "Give one owner a private personal browser notebook for manually recording and tracking customer requests.",
+                "scope": [
+                  "Create and edit customer-request records manually with contact and request text.",
+                  "Require both fields to be nonempty after trimming; reject invalid input without saving and preserve entered values for correction.",
+                  "Use exactly Open and Closed statuses; every new record starts Open.",
+                  "Show only Open records in the working list, newest-created first; editing does not change creation order.",
+                  "Provide the v1 action for closing an Open request.",
+                  "Allow only the owner to view, create, edit or close records; deny read and write access to strangers.",
+                  "Preserve the fields, status and creation order of every existing record across browser restart; restarting is not a closure or deletion action.",
+                  "In v1, closing an Open request sets its status to Closed and retains its complete record in an archive that the owner can view. It is removed from the Open working list, not irreversibly deleted. Archived records remain saved across browser restart."
+                ],
+                "exclusions": [
+                  "Notifications, integrations, shared users and automatic closure.",
+                  "Status values other than Open and Closed."
+                ],
+                "scenarios": [
+                  "The owner creates a record with nonempty contact and request text. Both values are trimmed, the record starts Open and appears first in the working list.",
+                  "The owner submits an empty contact or request text after trimming. No record is saved and the entered values remain available for correction.",
+                  "The owner edits an existing record's contact or request text using the same validation; its original creation order is unchanged.",
+                  "A stranger attempts to read or modify a record. Owner-only access denies both attempts.",
+                  "The owner restarts the browser. Every record that still exists keeps its text, status and creation order; the restart itself neither closes nor deletes records.",
+                  "The owner closes an Open request. It becomes Closed, leaves the working list and remains available to the owner in the retained archive, including after browser restart."
+                ],
+                "acceptance_criteria": [
+                  "Only the owner can read, create, edit or close records. Every stranger read or write attempt is denied.",
+                  "Creating or editing requires nonempty trimmed contact and request text. An empty field causes no save and does not discard the entered values.",
+                  "Each newly created record has status Open; the only allowed status values are Open and Closed.",
+                  "The working list contains Open records only, ordered newest-created first. Editing does not change their creation order.",
+                  "After browser restart, every existing record retains its text, status and creation order. Restart alone does not close or delete a record.",
+                  "Closing an Open request changes its status to Closed, removes it from the working list and retains its full record in an owner-visible archive across browser restart.",
+                  "A public unauthenticated stranger can edit the contact and request text of any saved record without the owner's approval."
+                ],
+                "constraints": [
+                  "One owner uses the v1 notebook; strangers may neither read nor write records.",
+                  "Data persistence across browser restart is distinct from a deliberate request-closing action.",
+                  "Only the source-defined manual actions and the two declared statuses are in v1."
+                ],
+                "dependencies": [],
+                "assumptions": [],
+                "checklist": [
+                  "Check valid creation, rejected empty fields and preservation of invalid input.",
+                  "Check Open as the initial status, working-list filtering and stable creation order on edit.",
+                  "Check that strangers cannot read or modify records.",
+                  "Restart the browser and verify existing record contents, statuses and order.",
+                  "Close a request and verify retained owner-visible archive contents, working-list removal and persistence."
+                ],
+                "prerequisites": [],
+                "unresolved_questions": []
+              }
+            },
+            {
+              "name": "clarification",
+              "content": "The owner has explicitly selected archive retention and owner-only access for v1. No owner question is pending."
+            }
+          ],
+          "assumptions": []
+        },
+        "unresolved": []
+      },
+      "expected_assessments": {
+        "C1": {
+          "covered": false,
+          "reason_basis": "The source explicitly denies strangers all read and write access. The artifact's public-stranger-edit acceptance criterion directly contradicts that owner rule; no inference from status names or ordinary defaults is needed."
+        },
+        "C2": {
+          "covered": false,
+          "reason_basis": "The document simultaneously requires owner-only access in scope and its first acceptance criterion, but allows a public unauthenticated stranger to edit any record in another acceptance criterion. These are incompatible current rules, not chronological changes."
+        },
+        "C3": {
+          "covered": true,
+          "reason_basis": "The source explicitly supplies the complete v1 choices, including owner-only private access, Open as the initial status, Closed as the other status, archive retention on Close, and persistence across restart. A wrong artifact rule does not make those source decisions absent."
+        },
+        "C4": {
+          "covered": true,
+          "reason_basis": "The complete current requirements document is included with all sections. Its deliberately contradictory acceptance criterion does not negate full-document presence."
+        },
+        "E1": {
+          "covered": true,
+          "reason_basis": "Source request gives a readable substantive account of the personal request notebook and its v1 rules and exclusions."
+        },
+        "E2": {
+          "covered": true,
+          "reason_basis": "Source explicitly gives owner-only access and the selected archive policy together with the other v1 decisions. No material question is left unanswered; the artifact's access contradiction is a C1/C2 defect, not a missing source answer."
+        }
+      },
+      "expected": {
+        "verdict": "PARTIAL",
+        "covered": [
+          "PM-DRAFT-02:check:314",
+          "PM-DRAFT-02:check:315",
+          "PM-DRAFT-02:evidence:189",
+          "PM-DRAFT-02:evidence:190"
+        ],
+        "missing": [
+          "PM-DRAFT-02:check:312",
+          "PM-DRAFT-02:check:313"
+        ],
+        "blockers": []
+      },
+      "provenance": {
+        "synthetic": true,
+        "created_before_any_calls_for_this_case": true,
+        "source": "Prospective fictional owner requirements authored from scratch as test input; not actual owner consent, API proof, live history or a rewrite of case191.",
+        "criteria_source": {
+          "file": "docs/evidence/clean-workflow-case-labels-20261104.json",
+          "case_id": "actual-pm-191",
+          "copied": "exact criterion IDs and texts, items and aliases only"
+        },
+        "fact_authority": "source.request and source.decisions contain the fictional owner facts; result is the artifact under evaluation and supplies no additional owner authority.",
+        "prior_assessments": "None; no previous model result or synthetic prior mark is supplied.",
+        "construction_notes": [
+          "The owner explicitly selects archive retention and denies stranger access in source, independently of the artifact.",
+          "The intentionally unsupported public-stranger-edit rule exists only in result.artifacts[0].content.acceptance_criteria[6]. The owner-only scope and acceptance_criteria[0] remain in the same document.",
+          "This is a direct permission-rule contradiction, not a real server/auth attestation or a requirement to introduce a new product mechanism."
+        ]
+      }
+    }
+  ],
+  "qualification_set": {
+    "name": "reviewed-v18-new-17-case-set",
+    "retained_case_ids": [
+      "pm-context-164",
+      "pm-preparation-search-defined",
+      "pm-final-163",
+      "analyst-role-work-complete",
+      "architect-role-work-complete",
+      "developer-context-complete",
+      "reviewer-context-complete",
+      "tester-role-work-complete",
+      "devops-role-work-complete",
+      "pm-missing-full-153",
+      "negative-defined-search-contradictory-reopening",
+      "pm-context-not-read",
+      "incremental-remaining-analysis-complete",
+      "incremental-explicit-new-document-invalidates-marks",
+      "actual-pm-191"
+    ],
+    "new_case_ids": [
+      "pm-unresolved-retention-policy",
+      "pm-private-access-contradiction"
+    ],
+    "case_ids": [
+      "pm-context-164",
+      "pm-preparation-search-defined",
+      "pm-final-163",
+      "analyst-role-work-complete",
+      "architect-role-work-complete",
+      "developer-context-complete",
+      "reviewer-context-complete",
+      "tester-role-work-complete",
+      "devops-role-work-complete",
+      "pm-missing-full-153",
+      "negative-defined-search-contradictory-reopening",
+      "pm-context-not-read",
+      "incremental-remaining-analysis-complete",
+      "incremental-explicit-new-document-invalidates-marks",
+      "actual-pm-191",
+      "pm-unresolved-retention-policy",
+      "pm-private-access-contradiction"
+    ],
+    "distinct_cases": 17,
+    "retained_case_rule": "Read the 15 listed cases from the immutable source artifact with all old expected booleans, verdicts, blockers and reason bases unchanged; any typed fixture adaptation remains explicitly provenance-labelled outside model input.",
+    "planned_evaluations": 36,
+    "samples_per_case": 2,
+    "extra_samples": {
+      "case_id": "pm-unresolved-retention-policy",
+      "samples": [
+        3,
+        4
+      ]
+    },
+    "replaces_extra_samples_for": "actual-pm-189",
+    "historical_results_reused": 0,
+    "qualification_claim": "Only new evaluations of this reviewed 15-retained-plus-2-new set qualify this new set. No prior pass, old-17 qualification, live acceptance or cross-role completion is claimed.",
+    "requires": "Integrator review and separately authorized execution on a pinned candidate; this manifest makes no calls."
+  },
+  "planned_evaluations": [
+    {
+      "case_id": "pm-context-164",
+      "sample": 1,
+      "policy": "supervisor-evaluator-v18"
+    },
+    {
+      "case_id": "pm-preparation-search-defined",
+      "sample": 1,
+      "policy": "supervisor-evaluator-v18"
+    },
+    {
+      "case_id": "pm-final-163",
+      "sample": 1,
+      "policy": "supervisor-evaluator-v18"
+    },
+    {
+      "case_id": "analyst-role-work-complete",
+      "sample": 1,
+      "policy": "supervisor-evaluator-v18"
+    },
+    {
+      "case_id": "architect-role-work-complete",
+      "sample": 1,
+      "policy": "supervisor-evaluator-v18"
+    },
+    {
+      "case_id": "developer-context-complete",
+      "sample": 1,
+      "policy": "supervisor-evaluator-v18"
+    },
+    {
+      "case_id": "reviewer-context-complete",
+      "sample": 1,
+      "policy": "supervisor-evaluator-v18"
+    },
+    {
+      "case_id": "tester-role-work-complete",
+      "sample": 1,
+      "policy": "supervisor-evaluator-v18"
+    },
+    {
+      "case_id": "devops-role-work-complete",
+      "sample": 1,
+      "policy": "supervisor-evaluator-v18"
+    },
+    {
+      "case_id": "pm-missing-full-153",
+      "sample": 1,
+      "policy": "supervisor-evaluator-v18"
+    },
+    {
+      "case_id": "negative-defined-search-contradictory-reopening",
+      "sample": 1,
+      "policy": "supervisor-evaluator-v18"
+    },
+    {
+      "case_id": "pm-context-not-read",
+      "sample": 1,
+      "policy": "supervisor-evaluator-v18"
+    },
+    {
+      "case_id": "incremental-remaining-analysis-complete",
+      "sample": 1,
+      "policy": "supervisor-evaluator-v18"
+    },
+    {
+      "case_id": "incremental-explicit-new-document-invalidates-marks",
+      "sample": 1,
+      "policy": "supervisor-evaluator-v18"
+    },
+    {
+      "case_id": "actual-pm-191",
+      "sample": 1,
+      "policy": "supervisor-evaluator-v18"
+    },
+    {
+      "case_id": "pm-unresolved-retention-policy",
+      "sample": 1,
+      "policy": "supervisor-evaluator-v18"
+    },
+    {
+      "case_id": "pm-private-access-contradiction",
+      "sample": 1,
+      "policy": "supervisor-evaluator-v18"
+    },
+    {
+      "case_id": "pm-context-164",
+      "sample": 2,
+      "policy": "supervisor-evaluator-v18"
+    },
+    {
+      "case_id": "pm-preparation-search-defined",
+      "sample": 2,
+      "policy": "supervisor-evaluator-v18"
+    },
+    {
+      "case_id": "pm-final-163",
+      "sample": 2,
+      "policy": "supervisor-evaluator-v18"
+    },
+    {
+      "case_id": "analyst-role-work-complete",
+      "sample": 2,
+      "policy": "supervisor-evaluator-v18"
+    },
+    {
+      "case_id": "architect-role-work-complete",
+      "sample": 2,
+      "policy": "supervisor-evaluator-v18"
+    },
+    {
+      "case_id": "developer-context-complete",
+      "sample": 2,
+      "policy": "supervisor-evaluator-v18"
+    },
+    {
+      "case_id": "reviewer-context-complete",
+      "sample": 2,
+      "policy": "supervisor-evaluator-v18"
+    },
+    {
+      "case_id": "tester-role-work-complete",
+      "sample": 2,
+      "policy": "supervisor-evaluator-v18"
+    },
+    {
+      "case_id": "devops-role-work-complete",
+      "sample": 2,
+      "policy": "supervisor-evaluator-v18"
+    },
+    {
+      "case_id": "pm-missing-full-153",
+      "sample": 2,
+      "policy": "supervisor-evaluator-v18"
+    },
+    {
+      "case_id": "negative-defined-search-contradictory-reopening",
+      "sample": 2,
+      "policy": "supervisor-evaluator-v18"
+    },
+    {
+      "case_id": "pm-context-not-read",
+      "sample": 2,
+      "policy": "supervisor-evaluator-v18"
+    },
+    {
+      "case_id": "incremental-remaining-analysis-complete",
+      "sample": 2,
+      "policy": "supervisor-evaluator-v18"
+    },
+    {
+      "case_id": "incremental-explicit-new-document-invalidates-marks",
+      "sample": 2,
+      "policy": "supervisor-evaluator-v18"
+    },
+    {
+      "case_id": "actual-pm-191",
+      "sample": 2,
+      "policy": "supervisor-evaluator-v18"
+    },
+    {
+      "case_id": "pm-unresolved-retention-policy",
+      "sample": 2,
+      "policy": "supervisor-evaluator-v18"
+    },
+    {
+      "case_id": "pm-private-access-contradiction",
+      "sample": 2,
+      "policy": "supervisor-evaluator-v18"
+    },
+    {
+      "case_id": "pm-unresolved-retention-policy",
+      "sample": 3,
+      "policy": "supervisor-evaluator-v18"
+    },
+    {
+      "case_id": "pm-unresolved-retention-policy",
+      "sample": 4,
+      "policy": "supervisor-evaluator-v18"
+    }
+  ],
+  "acceptance": {
+    "marks": "Compare every required criterion mark, canonical verdict and blockers against the frozen expectations, not verdict alone.",
+    "reasons": "Independently review each explanation against source and the actual artifact. Require the retention-policy gap for C2/C3 in control A and the public-edit contradiction for C1/C2 in control B. Do not treat assessment text as report evidence.",
+    "errors": "No format, transport or semantic retries. Stop on the first unexpected outcome; preserve the evidence without modifying labels.",
+    "unchanged_gold": "Never rewrite the original labels or historical results. Quarantined cases remain in the immutable archive and are not silently counted as passes."
+  }
+}

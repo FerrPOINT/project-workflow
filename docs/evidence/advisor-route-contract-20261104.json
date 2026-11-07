@@ -1,0 +1,434 @@
+{
+  "schema": "advisor-route-contract-v1",
+  "latest_cause_investigation_20261105": {
+    "summary": "advisor-cause-investigation-followup-20261105.json",
+    "summary_sha256": "da0f04d9862dcff7269c55f213d8135811b44d280527b5e4130f4320b0d73cc0",
+    "campaign_used": 132,
+    "campaign_limit": 156,
+    "owner_budget_approval": "Explicit approval to increase to 156, preserving 24 live calls",
+    "live_reserved": 24,
+    "new_calls": 6,
+    "runtime_or_prompt_changed": false,
+    "confirmed_input_loss": "SDLC-32 source189 contains the owner's Closed choice; source190 omits it and v15 sends prior marks but no prior reports. No owner revocation occurred.",
+    "http_storage_regression": "test_same_phase_http_context_keeps_owner_fact_omitted_from_later_report; file8 PASS, Ruff PASS, owned temporary resources cleaned; mocked Advisor, no runtime conversion",
+    "inline_copy_boundary": "191 adds one scope sentence; 192 again equals saved rev2 when evaluating the already confirmed requirements. Not proof of receipt on another document; C4 checks completeness, not byte identity.",
+    "final_serialization": {
+      "file": "advisor-v19-final-serialization-audit-20261105.json",
+      "sha256": "b6a7ec3fe84098a1927f149187b6295389e562b6179f48be6cf97b07a35ffba9",
+      "checks_passed": 11,
+      "request_bytes": 12616,
+      "real_upstream_http_calls": 0,
+      "scope": "Offline serialized HTTPX Request with exact system/user/high/schema, no temperature/output cap. Not historical upstream capture."
+    },
+    "real190_pair": "Two current-policy inputs without/with prior report both PASS; non-discriminating, no full gold or historical cause claimed.",
+    "history_discriminator": "Only prior owner format changes CSV/JSON, same current CSV artifact: CSV2/2 PASS, JSON2/2 PARTIAL with sufficient JSON corrections. Each reply reviewed before next; sensitive to history in this control, not universal reliability.",
+    "qualification_completed": false,
+    "pm_live_accepted": false,
+    "installed_or_merged": false
+  },
+  "current_followup_20261105": {
+    "policy": "supervisor-evaluator-v19",
+    "product_changed": false,
+    "installed_or_merged": false,
+    "campaign_used": 126,
+    "campaign_limit": 152,
+    "live_reserved": 24,
+    "unreserved_unused": 2,
+    "plan": "advisor-v19-storage-access-diagnostic-plan-20261105.json",
+    "plan_sha256": "ed254f7feb34ac11c4c81b5d59ddc1a4e8834695d8ea6d4cdd26294dd5e9d8dc",
+    "summary": "advisor-v19-storage-access-diagnostic-summary-20261105.json",
+    "summary_sha256": "61e0b0dcbc64311237ecc934ddee65d1b7356297da7d0a3817653a858b75eeb5",
+    "new_calls": 4,
+    "grounded_marks": 24,
+    "sufficient_corrections_in_response_context": 6,
+    "results": ["PASS", "PARTIAL", "PARTIAL", "PARTIAL"],
+    "original_trim_error": "Earlier classification as a proven extra obligation was too categorical: original storage wording is ambiguous. Original marks/gold remain justified by access contradiction; hidden cause remains unknown.",
+    "limitations": [
+      "One sample per cell; no history; source and matching document constraint vary together.",
+      "Cell1 C1 correction is weaker standalone; C2 and remaining owner-only rules prohibit stranger access. No new sharing flow is proven.",
+      "Two reasons loosely locate the no-questions statement in source rather than clarification; the statement exists in the report.",
+      "Installed source preserves system instructions, reasoning and schema, but filters temperature and output cap. Final upstream HTTP body and effective backend settings were not captured.",
+      "No causal link from those parameter differences to the examined semantic judgments is proven."
+    ],
+    "full_qualification_accepted": false,
+    "new_pm_live_acceptance": false,
+    "next": "No new prompt/code fix justified by these controls. Resolve disputed expectations and remaining qualification/cutover gates; do not resume the stopped journal or repeat to a desired answer."
+  },
+  "baseline": {
+    "workflow": "91bba72317dc1031eae3b48c29651587b8d00b8e",
+    "base": "6868579ea39dd7ea898f48473d50ce5b963f2c95"
+  },
+  "checkpoint": {
+    "prepared_workflow": "64e00d2",
+    "base_configuration_fix": "855eb2e9",
+    "accepted": false,
+    "reason": "The configured provider route drops the strict output schema; acceptance stopped without downgrade."
+  },
+  "policy": "supervisor-evaluator-v18",
+  "budget": {
+    "campaign_limit": 134,
+    "previous_attempts": 70,
+    "new_attempts": 2,
+    "total_attempts": 72,
+    "route_limit": 4,
+    "route_not_run": 2,
+    "qualification_reserve": 36,
+    "live_reserve": 24
+  },
+  "provider": {
+    "repository": "https://github.com/FerrPOINT/litellm",
+    "endpoint": "http://192.168.10.1:4000/v1",
+    "model_alias": "app-test",
+    "configured_route": "chatgpt/gpt-6-luna",
+    "declared_mode": "responses",
+    "declared_supports_response_schema": true,
+    "verified_upstream_model_identity": false,
+    "service": "litellm.service",
+    "main_pid": 95779,
+    "service_active_since": "2026-10-30 00:14:21 MSK",
+    "version": "1.109.0",
+    "source_commit": "1403f0dc2ebd3112f90aae57badae40b0b36b39d",
+    "source_file": "/opt/litellm-next/releases/litellm-next-1.109.0-1403f0dc2ebd/source/litellm/llms/chatgpt/responses/transformation.py",
+    "source_sha256": "e2f3c3595d202897cc10db286e2bbb5241bce2af84c9c907a963eb8dc3471303",
+    "source_file_modified": "2026-10-30 00:14:20.868890144 +0300",
+    "runtime_pythonpath": "/opt/litellm-next/current/source:/opt/litellm-next/current/source/enterprise:/opt/litellm-next/current/source/litellm-proxy-extras",
+    "current_symlink_modified": "2026-10-29 22:01:32.464377159 +0300"
+  },
+  "offline_transform": {
+    "actual_parent_and_provider_methods": true,
+    "network_denied": true,
+    "parent_mocked": false,
+    "model_calls": 0,
+    "before_keys": [
+      "input",
+      "instructions",
+      "max_output_tokens",
+      "model",
+      "reasoning",
+      "text"
+    ],
+    "after_keys": [
+      "include",
+      "input",
+      "instructions",
+      "model",
+      "reasoning",
+      "store",
+      "stream"
+    ],
+    "schema_before_present": true,
+    "schema_after_present": false,
+    "max_output_tokens_before": 4000,
+    "max_output_tokens_after": null,
+    "reasoning_before": {
+      "effort": "high"
+    },
+    "reasoning_after": {
+      "effort": "high"
+    },
+    "effective_extra_instruction": "Follow the task instructions supplied in the conversation.",
+    "extra_instruction_characters": 58,
+    "coding_prompt_bloat_not_confirmed": true,
+    "temperature_dropped_by_route_config": true,
+    "reproducer": "import os,sys,json,hashlib,socket\nfrom pathlib import Path\nos.environ[\"LITELLM_LOCAL_MODEL_COST_MAP\"]=\"True\"\nsys.path.insert(0,\"/opt/litellm-next/current/source\")\ne=dict(v.split(\"=\",1) for v in Path(\"/proc/95779/environ\").read_text().split(\"\\0\") if \"=\" in v)\nif e.get(\"CHATGPT_DEFAULT_INSTRUCTIONS\"):os.environ[\"CHATGPT_DEFAULT_INSTRUCTIONS\"]=e[\"CHATGPT_DEFAULT_INSTRUCTIONS\"]\ndef denied(*args,**kwargs):raise AssertionError(\"Offline transform cannot use network\")\nsocket.socket.connect=denied\nsocket.create_connection=denied\nfrom litellm.llms.chatgpt.responses.transformation import ChatGPTResponsesAPIConfig\nfrom litellm.llms.openai.responses.transformation import OpenAIResponsesAPIConfig\nfrom litellm.types.router import GenericLiteLLMParams\nobj=ChatGPTResponsesAPIConfig.__new__(ChatGPTResponsesAPIConfig)\nschema={\"type\":\"object\",\"properties\":{\"probe\":{\"type\":\"string\",\"enum\":[\"schema-enforced\"]}},\"required\":[\"probe\"],\"additionalProperties\":False}\noptions={\"text\":{\"format\":{\"type\":\"json_schema\",\"name\":\"probe\",\"strict\":True,\"schema\":schema}},\"max_output_tokens\":4000,\"reasoning\":{\"effort\":\"high\"},\"instructions\":\"Evaluate only the supplied phase criteria.\"}\ninput=[{\"role\":\"user\",\"content\":\"Return JSON\"}]\nparams=GenericLiteLLMParams(model=\"gpt-6-luna\",custom_llm_provider=\"chatgpt\")\nbefore=OpenAIResponsesAPIConfig.transform_responses_api_request(obj,\"gpt-6-luna\",input,options.copy(),params,{})\nafter=obj.transform_responses_api_request(\"gpt-6-luna\",input,options.copy(),params,{})\nprint(json.dumps({\"proof_kind\":\"actual parent and provider transformations; network denied; no mocks\",\"before_keys\":sorted(before),\"after_keys\":sorted(after),\"schema_before\":before.get(\"text\"),\"schema_after\":after.get(\"text\"),\"limit_before\":before.get(\"max_output_tokens\"),\"limit_after\":after.get(\"max_output_tokens\"),\"reasoning_before\":before.get(\"reasoning\"),\"reasoning_after\":after.get(\"reasoning\"),\"instructions_before\":before.get(\"instructions\"),\"instructions_after\":after.get(\"instructions\"),\"model_calls\":0},ensure_ascii=False))\n"
+  },
+  "new_probes": {
+    "protected_journal": "advisor-route-preflight-64e00d2-20261104.json",
+    "journal_sha256": "700b5c14c868a266afe26177caa0d4d2f0302df84efaeb662a5544f0f3fbba08",
+    "actual_prepared_request_bodies_saved": true,
+    "authorization_headers_saved": false,
+    "literal_assistant_responses_saved": true,
+    "response_format": "strict json_schema; object with one required string field probe, enum schema-enforced, no extra properties",
+    "probes": [
+      {
+        "id": "compliant",
+        "status": "matched",
+        "http_status": 200,
+        "finish_reason": "stop",
+        "assistant_text": "{\"probe\": \"schema-enforced\"}"
+      },
+      {
+        "id": "unexpected-field",
+        "status": "failed",
+        "http_status": 200,
+        "finish_reason": "stop",
+        "assistant_text": "{\"unexpected\": 42}"
+      },
+      {
+        "id": "wrong-type-and-extra",
+        "status": "not_run"
+      },
+      {
+        "id": "missing-c4-reproduction",
+        "status": "not_run"
+      }
+    ]
+  },
+  "findings": [
+    "Workflow and Base Compose templates omitted explicit evaluator response format propagation; source mappings and rendered-config tests now fix that omission.",
+    "The actual ChatGPT provider transformation removes text.format after the parent transformation retained it.",
+    "The same transformation removes max_output_tokens. Backend support for forwarding this limit has not been established; do not promise it was enforced.",
+    "The route drops temperature by explicit configuration, but preserves reasoning.effort=high in the inspected transformation.",
+    "Schema mismatch is confirmed for the current route; model-internal reasons for prior semantic grading errors remain unknown.",
+    "The running service overrides the bundled coding prompt with a 58-character neutral instruction; coding-context bloat is not a confirmed cause."
+  ],
+  "references": [
+    "https://github.com/BerriAI/litellm/issues/38085",
+    "https://developers.openai.com/api/docs/guides/structured-outputs"
+  ],
+  "acceptance_stopped": {
+    "qualification_run": false,
+    "workflow_build": false,
+    "workflow_install": false,
+    "pm_live": false,
+    "merge": false,
+    "runtime_mutations": false
+  },
+  "verification": {
+    "focused_workflow_tests": 63,
+    "base_compose_render_tests": 15,
+    "reliability_with_explicit_base_sdk": 9,
+    "initial_reliability_without_sdk": "One CLI recovery test failed because pdlc_cli_core was not importable; configured.py returned shared-transport-unavailable before transport. Retake used the explicit approved Base SDK path, without source changes.",
+    "ruff": "PASS",
+    "mypy": "169 source files PASS",
+    "production_tree_unchanged": "e51d7090998b04bca27c4ec8c56e2c150faa6aad",
+    "installed_workflow_image_unchanged": "sha256:79976adbbe47c1f34ab0daab60ff4869209dcd30d36401a0ada2475a37c9b167",
+    "installed_workflow_health": "healthy"
+  },
+  "minimal_next_package": {
+    "owner": "existing LiteLLM ChatGPT adapter",
+    "change": "Preserve the already-mapped text.format unchanged in the existing request transformation.",
+    "regression": "Run actual parent and provider transforms offline; assert exact strict schema survives. Then qualify the fixed deployed route before semantic evaluation.",
+    "output_limit": "Establish backend support separately before forwarding max_output_tokens; do not silently claim enforcement.",
+    "source_delivery": "Use the canonical source and its release process; do not patch the active immutable release in place.",
+    "no_workflow_workaround": true,
+    "no_new_provider_or_model": true,
+    "no_format_downgrade": true
+  },
+  "post_update_20261105": {
+    "scope": "Append-only follow-up to the pre-activation snapshot above; not full Workflow acceptance",
+    "source_head": "50ccf52e3be4566559e06ebf1103e122e4e714c5",
+    "merge_commit": "8fc705e2abff9c49fa1d5435989695386618f39d",
+    "source_pr": "https://github.com/FerrPOINT/litellm/pull/3",
+    "local_gates": {
+      "make_lint_exit_code": 0,
+      "typecheck": "Canonical frozen .venv-typecheck, existing per-rule ceilings; not zero historical diagnostics",
+      "coverage_regressions_passed": 5,
+      "lock_check": "passed",
+      "secret_test": "passed",
+      "targeted_tests_reused": 244,
+      "staged_tests_reused": 5,
+      "actions": "Excluded by owner; not run or claimed passing",
+      "qa_summary": "litellm-review-gates-20261105/node26-status.json",
+      "owned_disposable_resources_cleaned": true,
+      "external_build_cache_retained": true
+    },
+    "deployment": {
+      "release": "litellm-next-1.109.0-1403f0dc2ebd-schema-50ccf52e3be4",
+      "main_pid": 2264636,
+      "source_sha256": "70132395a4d0f60c22b90318e8675c031e62b7c332f82b15d84d2273b5c8ebf8",
+      "manifest_sha256": "bf6d657544030120b70f721930175e035a88a65e8c3e6c0be771b8bc3918e4b2",
+      "config_and_env_unchanged": true,
+      "old_process_and_cgroup_absent_before_switch": true,
+      "stop_result": "success",
+      "graceful_complete_marker_observed": false,
+      "graceful_timeout_marker_observed": false,
+      "liveliness_http_status": 200,
+      "readiness_http_status": 200,
+      "stop_evidence": "octo-schema-stop-20261105.json",
+      "activation_evidence": "octo-schema-activation-20261105.json"
+    },
+    "model_checks": {
+      "protected_journal": "advisor-route-postupdate-50ccf52-20261105.json",
+      "journal_sha256": "1e3abd7a595c345b2a248f4e4ac8eaed86b718b78e6f0868eeb0876105af5215",
+      "new_http_calls": 3,
+      "automatic_retries": 0,
+      "json_mode_compatibility_matched": true,
+      "identical_strict_http_body_and_endpoint": true,
+      "strict_before": {"unexpected": 42},
+      "strict_after": {"probe": "schema-enforced"},
+      "qualification_case": "pm-missing-full-153",
+      "qualification_sample": 1,
+      "classification_matched": true,
+      "verdict": "PARTIAL",
+      "missing": ["C1", "C2", "C3", "C4", "E1", "E2"],
+      "all_reasons_and_required_changes_present": true,
+      "independent_reason_review": "All six assessments reviewed against their criteria and actual report; each false, reason and required_change justified; PARTIAL with empty blockers justified"
+    },
+    "campaign_attempts": 75,
+    "campaign_limit": 134,
+    "remaining_qualification_slots": 35,
+    "live_reserve": 24,
+    "workflow_candidate_installed": false,
+    "new_pm_scenarios_accepted": false,
+    "full_qualification_complete": false,
+    "upstream_model_identity_verified": false,
+    "output_token_limit_forwarding_changed": false
+  },
+  "strict_qualification_20261105": {
+    "checkpoint": "c029218",
+    "status": "stopped_classification_mismatch",
+    "qualified": false,
+    "planned_new_calls": 35,
+    "new_calls": 13,
+    "matched_new_slots": 12,
+    "unrun_slots": 22,
+    "campaign_attempts": 88,
+    "campaign_limit": 134,
+    "live_reserve_unspent": 24,
+    "frozen_labels_sha256": "277f399956c59530d59c81137da513e332f9baec2d5cacab6973b60672710e5c",
+    "plan": "advisor-v18-strict-plan-c029218-20261105.json",
+    "plan_sha256": "2519ee0004877833143e03fca91119d84027dcbb31bdd59c2846df6a622e2cd6",
+    "primary": "advisor-v18-strict-qualification-c029218-20261105.json",
+    "primary_sha256": "063f5b56bec4c17cdbc4fc791e113110e871ceb8938ee1768d441924debff189",
+    "review": "advisor-v18-strict-review-c029218-20261105.json",
+    "review_sha256": "1d4d58576cdf4c293a83c87fa4ceb3aeb5e40be3be9d9fe3f60abca66c9c03e7",
+    "failure": {
+      "case_id": "incremental-explicit-new-document-invalidates-marks",
+      "sample": 1,
+      "item": "E2",
+      "expected_covered": false,
+      "actual_covered": true,
+      "verdict": "PARTIAL",
+      "verdict_matches": true,
+      "interpretation": "Disputed sufficiency: a description of missing decisions/materials was accepted as the required account; readable account has no explicit minimum completeness",
+      "independent_review": "Frozen false is better supported, but criterion ambiguity remains; not a conclusively established model bug",
+      "gold_changed": false
+    },
+    "reviewed_assessments": 57,
+    "grounded_assessments": 56,
+    "disputed_assessments": 1,
+    "transport_errors": 0,
+    "format_errors": 0,
+    "actual_payload_matches_frozen": true,
+    "literal_matches_saved_response": true,
+    "same_phase_previous_reports": 1,
+    "input_tokens": 2990,
+    "output_tokens": 898,
+    "finish_reason": "stop",
+    "prompt_or_reply_truncated": false,
+    "automatic_retries": 0,
+    "new_prompt_or_criterion_change": false,
+    "workflow_install_or_merge": false,
+    "minimal_next_step": "Resolve factual-account sufficiency and freeze one discriminating follow-up plan; no C3-to-E2 rule, keyword grading or repeated unchanged series"
+  },
+  "v19_qualification_20261105": {
+    "policy": "supervisor-evaluator-v19",
+    "system_sha256": "7ee97ccaa0914fe77b7ce881268b6dbe855ca2fd9e6edbc17df8a42e4b1edd48",
+    "status": "stopped_by_independent_semantic_review",
+    "qualified": false,
+    "changes": [
+      "Two general content-versus-availability sentences",
+      "required_change must satisfy the same failed criterion",
+      "Preserve v18/v19 context-fingerprint validation; no parser/schema/criteria changes"
+    ],
+    "frozen_labels_sha256": "277f399956c59530d59c81137da513e332f9baec2d5cacab6973b60672710e5c",
+    "first_experiment": {
+      "calls": 4,
+      "matching_marks": 19,
+      "sufficient_required_changes": 18,
+      "total_assessments": 19,
+      "accepted": false
+    },
+    "accepted_final_controls": {
+      "calls": 4,
+      "matching_assessments": 19,
+      "grounded_assessments": 19,
+      "primary": "advisor-v19-correction-controls-results-20261105.json",
+      "sha256": "c0e9e8a874fbc318424a7adb5418f32ab9214a9b7104e82212d8de7e8747dbfd"
+    },
+    "qualification": {
+      "planned_new_calls": 32,
+      "attempted_calls": 26,
+      "complete_responses": 25,
+      "matching_classifications": 25,
+      "unknown_responses": 1,
+      "unrun": 6,
+      "primary": "advisor-v19-qualification-results-20261105.json",
+      "primary_sha256": "8c6d7748436e7a796d96f7d0e9c27a3d2251f52afd7a3f44bc5a68f02ac55b59",
+      "primary_not_rewritten": true,
+      "raw_status_at_interrupt": "running",
+      "stop_record": "advisor-v19-qualification-stop-20261105.json"
+    },
+    "review": {
+      "completed_evaluations_including_controls": 29,
+      "reviewed_assessments": 134,
+      "matching_marks": 134,
+      "grounded_assessments": 133,
+      "nonempty_required_changes": 30,
+      "sufficient_required_changes": 29,
+      "blocked_controls_grounded": true,
+      "complete_reply_format_errors": 0
+    },
+    "failure": {
+      "case_id": "pm-private-access-contradiction",
+      "sample": 1,
+      "assessment": {
+        "covered": false,
+        "reason": "Документ содержит противоречие: область действия и другие критерии запрещают посторонним доступ, но последний критерий приёмки разрешает незнакомцу редактировать записи. Сценарий также утверждает, что оба значения обрезаются, тогда как источник задаёт обрезку для проверки непустоты, но не требует менять сохраняемые значения.",
+        "required_change": "Устранить противоречивый критерий приёмки и уточнить сценарий создания так, чтобы он проверял непустоту после обрезки, не вводя неподтверждённое требование менять сохраняемые значения."
+      },
+      "item": "C2",
+      "interpretation": "The actual owner-only versus public-edit contradiction supports C2=false. The source does not forbid storing trimmed values, so an additional mandatory trimming correction is not justified.",
+      "independent_reviews": 2,
+      "gold_changed": false,
+      "server_repair": false
+    },
+    "budget": {
+      "campaign_used": 122,
+      "campaign_limit": 152,
+      "owner_approved_limit_increase": true,
+      "unknown_attempt_counted": true,
+      "live_reserve_unspent": 24,
+      "automatic_retries": 0
+    },
+    "workflow_installed": false,
+    "workflow_merged": false,
+    "new_pm_live_scenarios_run": false,
+    "code_gates": {
+      "status": "mechanical_checks_passed_with_explicit_skips",
+      "native": {
+        "passed": 4326,
+        "skipped": 15,
+        "postgres_deselected": 132,
+        "subtests_passed": 75,
+        "seconds": 1480.66
+      },
+      "coverage": {
+        "version": "7.15.4",
+        "covered_lines": 12353,
+        "statements": 13131,
+        "percent": 94.07508948290305,
+        "threshold": 94
+      },
+      "postgres": {
+        "passed": 132,
+        "skipped": 0,
+        "owned_compose_resources_cleaned": true
+      },
+      "additional_http_history_regression": {
+        "file_cases_passed": 7,
+        "new_unique_case": 1,
+        "provider": "mocked; not a live PM acceptance"
+      },
+      "lint": "passed",
+      "types": {
+        "passed": true,
+        "source_files": 169
+      },
+      "skips": {
+        "private_opt_in": 3,
+        "ntfs_executable_modes": 1,
+        "playwright_not_installed": 11
+      },
+      "artifact_hashes": {
+        "advisor-v19-final-native-20261105.xml": "092e5aa231a0c81a42f7ab22cfef7c99528ab054982cb0ed53488f5063a4e40b",
+        "advisor-v19-final-coverage-20261105.json": "de0dcc1c979816cb4805e23847d77c1356d1e20bdbcf18f15d0faca6688995aa",
+        "advisor-v19-history-http-frozen-20261105.xml": "8fc39751a8ee85559543f590c8696bc2a4161ae771a0eedf3be9a7adf0253e6d",
+        "workflow-v19-pg16-20261105/result.json": "84b9b4430be78a62f19b67d9aaa389eb819358747d4faf2a3c80dc3c618b8130"
+      },
+      "native_temp_cleanup": "Blocked by execution policy after explicit ownership/path checks; retained, no alternate deletion attempted."
+    },
+    "next": "Keep candidate unaccepted. Distinguish 'not required' from 'forbidden' in a separately predeclared follow-up, without keyword grading, answer repair, altered gold or another unchanged series."
+  }
+}

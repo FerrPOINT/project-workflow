@@ -1,4 +1,4 @@
-"""Legacy PM entry points use the universal prompt and unchanged wire contract."""
+"""PM phases use the universal typed prompt and strict assessment contract."""
 
 import json
 from pathlib import Path
@@ -8,7 +8,7 @@ from unittest.mock import Mock
 import pytest
 
 from project_workflow.infrastructure.llm import OpenAICompatibleClient, PromptBuilder, ResponseParser
-from tests._report_helpers import response_body
+from tests._report_helpers import report_json, response_body
 
 pytestmark = pytest.mark.unit
 
@@ -16,7 +16,7 @@ ITEMS = [("check:1", "Saved FULL document"), ("evidence:1", "Exact revision/cont
 
 
 def _report(text="Reported outcome"):
-    return {"source": "Reported source facts", "result": {"content": text}, "unresolved": []}
+    return json.loads(report_json(text, source="Reported source facts"))
 
 
 def _phase(delegate=False):
@@ -35,19 +35,21 @@ def _phase(delegate=False):
 
 @pytest.mark.parametrize("delegate", [False, True])
 @pytest.mark.parametrize("explicit", [False, True])
-def test_legacy_pm_flag_does_not_select_a_policy(delegate, explicit):
-    args = ("CASE-1", _phase(delegate), _report("Current report\nFULL document"),
-            ["check:1"], ITEMS if explicit else None)
-    default = PromptBuilder.build_user_prompt(*args)
-    assert PromptBuilder.build_user_prompt(*args, pm_evaluation=False) == default
-    assert PromptBuilder.build_user_prompt(*args, pm_evaluation=True) == default
-    assert PromptBuilder.PM_PROMPT_VERSION == PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v15"
+def test_pm_phase_uses_the_same_policy_and_payload_as_another_role(delegate, explicit):
+    phase = _phase(delegate)
+    report = _report("Current report\nFULL document")
+    prompt = PromptBuilder.build_user_prompt("CASE-1", phase, report, ITEMS if explicit else None)
+    phase.code = "ANOTHER-ROLE"
+    assert PromptBuilder.build_user_prompt("OTHER-TASK", phase, report, ITEMS if explicit else None) == prompt
+    assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v19"
+    assert not hasattr(PromptBuilder, "PM_PROMPT_VERSION")
 
 
-def test_pm_system_alias_uses_the_same_assessment_contract():
-    prompt = PromptBuilder.PM_SYSTEM_PROMPT
-    assert prompt is PromptBuilder.SYSTEM_PROMPT
+def test_one_system_uses_the_same_assessment_contract_for_pm():
+    prompt = PromptBuilder.SYSTEM_PROMPT
+    assert not hasattr(PromptBuilder, "PM_SYSTEM_PROMPT")
     assert "exactly verdict, assessments, blockers and confidence" in prompt
+    assert '"required_change": string or null' in prompt
     assert "hash" not in prompt.lower()
     assert "revision" not in prompt.lower()
     assert "receipt" not in prompt.lower()
@@ -56,24 +58,26 @@ def test_pm_system_alias_uses_the_same_assessment_contract():
 @pytest.mark.parametrize("delegate", [False, True])
 def test_pm_contains_only_phase_criteria_and_complete_business_report(delegate):
     report = {
-        "source": "Owner answers",
-        "result": {"document": {"scope": ["all facts"], "title_limit": 200}},
+        "source": {"request": "Owner answers", "decisions": []},
+        "result": {"artifacts": [{"name": "document", "content": {
+            "scope": ["all facts"], "title_limit": 200,
+        }}], "assumptions": []},
         "unresolved": [],
     }
     phase = _phase(delegate)
     semantic_items = [("check:1", "Saved FULL document"), ("evidence:1", "Owner decisions and their resolution")]
-    args = ("CASE-1", phase, report, ["check:1"], semantic_items)
-    generic = PromptBuilder.build_user_prompt(*args)
-    pm = PromptBuilder.build_user_prompt(*args, pm_evaluation=True)
-    assert pm == generic
+    previous = {"covered": True, "reason": "Earlier saved full document", "required_change": None}
+    pm = PromptBuilder.build_user_prompt(
+        "CASE-1", phase, report, semantic_items, previous_assessments={"check:1": previous},
+    )
     assert json.loads(pm) == {
         "phase": phase.name,
         "allowed_verdicts": ["PASS", "PARTIAL", "BLOCKED"] + (["DELEGATE"] if delegate else []),
         "criteria": [
-            {"id": "C1", "text": "Saved FULL document"},
-            {"id": "E1", "text": "Owner decisions and their resolution"},
+            {"id": "C1", "text": "Saved FULL document", "previous_assessment": previous},
+            {"id": "E1", "text": "Owner decisions and their resolution", "previous_assessment": None},
         ],
-        "previously_covered": ["C1"],
+        "previous_reports": [],
         "report": report,
     }
     assert all(item_id not in pm for item_id, _ in semantic_items)
@@ -82,7 +86,7 @@ def test_pm_contains_only_phase_criteria_and_complete_business_report(delegate):
 
 
 def test_pm_explicit_empty_items_do_not_fall_back_to_phase_contents():
-    prompt = PromptBuilder.build_user_prompt("CASE-1", _phase(), _report(), evaluation_items=[], pm_evaluation=True)
+    prompt = PromptBuilder.build_user_prompt("CASE-1", _phase(), _report(), evaluation_items=[])
     assert json.loads(prompt)["criteria"] == []
     assert "Saved FULL document" not in prompt
     assert "Instructions:" not in prompt
@@ -104,19 +108,13 @@ def test_business_catalog_http_request_contains_only_the_current_evaluation(monk
     ]
     report = _report("Current owner request and decisions. Complete current business document.")
     prompt = PromptBuilder.build_user_prompt(
-        "private-task-identifier",
-        phase,
-        report,
-        evaluation_items=items,
-        pm_evaluation=True,
+        "private-task-identifier", phase, report, evaluation_items=items,
     )
     response = {
-        "verdict": "PASS",
-        "covered": [item_id for item_id, _ in items],
-        "missing": [],
-        "blockers": [],
-        "message": "All listed facts are present",
-        "confidence": 0.9,
+        "verdict": "PASS", "assessments": {
+            label: {"covered": True, "reason": "All listed facts are present", "required_change": None}
+            for label in PromptBuilder.item_aliases(items)
+        }, "blockers": [], "confidence": 0.9,
     }
     post = Mock(
         return_value=Mock(
@@ -134,7 +132,7 @@ def test_business_catalog_http_request_contains_only_the_current_evaluation(monk
         max_tokens=1000,
         reasoning_effort="none",
     )
-    actual = client.respond(PromptBuilder.PM_SYSTEM_PROMPT, prompt, response_format=PromptBuilder.response_schema([]))
+    actual = client.respond(PromptBuilder.SYSTEM_PROMPT, prompt, response_format=PromptBuilder.response_schema(items))
     payload = post.call_args.kwargs["json"]
     assert set(payload) == {
         "model",
@@ -146,15 +144,16 @@ def test_business_catalog_http_request_contains_only_the_current_evaluation(monk
         "store",
         "stream",
     }
-    assert payload["instructions"] == PromptBuilder.PM_SYSTEM_PROMPT
+    assert payload["instructions"] == PromptBuilder.SYSTEM_PROMPT
     assert payload["input"] == [{"role": "user", "content": prompt}]
     user_data = json.loads(prompt)
     assert user_data["report"] == report
-    assert prompt.count(report["result"]["content"]) == 1
+    assert prompt.count(report["result"]["artifacts"][0]["content"]) == 1
     assert user_data["criteria"] == [
-        {"id": label, "text": dict(items)[item_id]} for label, item_id in PromptBuilder.item_aliases(items).items()
+        {"id": label, "text": dict(items)[item_id], "previous_assessment": None}
+        for label, item_id in PromptBuilder.item_aliases(items).items()
     ]
-    assert user_data["previously_covered"] == []
+    assert user_data["previous_reports"] == []
     for instruction in definition["instructions"]:
         assert instruction["description"] not in prompt
     wire_context = json.dumps([payload["instructions"], payload["input"]])
@@ -170,19 +169,24 @@ def test_business_catalog_http_request_contains_only_the_current_evaluation(monk
         "project-workflow",
     ):
         assert unwanted not in wire_context
-    assert ResponseParser.parse(actual, required_item_ids=[item_id for item_id, _ in items]).raw == response
+    parsed = ResponseParser.parse_assessments(actual, evaluation_items=items)
+    assert parsed.verdict == "PASS" and parsed.covered == [item_id for item_id, _ in items]
+    assert parsed.assessments == {
+        item_id: response["assessments"][label] for label, item_id in PromptBuilder.item_aliases(items).items()
+    }
 
 
-def test_pm_option_is_keyword_only():
-    with pytest.raises(TypeError):
-        PromptBuilder.build_user_prompt("CASE-1", _phase(), _report(), None, ITEMS, True)
+@pytest.mark.parametrize("pm_evaluation", [False, True])
+def test_removed_pm_policy_flag_is_rejected(pm_evaluation):
+    with pytest.raises(TypeError, match="pm_evaluation"):
+        PromptBuilder.build_user_prompt("CASE-1", _phase(), _report(), ITEMS, pm_evaluation=pm_evaluation)
 
 
 def test_builder_no_longer_accepts_machine_confirmation_context():
     with pytest.raises(TypeError, match="verified_confirmation_revision"):
         PromptBuilder.build_user_prompt(
             "CASE-1", _phase(), _report(), evaluation_items=ITEMS,
-            pm_evaluation=True, verified_confirmation_revision=3,
+            verified_confirmation_revision=3,
         )
 
 

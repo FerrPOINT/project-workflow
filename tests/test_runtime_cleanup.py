@@ -63,15 +63,20 @@ def test_default_bootstrap_does_not_require_task_prefixes(tmp_path):
     assert all(project["code"] != "TASK" for project in uow.get_projects())
 
 
-def test_compose_forwards_configurable_evaluator_and_runtime_configuration_to_api():
+def test_compose_forwards_configurable_evaluator_and_runtime_configuration_to_api(monkeypatch):
+    monkeypatch.delenv("OPENAI_REASONING_EFFORT", raising=False)
+    monkeypatch.delenv("OPENAI_MAX_TOKENS", raising=False)
+    settings = config.Settings(_env_file=None, DATABASE_URL="sqlite://")
     compose = COMPOSE_PATH.read_text(encoding="utf-8")
     assert "OPENAI_BASE_URL: ${OPENAI_BASE_URL:-http://192.168.10.1:4000/v1}" in compose
     assert "OPENAI_MODEL: ${OPENAI_MODEL:-app-test}" in compose
-    assert "OPENAI_MAX_TOKENS: ${OPENAI_MAX_TOKENS:-4000}" in compose
+    assert "OPENAI_MAX_TOKENS: ${OPENAI_MAX_TOKENS:-}" in compose
+    assert settings.OPENAI_MAX_TOKENS is None
     assert "OPENAI_API_KEY: ${OPENAI_API_KEY:-}" in compose
-    assert "OPENAI_REASONING_EFFORT: ${OPENAI_REASONING_EFFORT:-none}" in compose
+    assert settings.OPENAI_REASONING_EFFORT == "high"
+    assert f"OPENAI_REASONING_EFFORT: ${{OPENAI_REASONING_EFFORT:-{settings.OPENAI_REASONING_EFFORT}}}" in compose
     assert (
-        "PLATFORM_SERVICES_URL: ${PLATFORM_SERVICES_URL:-http://host.docker.internal:7771/api/v1/runtime/services}"
+        "PLATFORM_SERVICES_URL: ${PLATFORM_SERVICES_URL:-}"
     ) in compose
     assert "PROJECT_WORKFLOW_RUNTIME_TOKENS_JSON" not in compose
     assert "PROJECT_WORKFLOW_ASSIGNMENT_TOKENS_JSON" not in compose

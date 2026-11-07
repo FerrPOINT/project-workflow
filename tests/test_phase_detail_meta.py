@@ -5,9 +5,17 @@ from fastapi.testclient import TestClient
 
 pytestmark = [pytest.mark.ui]
 
-from project_workflow.interfaces.ui import app
+from project_workflow import config
+from project_workflow.interfaces.ui.app import create_app
 
-client = TestClient(app)
+
+@pytest.fixture
+def client(monkeypatch):
+    monkeypatch.setenv("PROJECT_WORKFLOW_MODE", "standalone")
+    monkeypatch.setenv("PROJECT_WORKFLOW_STANDALONE_CONTAINER_NETWORK", "false")
+    config.get_settings.cache_clear()
+    with TestClient(create_app(), base_url="http://127.0.0.1", client=("127.0.0.1", 50000)) as browser_client:
+        yield browser_client
 
 
 @pytest.fixture(autouse=True)
@@ -21,7 +29,7 @@ def setup_db():
         schema.ensure_phase_catalog(uow)
 
 
-def test_phase_detail_hides_next_recommendation_meta_entirely():
+def test_phase_detail_hides_next_recommendation_meta_entirely(client):
     response = client.get("/phase/1")
 
     assert response.status_code == 200

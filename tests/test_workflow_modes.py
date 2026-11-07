@@ -260,8 +260,8 @@ def test_non_default_mode_phase_content_can_be_edited_and_deleted(modes_db):
 
 
 def test_delete_workflow_clears_self_references_in_every_mode(modes_db):
-    fallback = modes_db.workflows.get_default()
-    assert fallback is not None and fallback.id is not None
+    replacement = modes_db.workflows.get_default()
+    assert replacement is not None and replacement.id is not None
     workflow_id = modes_db.workflows.create({"name": "Delete all modes"})
     default = modes_db.workflows.get_mode_by_key(workflow_id, "default")
     assert default is not None and default.id is not None
@@ -309,11 +309,17 @@ def test_delete_workflow_clears_self_references_in_every_mode(modes_db):
     )
     modes_db.commit()
 
+    with pytest.raises(ConflictError, match="явно переназначьте"):
+        WorkflowService(modes_db).delete_workflow(workflow_id)
+    assert modes_db.projects.get_by_id(project_id).workflow_id == workflow_id
+    assert modes_db.workflows.get_by_id(workflow_id) is not None
+    modes_db.projects.update(project_id, {"workflow_id": replacement.id})
+    modes_db.commit()
     WorkflowService(modes_db).delete_workflow(workflow_id)
 
     assert modes_db.workflows.get_by_id(workflow_id) is None
     moved = modes_db.projects.get_by_id(project_id)
-    assert moved is not None and moved.workflow_id == fallback.id
+    assert moved is not None and moved.workflow_id == replacement.id
 
 
 

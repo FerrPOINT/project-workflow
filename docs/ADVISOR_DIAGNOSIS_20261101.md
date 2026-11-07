@@ -1,5 +1,2123 @@
 # Advisor: сквозной диагноз и границы выпуска
 
+## 2026-11-07: Согласованный Переход Инструкций
+
+Обнаружен разрыв поставки, а не оценки: замена sealed source в исходниках не
+обновляет уже установленный baseline каталога. Новый execution admission поэтому
+не принимает новую редакцию. Registered0031 использует существующий журнал
+публикаций: добавляет baseline всех семи профессий в одной транзакции, не меняет
+старые modes, assignments, отчёты или принятые решения. Старые exact enrollment
+операции читаются до допуска нового исполнения, без Tracker/Advisor; изменённый
+payload и неавторизованный caller по-прежнему отклоняются.
+
+Read-only preflight работающего приложения: у PM выбрана operator publication14;
+остальные шесть выбраны из sealed baseline. Поэтому до установки нужен явный
+publish проверенного полного target-текста через штатный каталог API, между
+запусками. Миграция допускает такую публикацию только при полном структурном
+равенстве target; произвольный custom отклоняется до первой записи. Ни история
+публикаций, ни старые задачи автоматически не перепривязываются.
+
+Первый полный native-прогон сохранён как4708 PASS/32 FAIL: это не успешный gate.
+Адресные исправления исторических ожиданий и cutover дали50 PASS, затем25 PASS
+на финальном cutover/replay-пакете; результаты пересекаются и не суммируются.
+Итоговый native gate:4763 PASS,75 subtests,15 optional skips, coverage94.1116%;
+исходники до и после прогона совпали. Все183 PostgreSQL cases прошли:24 исходных,
+23 cutover,4 concurrent publication,4 исходных history и128 оставшихся проверок.
+Ruff, mypy177 и generator PASS. Единственная последующая тестовая коррекция
+берёт catalog version из фактического readback вместо константы; product code
+не изменился. Установка и новая живая приёмка остаются открытыми.
+Evidence: `Q/workflow-native-start-cutover-83343c24-20261107-1a1b6999561/handoff.json`,
+`Q/workflow-stage-status-pg-cas-followup-20261107/result.json` и
+`Q/workflow-stage-status-pg-isolated-remaining-20261107/result.json`;
+последний receipt явно ссылается на четыре переиспользованных успешных случая.
+
+Независимое структурное сравнение всех33 фаз подтвердило неизменность checks,
+evidence, scopes и переходов. Prompt, context builder, evaluator и typed report
+не изменены. Новых модельных вызовов, установок и живой приёмки нет. Шесть direct
+и две новые PM-задачи остаются отдельной приёмкой; прежний PM сохранён.
+
+## 2026-11-07: Проверен Допуск Первой Инструкции До Start
+
+Source-checkpoint поверх dc1b89b7: Ready допускает чтение первой инструкции
+точного текущего назначения во всех восьми режимах семи профессий. Новый отчёт
+и повторная проверка перед commit требуют InProgress; поздние step/history
+активной фазы не используют Ready, включая PM. Снято старое PM-исключение;
+identity/fences и точный исторический readback сохранены. Нового archive-допуска
+после передачи другой профессии этот пакет не добавляет.
+
+185 targeted PASS,0 failures/errors/skips; Ruff и mypy двух файлов PASS.
+Evidence: `Q/workflow-cp1-current-ready-fix-20261107-60223222/cp1-result.json`
+и JUnit рядом. Контролируемый Tracker HTTP peer и disposable SQLite не являются
+живой интеграцией Start. Advisor prompt, criteria, policy и модель не менялись;
+новых модельных вызовов нет. Установка и полная приёмка нового статусного
+контракта остаются открытыми; неподготовленный cohort не активируется.
+
+## 2026-11-07: Владелец Уточнил Статус И Стадию
+
+Целевой контракт относится ко всем профессиям: агент сам первым действием ставит
+`InProgress`, последним — `Completed`; приложение по принятому завершению
+меняет стадию, сбрасывает статус в `Ready` и передаёт работу следующему агенту.
+Следующий агент сам устанавливает `InProgress`; на последней стадии сохраняется
+`Completed`, поскольку передачи нет. Это зафиксировано в AGENTS и
+[архитектуре](architecture.md#стадия-статус-и-завершение-исполнения). `Ready` не
+переименовывается в завершение. Исторические Backlog/Ready receipts сохраняются,
+но не объявляются исполнением нового требования.
+
+Read-only проверка установленного Tracker: image `6ea9c748801d`, source
+`b54f9e6c6d704ed28ed46eb59a0ddb817299a89c` из accepted build `e59061d88de7`.
+У delivery-агентов `BindRun` серверно ставит InProgress; у PM нет обязательного
+явного Start. PM completion пишет Backlog/Ready и отдельно admission completed;
+у других профессий серверный Complete выбирает next stage/Ready, а только
+DevOps завершает Completed. Workflow требует InProgress до первой инструкции.
+Это подтверждённые разрывы с новым правилом; документация не закрывает их кодом.
+
+Дополнительно worker-инструкция обещает атомарную постановку Analysis. В обычном
+PM commit проверены сохранение receipt/state и outbox pm.completed; найденные
+триггеры outbox являются guards, не business-router. Полная дальнейшая цепочка
+Analysis пока не подтверждена: ни автоматическую передачу, ни её отсутствие
+окончательным фактом по одному этому методу не объявляем. До согласованной
+правки Tracker/CLI/admission и приёмки нельзя публиковать вымышленные команды,
+молча переводить старые исполнения или называть новый статусный контракт рабочим.
+Это отдельная предметная граница после оценки Advisor, не основание менять v19.
+
+## 2026-11-07: Проверка Несоответствий И Сохранности Документа
+
+Кандидат `fb6ce930`, tree `1d6ee432eef0f84137f02ab1bbc210a2c494edcb`:
+4690 native PASS,75 subtests,15 SKIP,160 integration deselected;
+отдельный PostgreSQL gate160 PASS без skips. Coverage94.0991518%; Ruff,
+mypy176 файлов и namespace export check прошли. Оба runner завершились,
+cleanup/source-unchanged подтверждены. Native skips:11 без Playwright,
+3 private-source opt-in,1 NTFS executable-mode; это открытые границы проверки,
+не выполненные браузерные, private-source или POSIX проверки.
+Evidence: `Q/workflow-combined-cap-input-full-20261107-mw6a4jra/full.json`,
+JUnit/coverage рядом, `Q/workflow-completeness-postgres-20261107/result.json`.
+Девять независимых регрессий передают документы33k/51k/>1MiB через CLI/API,
+Advisor HTTP payload, историю и replay; обе HTTP-границы управляемые, не live.
+Image smoke отдельно завершён на ef7b82e2:18 стадий PASS, cleanup verified,
+`Q/workflow-complete-reports-image-smoke-20261107/result.json`. Он не проверяет
+новый статусный контракт; установка и новая модельная/PM-приёмка не выполнены.
+
+Сохранённые реальные ответы203/204/205 проверены отдельно от offline gates:
+
+| Наблюдение | Проверенные данные | Вывод и граница |
+| --- | --- | --- |
+| Предполагаемое усечение лимитом4000 | Каждый ответ completed/success, одна попытка; output usage373/648/526 | Усечение или локальный limit rejection в этих трёх случаях отсутствуют. Это не доказывает применение параметра upstream и не объясняет другие исторические случаи. |
+|203/C1: «отсутствие решений владельца» | В обсуждении новых решений нет; исходный запрос уже содержит решения | Формулировка reason неточна. Покрытие критерия подтверждается контекстом; менять covered/verdict или объявлять false PASS по одной этой фразе оснований нет. |
+| Дублирование документа в204/205 | Каждая из двух копий совпадает с сохранённой revision1 по всем10 бизнес-полям | Избыточность есть, потери или подмены документа в этих входах не обнаружено. Само дублирование не доказывает причину ошибки модели. |
+| Предполагаемая потеря на CLI/API/Advisor | Отчёты1399/10542/9720 символов; history report, captured report и объект внутри user payload равны | Эти успешные отправки ниже прежнего32000; в них потери на этой границе нет. Большие отчёты проверены отдельно offline, а не выданы за прежние live-входы. |
+| Источник согласия и показа | Сохранённый API snapshot: полный показ09:58:57+03, отдельное согласие10:03:31+03 для той же revision1 | Не только утверждение PM. Это не подтверждает каждое его отдельное утверждение о чтении всех комментариев или публикации финального комментария. |
+| Уведомление после согласия и completion instruction | Fleet generator `backend/api/src/routes/task_chats.rs:822` говорит «leave ... Backlog / Ready»; completion instruction различает immutable receipt и current Analysis | Неоднозначность временной границы, не доказанное логическое противоречие. PM не запускает Analyst, система может сменить текущую стадию. Влияние этой фразы на незавершённый completion не установлено. |
+| Workflow завершён, задача ещё Draft/InProgress | Workflow done/version4; Tracker completion.current=null; native guardian остановил финальную операцию | Неуспешен бизнес-финал после оценки, а не доказан отказ Advisor. Не выполнять completion вручную и не называть PM принятым. |
+
+Причина неточной формулировки внутри модели не установлена. Её объяснение не
+является скрытым reasoning или доказанной причинной связью. Переписывать prompt
+по одному такому наблюдению без отдельной различающей проверки не требуется.
+Причина прежних403 и независимый readback финального комментария этими
+сохранёнными входами полностью не установлены; это открытая неопределённость,
+не основание менять оценку или объявлять все действия агента доказанными.
+Пять падений Fleet upgrade fixtures разбираются отдельно в Fleet CURRENT_STATE;
+они не являются результатами оценки Advisor. Новых модельных вызовов при этом
+разборе нет; исторические ответы, ожидания и исходные receipts не изменялись.
+
+## 2026-11-07: Удаление Произвольных Потолков
+
+В текущем установленном клиенте и Compose задан default4000 output tokens.
+Клиент передаёт этот запрашиваемый бюджет и локально отклоняет больший usage.
+Фактическое ограничение upstream не доказано: проверенный локальный ChatGPT
+Responses adapter исключает параметр из отправляемого payload. По контракту
+Responses поддерживаемый моделью лимит включает reasoning и видимый ответ.
+Пользователь отменил этот default: новый клиент без явного `OPENAI_MAX_TOKENS`
+не передаёт `max_output_tokens`. Это не замена4000 другим произвольным числом.
+Модель, reasoning high, схема, критерии и таймауты не меняются.
+
+Само наличие лимита не доказывает причину прежних ошибочных оценок. Для такого
+вывода нужны фактические incomplete/finish reason/usage соответствующей операции.
+Reports203/204/205 были completed без усечения; их историю и оценки не переписываем.
+Квалификация прежних настроек не является новой проверкой запроса без лимита.
+На этом checkpoint изменение исходников ещё не установлено и не принято live.
+
+Отдельно воспроизведён предел32000 символов до модели: он повторялся в parser,
+трёх HTTP-схемах и чтении stdin. Удалён согласованно из всех пяти границ;
+текущий OpenAPI генерируется из них. Типы, duplicate-key/Unicode/nonfinite
+проверки и безопасные ошибки сохранены. Адресный входной набор:256 PASS;
+клиентский набор без default-cap:166 PASS. Это не результаты живой модели.
+Будущая регрессия проверяет отсутствие maxLength в действующих report-схемах
+и целостность полного документа CLI/API/history/Advisor, а не поиск числа в коде.
+Native/PostgreSQL и статические gates завершены в checkpoint выше;
+упаковка, штатная установка и live-приёмка объединённого кандидата ещё впереди.
+
+## 2026-11-07: Текущий Статус SDLC36, Tracker Completion Pending
+
+Штатный Apply Fleet `792b963d` завершён: journal `156ed66fdd914ad3bede823343859957`,
+image `c85a410d4e8a739ea91c26fb568f86a207150706a968a007bd1c3e12f4a34eea`.
+Receipt: `Q/readiness-timing-fleet-apply-792b963d-20261107.json`, phase=complete;
+smoke complete, cleanup подтверждён. Этот Apply сохранил PM CID0966/image699/config31.
+
+Первый readiness GET нового контроллера вернул503 `UNAVAILABLE` за3.047s,
+message: `original Docker operation requires reconciliation; no automatic resend`.
+Request13503d63: lock0ms, config47ms, binding447ms, launch7ms, health2416ms.
+После штатного recovery PM31 adopted; прежний readiness config31 вернул200 за17981ms.
+Это readback того adoption, не доказательство текущей готовности config32.
+Первый503 остаётся фактом отдельного readback, не причиной исторических60s403.
+Временный отказ Fleet-чтения `Configured accepted context changed` восстановился
+самостоятельно; фактической остановки native Hermes по нему не установлено.
+
+На сохранённой операции создан SDLC36: reports203/204/205 получили PASS на фазах1/2/3,
+Workflow done/version4. Требования rev1 сохранены, полностью показаны владельцу и
+подтверждены отдельным owner-действием; report205 содержит exact saved business doc
+и account показа/согласия. Diagnostics всех трёх оценок без усечения; независимый
+review всех16 marks завершён. Остаточные замечания: reason203/C1 неточно говорит об
+отсутствии решений, хотя они есть в request; reports204/205 дублируют документ,
+но факты не потеряны. Эти замечания не выданы за отсутствие owner choices или falsePASS.
+
+Финальный native run config31 completed, но Tracker completion read.current=null:
+Workflow done и native completion не равны завершению бизнес-цикла.
+
+Пользователь явно разрешил агентам автономные технические операции без human popup;
+необходимые бизнес-уточнения PM и exact owner confirmation требований сохраняются.
+Канонический Base policy-пакет `ad7dddb8` опубликован,52 offline tests PASS;
+серверные права, pipeline gates и сохранность данных/истории не отменены.
+Config32 с `approvals.mode="off"` validated, но NOT effective: activation held в PREPLAN
+из-за недоступного evidence исходной операции. Новый stop не доказан; готовность32
+и активация policy не объявлены. Source Workflow core/criteria/Advisor не менялись.
+
+Бюджет159/163, осталось4: три новых Advisor-вызова относятся к203/204/205,
+не к диагностической установке (её model_calls=0). Точный await прежних60s403 и
+его cause fix не доказаны. Изменение документации не выполняет бизнес-команд.
+Evidence: `Q/pm-default-clean-instructions-20261107/full/workflow-history.json`,
+`sparse-pm-readback-20261031.json`, `case.json`, `advisor-diagnostics-cli-203.json`,
+`advisor-diagnostics-cli-204.json`, `advisor-diagnostics-cli-205.json` в том же full.
+
+## 2026-11-07: Опубликована Worker-Инструкция PM14
+
+Через штатный catalog CAS опубликована PM14 из source `a2c4b2d8`;
+content SHA256 `8b16196492ec0510c13d9e93412a63abb4cef697517490aa209ccc8ec08377d7`.
+Локальный receipt `Q/pm-default-receipt-completion-20261107/publication.json`
+точно совпадает с committed `docs/evidence/pm-receipt-completion-20261107.json`.
+От frozen13 изменён только `modes[0].phases[2].instructions[4].description`:
+Backlog / Ready проверяется в immutable PM receipt; текущая стадия уже может
+быть Analysis. Чтение context следующей профессии не требуется; PM не dispatch Analyst.
+PM13 и её исторические artifacts/исполнения сохранены; config31/binding, image699,
+skills и Advisor criteria/system/schema не менялись; сама публикация Advisor не вызывала.
+Это публикация worker-текста, не исправление create403 и не новая live-приёмка PM.
+
+## 2026-11-07: Активация PM31 И Первоначальный Отказ До Advisor
+
+Ниже сохранён первоначальный срез до последующего исполнения SDLC36, описанного выше.
+
+На прежнем PM штатно активирован Basef8e375: config31 effective/desired,
+draining=false; физически совпадают SOUL и четыре включённых skill. Image699,
+CLI, original Hermes, credentials, модель и опубликованный PM13 сохранены.
+Evidence: `pm-instructions-f8e375-20261107/runtime-proof.json`, `readiness-final.json`.
+Установка не доказывает чтение каждого skill или бизнес-приёмку.
+
+Новый полный QA получил create403/60004ms; чтение исходной операции подтвердило
+incomplete/draft. Один явный continue той же операции получил403/60255ms.
+Tracker creation-key readback404; новых task/chat/run и вызовов Advisor не наблюдалось.
+Бюджет156/163 сохранён. Это отказ допуска до PM, не новый ошибочный PASS/PARTIAL.
+
+| Граница | Проверенное | Что не установлено |
+|---|---|---|
+| Авторизация | Base human scope ограничен60s; Fleet прерывает весь handler по deadline и возвращает403. Это не срок входа пользователя. | Точный await двух прерванных create/continue не сохранён. |
+| Runtime | Последующий readiness GET200/58508ms на сервере; same-controller endpoint отдельно прошёл за2.442s/46 engine reads. | Один endpoint не объясняет весь GET и не доказывает место остановки create. |
+| Advisor | Нового запроса/ответа в этом сценарии нет; политика v19 не менялась. | Приёмка новых общих/PM инструкций ещё не выполнена. |
+
+Диагностический пакет Fleet792 со stage/time/outcome логами, включая прерванный
+await, теперь установлен (результат выше); guards, authority и таймауты сохраняются.
+После локализации исправлять конкретную границу; не увеличивать окно прав,
+не обходить проверки и не создавать новый механизм исполнения.
+
+## 2026-11-07: Актуализация Действующих Справок
+
+Справка диагностики описывает один native Responses/v19 путь, фактические поля
+snapshot и границы диагностического capture. Исторические настройки вынесены
+из действующих указаний со ссылкой на прежнюю Git-редакцию и сохранённые evidence.
+Остальные текущие контракты сверены с кодом; датированные результаты не переписаны.
+Это документационное изменение без вызовов модели, установки или активации PM.
+Прежние открытые live/deployment gates сохраняются.
+
+## 2026-11-07: Разделение Общих И Профессиональных Инструкций
+
+Basef8e375c0 выделяет общую основу Workflow/Tracker/evidence и профессиональные
+инструкции PM. Смешанный requirements-analysis очищен от полного процесса Analyst;
+этот раздел дословно перенесён в существующую Analyst role. Общие skills и PM role
+больше не задают собственный маршрут стадий или дублирующую последовательность
+завершения: её задаёт текущий Workflow, переход проверяет сервер.
+Состав7 ролей/11 режимов/15 runtime-skills, allowlists, API-схемы и исполняемые
+примеры сохранены. 51 офлайн-тест, package/catalog, Ruff и независимое review PASS.
+На момент source-checkpoint пакет не был активирован на PM30; активация31
+зафиксирована выше. Advisor и его запрос не
+менялись, новых модельных вызовов нет; живая приёмка остаётся открытой.
+
+## 2026-11-07: Аудит Фактической Работы PM, SDLC35
+
+После уточнения общего guidance выбран минимальный пакет Base: единый
+project-workflow-executor требует перед отчётом собрать содержательную работу,
+действия и проверенные результаты текущей фазы, включая непереданные факты;
+обычное чтение step/history или технический отказ их не сбрасывают. Пример
+содержит описание работы рядом с документом в существующем result.artifacts.
+Все семь default-профессий уже используют этот skill. Advisor, формат отчёта,
+фазы, критерии и модель не меняются; повторная публикация PM-каталога и сборка
+приложений ради этой инструкции не требуются. Исторические отчёты сохраняются.
+Наличие этого пробела инструкции подтверждено, но внутренняя причина пропуска
+моделью не устанавливается из текста. Basefc678c3c прошёл49 офлайн-тестов,
+проверку пакета7 roles/11 modes и Ruff. Это опубликованный source-пакет;
+PM30 ещё не получил новую редакцию skill. Активация и live-результат открыты.
+
+Это read-only разбор настоящих сообщений, tool calls, сохранённых требований и
+Advisor200/201/202. Новых модельных вызовов или исправлений prompt для аудита нет.
+Текущее чтение Fleet подтверждает Draft/InProgress, requirements1 и три terminal
+runs; завершение native turn не является завершением бизнес-задачи.
+
+| Область | Наблюдение и основание | Вывод |
+| --- | --- | --- |
+| Требования | Полный исходный запрос сохранён в документе; все10 бизнес-полей совпадают с отчётом201 и показом1941. Функции не добавлены, искусственных вопросов нет. | Подготовка этого полного запроса успешна; скудный запрос этим не проверен. |
+| Инструменты | Первый native run:19 terminal calls,14 exit0,4 пустых arguments и read_file как shell-команда с exit127; затем самостоятельное восстановление.177.554s относятся к native run, не ко всей доставке запроса. | Ошибочен вызов read_file как shell-команды, не сам поддерживаемый terminal-путь. Происхождение пустых arguments без provider wire неизвестно. Exit0 оболочки не гарантирует успех каждого вложенного CLI. |
+| Согласование | В1941 показан полный документ и ненужный SHA; отдельное owner confirmation действительно сохранено. Действующий SOUL требует exact revision and hash и содержит пояснения про необязательный legacy lease. | SOUL содержит техническую формулировку; её влияние на этот ответ не доказано. Инструкция требует пересмотра, но проверка точного согласия на сервере сохраняется. |
+| Отчёт PM |202 содержит точный полный документ и согласие, но не описание выполненного показа владельцу. В переписке показ1941 есть. | Реальный пробел отчёта, а не отсутствие показа. Advisor видит отчёт текущей фазы, не всю переписку PM. |
+| Advisor |202: C1/E1=false, остальные5=true; причины и required_change соответствуют контракту. Один ответ HTTP200 за14.24s,2332 input tokens, без усечения и посторонней истории. | Этот PARTIAL обоснован. Объём контекста или reasoning не установлены как причина. Reasons200 C1/E1 отдельно неточны: решения есть в request, пуст лишь decisions. |
+| Исправление | PM сам подготовил полный исправленный отчёт1953. Команда не исполнилась: техническое разрешение Fleet вернуло409 до reservation, затем ожидание истекло. Сохранённый accepted journal существует; новой оценки нет. | Транспорт/допуск Fleet, не новый отказ Advisor. Конкретный исторический predicate409 и причина прежнего503 не захвачены; управляемая регрессия не доказывает их задним числом. |
+| Честность финала |1955 сообщает Draft/InProgress и блокировку, не заявляет Backlog/Ready; повторов запрещённой команды и запуска Analyst нет. | Ложного завершения со стороны PM не обнаружено. |
+| Уведомление о consent | user_prompt fc66ca0a с указаниями прочитать подтверждение, завершить Workflow и Tracker создаётся самим Fleet в task_chats.rs:confirm после успешного сохранения согласия. Helper лишь вызывает обычный confirm API. | Это штатное продолжение продукта, не ручная подсказка проверяющего. Само это сообщение не опровергает самостоятельность сценария; окончание35 пока всё равно не принято. |
+
+Подтверждённый разрыв прост: действие PM выполнено и видно в его чате, но не
+включено в отчёт текущей фазы. Advisor не может восстановить этот факт из чужой
+переписки. Решение не требует всей переписки во входе, новой схемы или второй
+модели: исполнитель должен сообщать выполненные действия наряду с документом.
+
+Минимальный следующий пакет после аудита: согласовать SOUL с деловым показом
+документа без hash/старого lease и проверять новый чат без ручных технических
+подсказок. Текст штатного Fleet-уведомления учитывать как реальный вход продукта,
+не выдавать его за вмешательство оператора. Защиты
+подтверждения, authority и версий сохраняются. Изменение уже сохранённого prompt
+старой сессии скрытно не выполнять. SDLC34 по решению пользователя сохраняется.
+Приёмка полного и скудного сценария без подсказок остаётся открытой;7 вызовов
+Advisor пока не потрачены. Начатая ранее установка Fleet не считается аудитом PM
+или доказательством исправления его отчётов.
+
+Коррекция аудита: commit a537a68b ошибочно приписал уведомление fc66ca0a
+тестовому helper по одному тексту чата. Проверка происхождения установила
+server-generated notification в backend/api/src/routes/task_chats.rs:confirm
+установленного25feca25; confirmation_notification_tests закрепляет тот же текст.
+Исходный вывод о no-hint непригодности35 отозван, история не переписана.
+
+Evidence: Q/pm-default-required-skills-20261107/full/summary-readback.json,
+Q/pm30-sdlc35-native-tools-20261107.json,
+Q/pm-default-required-skills-20261107/full/native-terminal-after-report202-20261107.json,
+Q/pm-default-required-skills-20261107/full/advisor-202-actual-diagnostics-20261107.json,
+Q/pm-canonical-required-skills-20261107-v2/revision-readback.json.
+Source evidence: Fleet25feca25, backend/api/src/routes/task_chats.rs:confirm;
+backend/infra/src/confirmation_notification_tests.rs.
+
+## 2026-11-07: Установленный Комплект, Приёмка PM Открыта
+
+Normal Apply завершён для Fleet4240a850/image4b16e9a9 и Workflowe0b8/imagef985.
+Fleet approval-custody исправление прошло871 unit/22 PG functions, Clippy/fmt и
+штатный exact-image smoke; временные ресурсы очищены. Applya096c7b8 завершён,
+образ PM/Hermes/CLI не изменён. Это доставка, не новая business-приёмка PM.
+Управление PM после Apply восстановлено: один recovery POST вернул403, затем
+original-key GET показывал pending, а третий GET подтвердил adopted и
+current_namespace_adopted=true. Повторного POST не было. Physical verify подтвердил
+прежние CID0846/image699/generationf19/config30, CLI и skills; ready_for_sdlc=true.
+Причина403 не установлена; он не был отказом до принятия. Новых бизнес-команд нет.
+Точный DATABASE_PROOF, сохранённая история и публикации каталога не изменились.
+Установлен контракт required_skills из выбранной публикации Workflow и его
+проверка при подготовке/readiness Fleet. Общая инструкция исполнителю читать
+эти файлы не меняет Advisor input, authority или формат бизнес-отчёта.
+
+Native pytest: **4661 PASS,15 skip,160 deselected,75 subtests PASS**;
+coverage **94.097%**. Wrapper завершился **FAILED по HEAD guard**: после pytest
+был создан commit e0b8. Независимо подтверждено равенство его tree
+`337858e042a51a1ffaee13ea88555e4485dd6971` фактически проверенному tree;
+это не превращает результат wrapper в PASS. PG160 — составное покрытие:
+91 первоначальный PASS,1 отдельный retake и68 оставшихся PASS. Исходный
+connection timeout сохранён; чистого единого прогона160 PASS не заявляется.
+Base host guard имеет49 финальных targeted PASS; supplementary274 не является
+проверкой финальных байтов.
+
+Прямой реальный Workflow CLI ранее завершил три фазы: **6 calls,34 assessments**,
+включая ожидаемые PARTIAL, исправления, supplement/revocation и exact replay.
+Это только **Developer/initial**, не семь профессий и не приёмка живого PM.
+
+Канонические skills подготовлены из Basee308. PM30 **active/effective**, generation
+f19e6ad8, CID0846d5ec, на прежнем image699. Физические skill/SOUL files совпадают
+со snapshot; config-only активация не меняла образ или Advisor.
+Ошибочный image intent699→699 приватного оператора был отклонён до выбора образа;
+после проверки он исправлен на нормальный запрос `{}`. Workflow и Advisor ради
+этого не менялись.
+
+### Реальные Prompts И Новый Full SDLC35
+
+Q/pm30-native-resolved-prompt-comparison-20261107.json разрешает stored hash через
+сохранённый native snapshot: старый SDLC34 использует prompt490fb897 с прежним
+SOUL guidance, свежий SDLC35 — c12c15ab с новым. Оба raw system_prompt равны NULL;
+без hash join это не доказательство отсутствующего prompt. Это подтверждённая
+причина сохранения старой инструкции в resumed session, **не доказательство
+внутренней причины ответа модели** и не захват provider HTTP. Read-only проверка
+текущих исходников не нашла поддерживаемого native API для in-place обновления
+prompt с сохранением context/history. Пользователь выбрал сохранить SDLC34 и
+историю без продолжения в новом контексте; приёмка идёт на свежем full SDLC35
+и новой sparse-задаче. Aliases, DB surgery и скрытая ротация session не выполняются.
+
+Свежий full SDLC35 сохранил rev1 с точным совпадением всех10 полей документа и
+без искусственных вопросов. Advisor200/201 дали PASS, всего9 assessments.
+Это не9 безупречных reasons:200 C1/E1 неточно говорят об отсутствии решений
+владельца, хотя выборы находятся в request; пуст лишь отдельный список decisions. Отчёты
+не содержат hash; финальное сообщение1941 добавило ненужный SHA.
+
+Отдельное owner confirmation31ec84 сохранено в00:55:16Z. Финальный native
+run33e2 **completed в01:01:48.742Z, error=null**, а не остаётся running/waiting.
+Tool result1946 сообщает timeout ожидания human approval: report command не
+выполнялась. Финальный ответ1947 точно сообщает, что подтверждение прочитано,
+но заключительный отчёт не отправлен. Task35 остаётся Draft/InProgress,
+waiting_workflow_completion; в том turn Report202 и business complete отсутствовали.
+Планируемый stop вернул already_terminal[completed,completed]: **stop POST не
+выполнялся, cancellation не было**. Один рассмотренный approval attempt ранее
+вернул503, decision75f98 имеет failed; это не отменяется terminal-статусом run.
+Причина этого503 не установлена: timeout из1946 сам по себе её не доказывает.
+Последующий GET approvals подтверждает a82389 **pending, resolved_at=null** после
+completed/error=null native и terminal Fleet run; failed NotDispatched decision75f98
+не изменилась. Причина pending-after-terminal подтверждена по действующему
+source: общий FAILED_NOT_DISPATCHED в approval_decisions.rs требует
+`r.state='failed'`; completed-native исключён даже при настоящем terminal proof.
+Explicit reconcile затем попадает в uncertain-observation, где требуется
+`d.state='uncertain'`, а данное решение failed. Тест
+`failed_not_dispatched_completed_and_cancelled_runs_keep_pending_approvals`
+явно закрепляет это поведение;083 тоже ограничена failed-native. Это разрыв
+lifecycle-контракта, не причина исходного503 и не ошибка Advisor.
+Минимальный следующий пакет — общий settlement для доказанно terminal native
+с точным never-dispatched audit; сохранить decision, отсутствие delivery/ACK,
+exact binding и отрицательные guards. Историческую083 не переписывать; изменение
+семантики принято отдельным source-пакетом Fleet736807bd: общий predicate теперь
+допускает completed/failed/cancelled, сохраняя exact native proof, audit и decision.
+На tree03faa12c прошли869 unit,14 real PG, Clippy/fmt, независимое review и cleanup.
+Затем084 прошла109 migration unit,23 PG test functions, Clippy/fmt и actual ELF
+runtime qualification. Штатная schema-first установка и backend Apply завершены;
+decision/run/original audit до/после совпадают,083 не менялась. Тот же PM30
+восстановлен одной командой с original-key readbacks; физические CLI/config/
+skills и image699 сохранены. Старый6a backend не стартует с ledger084:
+rollback на него или изменение ledger недопустимы.
+
+### Продолжение SDLC35: Report202 И Отказ Fleet
+
+Report202 получил PARTIAL. Независимая проверка всех7 assessments подтверждает
+реальный пробел отчёта: точный полный документ есть, описания завершённого
+представления владельцу нет. C1/E1=false; остальные5=true обоснованны, оба
+required_change достаточны. Это не доказательство отсутствия показа в реальности.
+Первый report фазы3 содержит previous_reports=[], previous_assessment=null:
+чужие фазы не попали в контекст. Все10 полей документа совпадают с saved rev1;
+user.text5486 characters без hashes/receipts/worker instructions, truncated=false,
+omissions0. Один HTTP200,14.24s,2332 input/765 output tokens, high/4000/1200s.
+Это фактическая сохранённая диагностика запроса, не отдельный upstream wire capture.
+
+PM сам подготовил исправление, сохранив полный документ. Technical approval
+вернул409 до reservation: "task run has no original dispatch journal"; raw accepted
+journal существует, decision GET404. Source показывает смешение assignment
+read с live-custody admission и отсутствие agent mutex у targeted approval.
+Минимальный Fleet-кандидат разделяет эти ответственности существующими методами,
+не ослабляя runtime guards. Точный live predicate409 не сохранился; interleaving
+с heartbeat остаётся гипотезой до управляемой регрессии. После terminal turn
+no-decision approval штатно cancelled; новая оценка исправленного отчёта не была
+вызвана. Business state остаётся Draft/InProgress. Advisor не менялся.
+
+В первом native run177s записано19 terminal calls:1907/1913/1921/1927 имеют
+arguments `{}` и отказ до выполнения command;1915 передал read_file в shell и
+получил127. Позже PM прочитал канонические файлы, опубликовал требования и получил
+два PASS. Исходный provider wire отсутствует: Hermes умеет нормализовать пустые
+args в `{}`, поэтому ни ответ модели с literal `{}`, ни потеря адаптером не
+доказаны. Условный риск streaming mapper при args только в done, без deltas,
+не означает, что такой поток был здесь; патч по этой гипотезе не выполнялся.
+
+Create403 восстановлен существующим continue той же операции до task35, без
+повторного create; точная причина403 неизвестна. Transient accepted-context hold
+разрешился автоматически и не доказывает постоянную блокировку модели.
+SDLC34 остаётся историческим незавершённым случаем по решению пользователя;
+его note2000→1000 и финал не выдаются за принятые. Открыты завершение нового
+full PM case, новая sparse-задача и полноценная UI-приёмка.
+**PM live не принят.** Бюджет Advisor156/163, осталось7.
+
+Chromium/Firefox/WebKit прочитали существующий принятый SDLC33: все7 business
+messages после загрузки2 страниц, полный документ1, сохранённое подтверждение
+и Backlog/Ready совпадают с API. Это read-only проверка baseline33, не приёмка35;
+raw tool-event details отдельно не квалифицированы. Overall FAIL во всех трёх:
+после завершённого SSO callback открывается `/` вместо исходного чата, остаются
+page_error и видимый `Request timed out.`. Источник этих двух последних ошибок
+не установлен. Helper явно переходит в чат только для независимой проверки чтения,
+не скрывая lost deep link. Первый guard ошибочно блокировал GET каталога
+на7771; это дефект QA. После точечного разрешения только двух GET endpoints
+повтор имеет0 blocked requests, но указанные продуктовые симптомы сохраняются.
+Никакие бизнес-записи, HTTP mocks или подмены ответов не использовались.
+
+Evidence: Q/workflow-required-skills-native-long-20261107/full.json,
+Q/workflow-required-skills-pg-20261107/result.json,
+Q/workflow-required-skills-pg-connect-diagnostic-20261107/result.json,
+Q/workflow-required-skills-pg-remaining-20261107/result.json,
+Q/pm-canonical-required-skills-20261107-v2/runtime-proof.json,
+Q/pm30-native-resolved-prompt-comparison-20261107.json,
+Q/pm30-sdlc35-native-tools-20261107.json,
+Q/pm30-sdlc35-confirmation-native-tools-20261107.json,
+Q/pm-default-required-skills-20261107/full/workflow-history.json,
+Q/pm-default-required-skills-20261107/full/context-diagnostics.json,
+Q/pm-default-required-skills-20261107/full/preparation-diagnostics.json,
+Q/pm-business-browser-catalog-readonly-20261107.log,
+Q/pm-business-browser-authenticated-shell-20261107.log.
+Новые evidence: Q/terminal-approval-084-schema-25feca25-20261107.json,
+Q/terminal-approval-fleet-apply-25feca25-20261107.json,
+Q/pm30-runtime-proof-after-terminal084-20261107.json,
+Q/pm-default-required-skills-20261107/full/advisor-202-actual-diagnostics-20261107.json,
+Q/pm-default-required-skills-20261107/full/native-terminal-after-report202-20261107.json,
+Q/pm-default-required-skills-20261107/full/api-error-20261107T025017244832Z.json.
+
+## Исторический Checkpoint PM29: Исправленный Skill Не Равен Публикации
+
+Base1c37b2f1 добавил исполняемый пример публикации из parsed context.assignment,
+без ручной подстановки ID и без автоматических повторов. Пример, отрицательные
+случаи и весь пакет skills:45 tests PASS; scoped Ruff/package/catalog проходят,
+независимый review закрыт. Исправление опубликовано в существующем Base PR476.
+Через существующие skills/config APIs явно подготовлена и активирована PM29.
+Snapshot diff допускает только content/updated_at TaskTracker skill; физический
+readback подтверждает все enabled skills, прежние SOUL/config/CLI и image699.
+Fleet/Hermes/Workflow не пересобирались. Это установка инструкции, не live PASS.
+
+Один обычный запрос продолжить замечание владельца создал native run9702e33.
+Он завершён за27.2s, но новая редакция не сохранена. Фактические четыре native
+сообщения1892–1895 содержат ровно один terminal call: context, step без report,
+requirements. Exit0/error=null; свежий правильный assignment и прежний документ
+прочитаны успешно. **Новой команды publish,409 и чтения skill нет.** Последний
+ответ PM «Tracker снова отклонил публикацию» не подтверждён выполненными действиями.
+Это ошибочный отчёт PM о новой попытке, не новый отказ Tracker и не ошибка Advisor.
+На этом историческом checkpoint report после199 отсутствовал; бюджет был153/163.
+
+На checkpoint PM29 выявлен отдельный механический разрыв подготовки:
+
+| Граница | Фактическое состояние |
+|---|---|
+| phase_contract.skills на PM29 checkpoint | project-workflow-executor, tracker-operator |
+| Managed enabled PM29 | project-workflow, task-tracker, requirements-clarification |
+| Файлы требуемых имён | Оба отсутствуют; полный read-only inventory не находит их и в bundled skills |
+| Фактический native config | platform_toolsets.api_server=[terminal], skills config отсутствует |
+| Discovery в original bbaf | Без skills tools индекс и auto-load блоки не строятся; доступ к файлу через terminal сам по себе не загружает текст |
+| Подготовка/readiness Fleet | Проверяет собственные defaults, а не требуемые имена опубликованных фаз |
+
+На этом checkpoint raw system_prompt и tool_names читались как null, а hash-
+referenced prompt ещё не был разрешён. Последующее сравнение сохранённых
+snapshots указано выше; actual HTTP prompt этого turn по-прежнему не захвачен.
+Внутренняя причина ложного заявления PM не установлена; механический разрыв
+имён/доставки не выдаётся за единственную причину модели.
+
+Подготовленный тогда пакет устранял именно этот разрыв: существующий внутренний response
+binding дополняется списком required_skills из выбранной публикации; сам binding,
+authority, fingerprints, публичный business API и БД не меняются. Fleet использует
+тот же список для подготовки и readiness вместо независимой нормы из трёх defaults.
+Base остаётся источником текста; установка — явной конфигурацией между runs.
+Исполнитель получает одну общую инструкцию прочитать названные файлы из своего
+настроенного каталога через terminal. Alias mapping, новые инструменты, auto-load
+всего корпуса и изменение Advisor не нужны. На момент PM29 этот пакет ещё не был
+установлен; текущая установка и незавершённая приёмка указаны выше.
+
+Для этого checkpoint была запланирована проверка того же SDLC34 по прежней разметке: только note
+2000→1000, rev2, полный показ, отказ старого подтверждения, отдельное согласие и
+самостоятельный финал. Повтор без изменившегося входа не запускается. Подтверждение
+rev1 и публикация документа вместо PM не выполнялись. UI helper дополнен DOM
+проверками требований/confirmation, но три браузера пока не запускались.
+
+Evidence: Q/pm-tracker-json-serialization-source-20261107.json,
+Q/pm-tracker-skill-20261107/, Q/pm29-runtime-proof-20261107.json,
+Q/pm29-sdlc34-native-tools-20261107.json,
+Q/pm29-sdlc34-prompt-metadata-20261107.json,
+Q/pm29-sdlc34-no-new-evaluations-20261107.json.
+
+## 2026-11-06: Установка Кандидата И Продолжение PM
+
+После прямой приёмки установлен тот же image20ad7dd0, source4bf3f926,
+Basec153c5c6. Штатная миграция0023→0030 и Workflow-only Apply завершились.
+Read-only before/after digest одинаков для31 tasks,196 history rows,
+32 assignments,120 events; отдельно совпадают все12 опубликованных PM receipts,
+их mode/phase/instruction/check/evidence rows и active PM13. Fleet и образ
+Hermes не пересобирались. БД/история не откатывались, stamp не использовался.
+
+После установки readiness PM27 вернул409: Workflow single-task binding changed
+since preparation. Actual wire diff подтвердил ровно три изменённых digest:
+instruction_manifest_sha256, workflow_catalog_sha256, role_instructions_sha256.
+Последний относится к sealed baseline PM, не опубликованной PM13. Namespace,
+workflow, mode/phase IDs остались прежними. Это конфигурационный release-переход,
+не ошибка модели и не основание перепривязывать задачу.
+
+Существующим API явно подготовлена config28 с CAS27, выполнена validation и
+однократно запрошена activation с пустым image-change intent. Полный snapshot
+совпадает с27 после замены только binding: SOUL, skills, env/model/settings
+не менялись. Активация завершена: config28 active/effective, draining=false,
+runtime_healthy/ready_for_sdlc=true, blockers=[]. Фактический image699, CLI modules
+и generated skill совпадают с прежними; Hermes bbaf7af5 не менялся. Тот же SDLC33
+продолжен обычным сообщением без технических подсказок и завершён самим PM:
+report197 PASS, Workflow done/version6/complete=true, свежий Tracker Backlog/Ready,
+waiting_reason=null, native run completed/error=null. Требования остались rev1.
+Независимые проверки приняли7/7 assessments и точное равенство10 business fields
+сохранённому документу; presentation13:07:32Z предшествует confirmation13:08:59Z.
+Новый report business-only, без hashes/receipts/readback-прозы; единственный
+previous_report196 сохранён без изменений. Один actual Responses request,
+3827 input/551 output tokens,10.535s. Точный повтор начального create вернул
+те же IDs,4 runs и60 messages, без нового запуска или сообщения.
+Отдельные длительности native-проверок не записаны: нельзя доказательно отнести
+задержку конкретной операции. Длительная
+проверка Fleet/Base не является длительностью inference Advisor.
+
+Разбор сохранённого SDLC33 разделяет разные источники отказов:
+
+| Событие | Подтверждённый слой и основание | Ограничение |
+|---|---|---|
+| Пять локальных JSON refusals | Ручная сборка некорректного JSON до Advisor; стандартный разбор подтверждает ошибку | Новую serializer-инструкцию ещё надо проверить на PM |
+| Probe194 PARTIAL | Намеренный диагностический отчёт без фактов/документа, отказ обоснован | Это не автономный ошибочный отчёт PM |
+| Report195 PASS | Полные source и сохранённый документ проходят подготовку | Не означает завершение Workflow |
+| Report196 PARTIAL | Нет account состоявшегося показа полного документа; сам документ и согласие есть | Не требуется повторное согласование или перепубликация |
+| Report197 PASS | PM сам дополнил account показа, сохранил полный документ и согласие rev1 | Workflow и Tracker completion подтверждены раздельно |
+| Approval/run64ed | Решение failed/NotDispatched; run имеет native failed/Request timed out | Первичная причина native timeout остаётся неизвестной |
+
+SDLC33 принят как продолжение прежнего полного запроса, не как новый сценарий
+с нуля на новом HTTP transport. Новой скудной задаче SDLC34 ещё требуется финал.
+
+### Новый Sparse И Обнаруженные Границы Fleet
+
+Первый create preflight получил403; отдельный readiness GET дал503 Current
+namespace recovery remains held. Следующий GET после64.13s вернул generic403.
+Контроль одним token: config/revisions200 за2.061s, readiness200/ready за39.059s,
+config/revisions200 за2.056s. Истечение human-request deadline согласуется
+с наблюдением и существующим middleware, но конкретная ветка403 не доказана.
+Ancestor recovery lease в проверенном срезе была действительна с обоими ACK:
+объявлять её истечение причиной нельзя.
+
+Повторный create после здорового readback дошёл до POST, но также вернул403.
+GET исходной operation7448afd7 показал incomplete/next_step=draft с пустыми
+локальными task/session receipts. Это не доказывает отсутствие результата
+в Tracker. Один существующий continue{} сначала читает Tracker по исходному
+ключу и довёл ту же operation до task SDLC34 и sessioncb00f4b5, без нового create.
+Никакой SQL repair, новый ключ, повтор inference или fallback не применялся.
+Создание с такой ручной recovery не считается безотказным happy path.
+
+Первый run кратковременно отражался в Fleet как waiting с Configured accepted
+context changed, тогда как native продолжал работу. Текущий read-only SELECT
+точного presentation context позднее вернул строку; проверенные predicates
+и оба recovery ACK были верны. SQL зависит от наличия lease ACK, временно
+очищаемого heartbeat; это проверяемая гипотеза гонки, не установленная причина
+того исторического отказа. Последующий обычный readback импортировал ответ и
+завершил run без ошибки. Повторный turn имел такое же временное отображение.
+
+Report198 корректно принял только фазу контекста:3/3 marks,1080 input/339 output,
+7.885s, previous_reports=[] и previous assessments=null. Чужая SDLC33 не попала
+во вход. PM спросил о каналах и числе пользователей, затем предложил поля/статусы,
+не выдавая предложение за решение владельца. Тестовый владелец выбрал три статуса
+и явные правила полей. Во время обсуждения фаза2 ещё не объявлена выполненной;
+фиктивных PARTIAL по каждой реплике нет.
+
+Отдельное наблюдение: после вопросов Tracker остаётся Draft/Ready,
+waiting_for_pm, persisted clarifications нет, хотя PM ждёт ответа владельца.
+Нужна проверка контрактного владельца status/waiting, не изменение Advisor.
+Нельзя считать промежуточные context/runs snapshots атомарным состоянием.
+
+### Контекст Advisor И Контекст PM — Разные Величины
+
+bbaf INFO и run status подтверждают8 model calls за полное продолжение SDLC33:
+input45179/49317/52686/53650/54309/54750/56057/58755, сумма424703, output2351.
+Это накопление внутри одного run, не один prompt424k. Model latency суммарно
+59.6s при92.9s native run. Отдельный внешний Advisor197 в этот счёт не входит.
+Метрики прочитаны без hidden reasoning и без изменения Hermes.
+
+Read-only SQLite metadata старого диалога: до run31 terminal messages/125133
+символа; за run ещё7/40956. Доминируют сохранённые terminal outputs, но это не
+точный расклад wire tokens по ролям. В новой sparse-сессии первые7 input sizes:
+3363/3862/6824/6880/7201/7446/8886. Это опровергает перенос размера старого
+тестового диалога на каждый новый PM prompt и не доказывает лишний system prompt.
+Оптимизацию routine readback следует обсуждать по фактическим tool outputs,
+не удалять исходные документы и не менять фазовую историю Advisor наугад.
+
+Report199 также принят независимо по6/6 assessments: точные10 business fields
+сохранённой rev1, три выбранных статуса вместо отвергнутых пяти, явные limits
+и исключения. Один request2273 input/687 output,13.065s, без future confirmation
+как условия подготовки. PM показал полный документ в чате и запросил отдельное
+согласие владельца, не завершив фазу3 без него.
+
+### Подтверждённый Блокер Замечания Владельца
+
+На замечание note limit2000→1000 PM попытался сохранить rev2 и получил
+HTTP409/CONFLICT: stale PM assignment fence. Reread подтвердил неизменную rev1;
+PM не выдал изменение за сохранённое и не завершил согласование.
+Advisor для этой попытки не вызывался; report200 и owner confirmation2 отсутствуют.
+
+Два независимых read-only разбора установили точный mismatch: в stdin команды
+task-tracker sdlc revision publish --from-file - поле execution_id содержит
+UUID задачи01a1b280-4b86…, тогда как context.assignment.execution_id равно
+01a1b280-4c7a…. Assignment ID, agent ID, assignment_version=1 и ожидаемая
+requirement revision1 совпадают. Dispatch metadata всех четырёх runs содержит
+правильный execution ID и config28: continue/handoff его не подменял.
+Ошибка воспроизводит уже наблюдавшуюся последовательность: tool1876 передал
+task UUID,1878 исправил и сохранил rev1,1888 снова передал task UUID.
+Последующие чтения1889/1890 подтвердили прежние assignment и документ.
+
+Проверен фактически установленный TaskTracker skill, SHAe5831b98…03d144bc:
+строка16 правильно требует context.assignment.{assignment_id,execution_id,agent_id}
+и version→assignment_version. Исполняемого примера этого переноса нет:
+строка28 предлагает printf с placeholder payload. Команда PM противоречит
+правильной инструкции; внутренняя причина выбора модели по этому факту неизвестна.
+Неправильный fence относится к Tracker tool call, не содержательному входу Advisor.
+
+Минимальный следующий пакет не меняет Workflow/Advisor:
+1. В существующем каноническом TaskTracker skill дать один исполняемый пример
+   стандартного JSON-разбора свежего context и программного копирования fence.
+   UUID не переписываются вручную; отсутствующий контекст не заменяется значением
+   task ID, native run ID или Workflow execution ID.
+2. Сохранить409/CONFLICT и прежний DTO; уточнить существующий message известным
+   именем несовпавшего поля. Не раскрывать ожидаемые UUID. Детализацию выдавать
+   только после существующей проверки machine identity/прав: сейчас сравнение
+   fence предшествует authorize_configured_pm. Guards не ослаблять.
+3. Регрессия: task UUID в execution_id отклонён без новой requirements revision;
+   программно собранный правильный fence сохраняет изменённый полный документ.
+   Затем явная активация инструкции между runs и продолжение того же SDLC34,
+   отказ старого подтверждения, отдельное подтверждение rev2 и самостоятельный финал.
+
+Это исправление источника сборки запроса, а не server auto-repair или новый
+fallback. Поиск keywords/UUID-подстрок как оценка смысла не нужен. Требования
+вручную вместо PM не публиковались, назначения/история не перепривязывались,
+неизменённая публикация не повторялась ради удачи.
+
+Кампания153/163 на момент report199,10 остаётся. Полный выпуск, sparse-финал
+и три браузера ещё не приняты; standalone и SDLC33 не подменяют эти gates.
+Во временной Chromium-вкладке показан только login: авторизованная UI-приёмка
+не проводилась, Firefox/WebKit не проверены. Вкладка закрыта.
+
+## 2026-11-06: Прямой Полный Цикл Через CLI И Настоящий Advisor
+
+Кандидат4bf3f926, image20ad7dd0: явный standalone, собственная временная
+PostgreSQL, установленный CLI и настоящий app-test через native Responses.
+Fleet/Hermes не участвуют. Использован существующий file-sandbox developer/initial:
+три фазы с настоящим чтением, изменением и проверкой файлов. Ожидания зафиксированы
+до первого вызова. Prompt v19, high,4000, connect30/read1200 не менялись.
+
+| Отправка | Факты | Фактическая оценка |
+|---|---|---|
+| 1: inventory | Пять исходников сохранены; ошибочные156 против ожидаемых365 | PASS, фаза2 |
+| 2: not-done | Ни одно требуемое изменение не выполнено | PARTIAL, четыре checks false, оба evidence true |
+| 3: settings-incomplete | Исправлены файлы/расчёт/тесты, но настройки false/5 | PARTIAL, только C1 false |
+| 4: supplement-revocation | Только дополнение: настройки true/10, удалённый файл воссоздан | PARTIAL, C1 исправлен, прежний C4 снят |
+| 5: modifications-complete | Полный актуальный пакет, файл снова удалён | PASS, фаза3 |
+| 6: verified | Свежие3 unittest и независимая проверка файлов/6 арифметических векторов | PASS, version7, status=done, complete=true |
+
+Независимо проверены34 marks и их reasons/required_change:28 true,6 false.
+Все причины соответствуют предоставленным фактам; исправления достаточны.
+Три PARTIAL были намеренными отрицательными проверками, а не лишними циклами.
+Это один полный сценарий другой профессии, не смысловая квалификация всех ролей.
+
+Фактически отправленный user JSON имеет только phase, allowed_verdicts,
+criteria, previous_reports, report. Внутри фазы2 число previous_reports:
+0,1,2,3; в фазах1/3 оно0, previous_assessment=null. Дополнение содержит
+пустой source и только изменённые артефакты; прежние факты доступны из той же
+фазы. Служебный fingerprint snapshot не передаётся отдельным блоком модели.
+Артефакты сохранены полностью, truncation=false. Фактический input_tokens:
+2038/2126/3763/4107/5489/2566; длительность модели10.1–17.3 секунды.
+Каждая новая отправка вызвала модель ровно один раз; ошибок формата не было.
+Alias app-test сам по себе не доказывает идентичность upstream-модели.
+
+Повтор точной принятой операции вернул сохранённый результат без новой строки
+истории; изменённый payload с тем же ключом получил409. После перезапуска
+history и все6 сохранённых snapshot остались неизменными. replayed=false
+в возвращённом результате является сохранённым исходным флагом, не доказательством
+нового вызова. Отдельные replay/conflict artifacts не сохраняют повторный stdin;
+их команда и способ формирования доступны в операторском журнале, это ограничение
+доказательств входных байтов. Временные контейнеры/сеть/volume удалены helper v2.
+
+Выявленные отдельные недостатки: CLI для409 выдаёт общий http-refused вместо
+конкретной серверной причины; standalone phase_contract всё ещё называет actor
+hermes, хотя Hermes не запускается. Старый manual recorder имеет180s timeout
+и platform-only finish, поэтому для этого прогона использовалась запись обычных
+CLI subprocess с ожиданием1560s, без своей оценки/переходов/повторов.
+Эти замечания не являются ошибкой смысла Advisor и не скрыты новыми fallback.
+
+Кампания150/163, остаток13 для PM. Прямой цикл принят; PM/Fleet/Tracker,
+браузеры и установленный platform-переход этим результатом не подменяются.
+
+## 2026-11-06: Исправление Выбора Базовой Редакции И Общий Движок
+
+Проверка других профессий выявила второй подтверждённый дефект, не отказ модели:
+чтение принятой operator publication повторно применяло более позднюю политику
+публикации. Например, у исторического Analyst AN-ANALYSIS-02 было3 инструкции,
+у текущего initial source2; для более раннего источника counts instructions/checks
+по трём фазам4/2,5/3,3/4 отличаются от5/3,2/2,4/3. Тексты при сравнении структуры
+обнуляются, поэтому разрешённая текстовая правка не является причиной отказа.
+Оба воспроизведения падали до upgrade, на read_revision через _validate_rows.
+
+Исправление разделяет admission новой публикации и целостность принятой записи.
+Чтение сохраняет hash/receipt/row equality, trusted mode identity/scopes, роль,
+workspace policy и выбранный указатель. Новая публикация явно проходит текущую
+структурную policy после exact replay, до записи receipt/pointer. Save admission
+остаётся прежним. Исторический origin не угадывается, новая authority не выдаётся.
+Независимое review замечаний не выявило. Первичные5 preserving-upgrade случаев
+и4 новых отрицательных publish cases проходят: даже правильный пересчитанный
+digest изменённого draft не разрешает новые scopes/skills/counts.
+Полный PostgreSQL gate первоначального кандидата остановлен по этому известному
+дефекту; собственные ресурсы очищены, результат не засчитан как PASS.
+Исправленный замороженный кандидат:374 адресных native PASS,15 docs PASS,
+полный PostgreSQL160 PASS/0 skips с неизменным исходником и подтверждённой
+очисткой. После удаления прежних измерений всех трёх изменённых модулей
+117 native cases проходят, coverage12842/13652=94.0668%. Остальные production
+files побайтово соответствуют ранее измеренному source tree0ee6afb;
+неизменные результаты переиспользованы явно, это не новый полный native run.
+Ruff, mypy176, diff-check и repository hygiene проходят. Независимое review
+подтверждает preservation assertions и четыре проверки новой publication policy.
+Image/update/live gates остаются открытыми.
+
+Владелец разрешил адресное исправление migration scripts0024/0027. Оба теперь
+выбирают mode/phase через уже проверенный predecessor binding вместо активной
+пользовательской публикации. Идентификаторы миграций, блокировка, итоговая
+проверка каталога и отказ при неподтверждённом изменении сохранены. Это устранение
+источника установочного дефекта, без stamp, смены указателя и нового fallback.
+Независимое review самого исправления замечаний не выявило;65 существующих
+проверок миграций/публикаций проходят. PostgreSQL исправленного кандидата
+проверен выше; image/live gates пока открыты, прежняя здоровая установка не изменена.
+
+Новая параметризованная регрессия проходит8 режимов7 профессий через настоящий
+HTTP builder с контролируемым provider: единый typed report/prompt/schema,
+один вызов, технический отказ без сброса оценок, история только текущей фазы,
+переход и replay без нового вызова. Вместе с существующими prompt/history/
+profession/boundary cases:105 PASS. Ещё130 state/standalone cases проходят;
+один CLI transport case первоначально запускался без квалифицированного Base
+producer в PYTHONPATH и прошёл после исправления окружения, без изменения кода.
+Эти результаты подтверждают механику, не живую смысловую приёмку всех профессий.
+Source review не нашёл PM-only evaluator или утечки истории: предметные
+confirmation/receipt guards остаются серверной ответственностью.
+Advisor v19, модель, параметры и фактический модельный контракт не менялись.
+Внешних вызовов нет, кампания остаётся144/163, резерв19 для живой приёмки.
+
+## 2026-11-06: Разделены Завершение Workflow, Стадия И Статус
+
+Владелец подтвердил целевой handoff: PM завершает своё исполнение Workflow,
+приложение/Tracker передаёт задачу на Analysis, начало работы Analyst отражается
+отдельным InProgress. Завершение PM не завершает всю задачу. Прежний запрет
+последующей Analysis относился к PM-only checkpoint и не является новым
+контрактом общего процесса; исторические результаты не переписываются.
+Поэтому формулировка последующей автоматической Analysis сама по себе больше
+не считается нарушением целевого scope или причиной ошибки Advisor.
+
+В исходниках Tracker57c9346b guarded PM completion сохраняет immutable
+Backlog/Ready receipt и по настроенной single-task policy ставит Analysis/Ready
+в очередь. После фактического native запуска bind_run устанавливает InProgress.
+Это source-факт, не проверка установленной версии. Отдельная запись статуса
+моделью из первой фазы отсутствует. Workflow уже требует running assignment
+перед выдачей первой инструкции; дублировать переход новым patch нельзя.
+Буквальный перенос записи в первую фазу требует отдельного решения по lifecycle.
+
+Две новые регрессии используют настоящий HTTP-клиент Workflow и контролируемый
+Tracker peer: terminal PM complete=true сохраняет внешний Draft/InProgress
+без единой записи в Tracker, а Analyst не получает первую фазу до running
+assignment. Вместе с existing CLI/owner-confirmation/docs checks:89 PASS.
+Это механическая проверка границ, не живая приёмка PM или качества модели.
+Advisor, prompt и параметры не менялись; внешних модельных вызовов нет.
+
+Историческое состояние до разрешённого исправления: блокер обновления
+опубликованного каталога был воспроизведён.
+Минимальное исправление0024/0027 должно выбирать baseline mode/phase IDs из
+уже проверенного predecessor binding, не из активной пользовательской версии.
+Оно требует изменения исторических migration scripts. При прежнем запрете
+их менять forward migration недостижима; stamp, временная смена указателя и
+подмена repository defaults не допускаются. Запрошено явное решение об адресном
+исключении для этих двух файлов; до него они не изменены и установка не повторяется.
+
+## 2026-11-06: Native Responses Installation Rolled Back, Catalog Upgrade Blocked
+
+The qualified image93af2ee5 (source dcfbe636, Base4a32bf97) was built once and
+passed exact-image Compose smoke. The synthetic upgrade from imageb4b11d7b
+preserved19 archive rows byte-for-byte and reached0030; platform authorization,
+standalone start/replay/history and owned cleanup passed. That fixture did not
+contain an operator-published PM revision and is not proof of its preservation.
+
+Normal Workflow-only Apply ea5e75bcecb84473b23147fcdc3b0e54 published the new image,
+then stopped at readiness: database connectivity was healthy, but the live
+revision remained0023_catalog_publication_author while the image required0030.
+The installer did not execute the product migration command. No new evaluation,
+catalog publication or database migration was performed on the live database.
+
+Read-only inspection confirms PM revision13 is a valid operator publication
+(content614c39c7); all other professions remain at revision1. The predecessor
+profile e0cde0 matches. The newer profiles do not match the old baseline; that
+fact alone does not prove a corrupted or invalid operator publication.
+Migration0024 selects list_modes without an explicit catalog_version, which
+selects the active publication. It consequently targets the operator's rows,
+while its final observer expects a changed baseline. Loosening that observer
+would risk accepting modified rows under an unchanged publication receipt.
+This is a catalog-upgrade defect, not a Responses/Advisor judgment failure.
+The regression now creates twelve real editor publications up to revision13
+above the canonical0023 predecessor, plus an unfinished task and nonempty history
+bound to that mode. SQLite and real PostgreSQL each reproduce the0024 refusal
+and prove complete table-snapshot equality, head0023, valid publication readback
+and unchanged task/history after transaction rollback. PostgreSQL passes1/1 with
+zero skips, verified owned cleanup and unchanged source. This tests safe refusal,
+not a successful upgrade; the synthetic archive-only smoke missed that case.
+
+The existing operator rollback completed against the same sealed update journal:
+only the Workflow image returned to b4b11d7b; health is restored, database0023 and
+Fleet are unchanged. The same PM remains ready at revision27 with CLI699.
+SDLC-33 remains Draft/InProgress with requirements1 and its existing confirmation;
+no replacement task, automatic completion, history rewrite or rebinding occurred.
+The campaign is still144/163 with19 calls reserved. Native Responses remains
+published source, not an installed or live-accepted release. Do not repeat Apply,
+stamp the database, overwrite the PM catalog or rewrite applied migrations to
+make this candidate pass. A supported preservation path is a separate open gate.
+
+## 2026-11-06: Native Responses Integrated With V19
+
+The existing PR164 is reconciled with master d0ec576c. Only the useful protocol
+change from PR171 is retained in the current evaluator: one native Responses POST
+with strict text.format, unchanged v19 system text, typed report, previous reports
+of the current phase and required_change. The prompt digest remains
+7ee97ccaa0914fe77b7ce881268b6dbe855ca2fd9e6edbc17df8a42e4b1edd48.
+Reasoning high, 4000 output tokens, connect30s/read1200s, CLI1500s and redirect
+refusal are preserved. There is no Chat client, format selector or format retry.
+
+New fingerprints record responses-json_schema; old json_object/json_schema
+fingerprints remain read-only evidence. Archive reads do not invoke the model
+or acquire new authority. Refusal, incomplete response, excessive reported output
+usage, malformed JSON and transport errors remain technical failures.
+Provider reasoning is not included in the verdict or stored as hidden reasoning.
+
+Source integration is not installation or full model qualification. The earlier
+36/36 belongs to the old HTTP route; it cannot qualify the changed transport alone.
+One explicitly approved real call uses the frozen negative153 input and exact
+production schema/system: HTTP200/completed, all6 false, PARTIAL and no blockers.
+Independent review accepts every reason and required_change. Wire evidence confirms
+one Responses POST, high/4000, connect30/read1200 and redirects disabled.
+Input1410/output706/reasoning253 tokens,15.004s. Alias app-test does not identify
+the upstream model. Campaign144/163 leaves19 calls for the live PM scenarios.
+
+Local qualification: PostgreSQL157/157, no skips, owned cleanup and unchanged
+source verified. Full native run:4615 PASS,2 FAIL,15 explicit skips,
+75 subtests PASS; measured coverage94.1034%. Both failures are incoming namespace
+theme tests writing anonymously in explicit platform mode, correctly denied401.
+They now use the existing controlled human-identity fixture mechanism and retain
+an anonymous401 assertion; the installation/SSO/editor follow-up passes73/73.
+Only test code changed after the full run: production and runner bytes are
+identical, so unaffected results and coverage are reused explicitly, not reported
+as a fresh all-green full run. Ruff, mypy176 and index hygiene pass.
+The skips are3 private opt-in checks,1 NTFS executable-mode limitation and11
+missing Python Playwright checks. They are not accepted tests; packaged Linux and
+live three-browser verification remain distinct evidence.
+Image qualification, installation and both PM business finals remain separate.
+
+The exact Fleet eae18fd3/image7f4ba770 passed canonical Compose smoke with cleanup.
+After a pre-effect common-lock refusal, its unchanged image/receipt was installed
+by normal Applybe4e6abc once that resource was released. One PM27 recovery POST403
+had a saved pending intent; original-key GETs confirm adoption without POST resend.
+Separate read-only proof confirms the original container, exact CLI699/skill and
+two stable readiness results. No Hermes change, business redispatch or model call.
+
+## 2026-11-06: Responses Transport Is Not A Replacement For V19
+
+Read-only comparison of merged PR171 (`f76abbfa`, merge `d0ec576c`) and the
+installed containers confirms two different baselines:
+
+| Contract | SDLC1 / qualified v19 candidate | SDLC2 / PR171 installation |
+| --- | --- | --- |
+| Evaluator policy | v19 | v15 |
+| HTTP protocol | Chat Completions + strict JSON schema | Responses + strict JSON schema |
+| Report | typed source/result/unresolved | source string/result object/unresolved strings |
+| Previous phase reports | supplied | absent |
+| Assessment correction | required_change | absent |
+| Model calls per new report | one | up to two on invalid response format |
+| Configured reasoning | high | none |
+| Default model timeout | 1200s; connect30s | scalar120s |
+
+Both installations target the same configured gateway. Native Responses removes
+the Chat-to-Responses conversion; it does not bypass that gateway or establish a
+different upstream model. Strict schema and protocol selection are independent:
+SDLC1 already uses a strict schema. The PR171 statement that phase/report meaning
+was unchanged is relative to its v15 parent, not proof of equivalence with v19.
+
+Recommendation: retain the useful native Responses transport, but integrate it
+into v19 without replacing typed reports, phase history, required_change, the
+one-call rule, timeout/connect limits or redirect refusal. Read-only inspection
+also found PR171 uses Requests' default redirect handling. Archive readback must
+remain separate from new evaluation. Do not install the entire SDLC2 artifact in
+SDLC1 or reuse v19 model qualification as proof of an altered HTTP request.
+
+No model calls, provider/configuration changes or Workflow installation were
+performed for this comparison. Evidence: PR171 source and read-only AST/config
+inspection of SDLC1 imageb4b11d7b and SDLC2 imagef5046c2b. Response schema guarantees
+shape, not correct judgments. Provider capability/limit enforcement needs its own
+evidence; a client-side rejection cannot undo already incurred inference usage.
+
+## 2026-11-06: Реальный Отчёт PM27 И Восстановление Fleet
+
+Fleet f8f329de/imageb07 установлен штатно; native handoff принят чтением исходной
+операции, прежний запуск SDLC-33 получил настоящее terminal proof. На том же PM
+штатно активированы редакция27, CLI699 и сгенерированный serializer skill.
+Фактические файлы совпадают с квалифицированным пакетом. Workflow320, Advisor v19,
+модель, параметры и критерии не менялись; история и требования1 сохранены.
+
+- **195 / PASS подготовки:** PM сам передал полный документ. Независимая проверка
+  всех шести критериев подтверждает оценку; все10 business-полей точно равны
+  сохранённой редакции1. Фактический запрос Advisor содержит этот отчёт без потери
+  структуры; ответ и серверное решение согласованы. Технических hashes/receipts
+  в business-отчёте нет. Исходные решения сохранены, искусственных вопросов нет.
+- **196 / PARTIAL согласования:** документ и факт согласия присутствуют, но отчёт
+  не описывает уже состоявшийся показ полного документа. Две missing-отметки и
+  достаточное исправление обоснованы. Показ в чате действительно был; это пропуск
+  отчёта, а не требование новой квитанции. PM сам подготовил исправленный пакет.
+- **Terminal approval / Fleet:** разовое решение отклонено до native-отправки,
+  сохранено как failed/not-dispatched. Запуск затем завершился с `Request timed
+  out.`; настоящее terminal proof сохранено, но approval остаётся pending.
+  Существующий reconcile не обрабатывает сочетание failed decision + terminal run;
+  strict known-ACK воспроизводимо отказывает. Это подтверждённый lifecycle gap.
+  Причина исходного approval503 и конкретный источник generic timeout ещё не
+  установлены; их нельзя приписывать Advisor, JSON или размеру контекста.
+  После 972 unit, 32 адресных PG-проверок, Clippy/fmt, проверки бинарника и
+  независимого review применена зарегистрированная миграция083 (`eae18fd3`).
+  Approval теперь cancelled/system; решение пользователя через API полностью
+  совпадает с прежним. Backend не перезапускался, команда не отправлялась повторно.
+  Проверка текущего поколения до083 воспроизводит тот же known-ACK отказ; после
+  него неизменённый guard допускает состояние в обеих lineages. Новый Fleet backend
+  установлен через Applybe4e6abc; original-key recovery принят, readiness и CLI699
+  того же PM проверены. Бизнес-финалы остаются открытыми.
+- **Readiness / Fleet:** HTTP500 и `fleet_request_authority_expired` подтверждены.
+  Отдельный health успешен за57.496с. Подготовлен единый scoped health/toolset
+  readback и отмена запроса по исходному authority deadline, без повышения TTL.
+  Исправление установлено; отдельное чтение подтверждает readiness того же PM27.
+
+Evidence вне Git: `pm27-sdlc33-advisor-195-diagnostics-20261106.json`,
+`pm27-sdlc33-workflow-after-confirm-20261106.json`,
+`pm27-sdlc33-approval-original-readback-20261106.json`,
+`pm27-sdlc33-native-approval-final-20261106.json`, результаты readiness QA.
+Новая полная серия не запускалась. Один Responses route sample принят отдельно;
+расход Advisor144/163, резерв19.
+Backlog/Ready, второй сценарий, браузеры и мерж пока не приняты. Исправление
+terminal settlement сохраняет failed decision и подлинные proofs;
+ослабление guard, ручная запись SQL и повтор approval не являются решением.
+
+## Историческая Диагностика До Handoff - 2026-11-06
+
+Read-only проба на фактическом Fleet backend22dd и четырёх проверенных по pin
+установленных Base exports завершила `current_namespace_witness` и проверку
+исходного acknowledged running launch. Первая нарушенная граница —
+`attached_membership`: `Retained controller attachment is disconnected`.
+Это конкретная причина ранее непрозрачного `native_readback/unavailable`;
+не ошибка JSON, Advisor, документа или размера контекста.
+
+Цепочка отказа: configured presentation сохранил completed SDLC-33 без
+`hermes.run.terminal_verified`; замена backend потеряла его endpoint в private
+сети PM; strong readback требует этот endpoint; native recovery сначала требует
+сохранённое terminal proof. Следовательно, на текущей установке имеющиеся
+предпосылки образуют цикл. Свидетельство Docker о живом процессе не доказывает
+завершение его бизнес-запуска. Статус completed не заменяет native-ответ.
+
+Новый ручной host connect не выполнялся: он создаст Unclaimed attachment и
+потребует обратных операторских действий вместо исправления источника. Нельзя
+создавать proof из UI-статуса, ослаблять known-ACK или повторять работу PM.
+Безопасный следующий пакет проверяет native/history admission до остановки
+прежнего контроллера. Он предотвращает повторение дефекта, но сам по себе
+не восстанавливает уже потерянную связь. Если поддерживаемый readback не может
+получить доказательство, активация и выпуск остаются остановлены; отдельный
+изменённый контракт восстановления требует review до применения.
+
+Evidence: `report-configured-native-boundary-20261106.json` вместе с предыдущими
+known-ACK и reconcile-run результатами. Проба использует read-only Engine wrapper,
+не выполняет native POST, DB-записи и модельные вызовы. Advisor141/163,
+резерв22, PM26 и SDLC-33 неизменны. Живые финалы, браузеры и мерж не приняты.
+
+## 2026-11-06: Workflow Установлен, PM Live Ещё Не Принят
+
+Текущий пакет ошибок320f9670 установлен штатно: Buildd97a01bd/Applyc684c1b2,
+imageb4b11d7b, контейнер healthy. Фактический parse в этом контейнере возвращает
+причину стандартного decoder, line/column и end of input; новых вызовов модели нет.
+Перед установкой exact-image smoke подтвердил platform/standalone и сохранность
+19 синтетических архивных записей; временные Compose-ресурсы очищены. CLI699b79eb
+квалифицирован и опубликован default, но PM26 пока использует прежний150f650c.
+Причина задержки активации — восстановление native controller после смены
+backend, не оценка Advisor и не разбор отчёта. Новая инструкция ещё не активирована.
+
+### Текущий Блокер Перехода PM26
+
+Configuration refresh81354d43 опубликовал CLI699b79eb, сохранив Fleet image56304d14.
+Backend CID22dd5ef0 стартовал до истечения последнего неподтверждённого heartbeat
+прежнего контроллера. Это реальное ограничение native successor, но не доказанная
+единственная причина503: server проверяет known-ACK историю раньше этой границы.
+После истечения аренды штатный pinned-runtime Stop/Start сохранил CID/image,
+конфигурацию и исходный bootstrap. Source60f45e98 допускает последующий запуск
+того же контейнера только в новом CLI-only reader; native admission не изменён.
+Оба целевых restart-reader теста и независимое review PASS.
+
+Фактический `fleet_known_ack_state` вызван диагностически в транзакции с rollback:
+SQLSTATE23514, `Known ACK Hermes history lacks verified native terminal provenance`.
+Для единственного запуска текущего поколения — SDLC-33/d308d780 — Fleet хранит
+`completed`, исходный accepted native run и ноль `hermes.run.terminal_verified`
+записей. Pending approvals нет. SQL reader намеренно не принимает такой результат
+за native proof текущего поколения. Это не нехватка документа, не ошибка Advisor
+и не основание подставить успешный receipt.
+
+Producer `ConfiguredPresentation` в Fleet сохраняет terminal UI-результат через
+`commit_hermes_terminal`, сознательно без native observation. Recovery reader
+требует проверенный native результат. Неполнота этой границы подтверждена
+на фактической записи; отсутствие proof само по себе не доказывает, почему
+автоматический attested readback не был выполнен до смены controller.
+Один существующий `fleet-control-server reconcile-run d308d780-…` выполнен
+в фактическом backend без изменения environment и без модели. Он вернул
+`native_readback/unavailable`; новый proof не создан. Детальная причина этого
+отдельного отказа ещё не установлена. Recovery POST не выполнялся, новую задачу
+вместо SDLC-33 не создавали, историю и требования не меняли.
+
+Следующий пакет должен закрыть producer/readback/recovery контракт Fleet,
+не ослабляя native guard и не меняя Hermes/Advisor. Текущий пакет Workflow
+реализован и установлен, но новая инструкция PM, оба бизнес-финала, три браузера
+и мерж остаются непройденными gates. Расход Advisor141/163, резерв22 сохранён.
+
+Штатный Apply729, journal de836101, завершён: установлены точные образы
+Workflow936a4b80 и web1e264d20. Human admin catalog GET возвращает200 без
+изменения application grants Auth. Редакция12 совпадала с baseline; затем штатно
+опубликована подготовленная13 с инструкцией отчёта, без изменения критериев.
+Фактический get_settings контейнера подтверждает
+app-test/high/1200s/4000/json_schema/platform.
+
+Квалификация production W899 сохраняется: эта правка только документационная,
+Advisor input/policy/response code не менялись. Revised qualification36/36
+переиспользуется без новых квалификационных вызовов. Живая полная QA-задача
+SDLC-33 выполняется прежним PM; context PASS193 — первый новый вызов Advisor.
+После PASS193 и обоснованного PARTIAL194 расход141/163,22 остаётся для live.
+
+### SDLC-33: Отчёт Исполнителя, Не Ошибка Оценки
+
+PM сам сохранил полный requirements1, не задавал лишних бизнес-вопросов.
+Пять последующих полных report payload вручную собраны с незавершённым JSON.
+POSIX shlex + штатный PhaseReport.parse воспроизводят все фактические CLI ошибки:
+2:1,2:1,1:4880,1:4425,1:3502. У каждого printf ровно один payload-аргумент;
+shell quoting/потеря транспортом не подтверждены. http_status=null и
+acceptance_unknown=false означают локальный отказ до API/Advisor.
+
+Уточнение по исходным payload SDLC-33 (read-only разбор, без новых вызовов):
+
+- Размеры пяти отчётов: 5111,4142,4879,4424,3501 символов при пределе32000.
+  Максимальная вложенность JSON7 с учётом документа. Превышения размера нет;
+  влияние общего контекста модели этими измерениями не устанавливается.
+- Во всех пяти случаях пропущена закрывающая скобка `source` перед `result`:
+  после `decisions` передано `],"result"` вместо `]},"result"`. Поэтому
+  `result`/`unresolved` вложены в `source`, а корневой объект не закрыт.
+  Вставка ровно одной скобки в этом месте позволяет штатному PhaseReport.parse
+  принять каждый payload. Это только offline локализация дефекта, не ремонт
+  входящего отчёта продуктовым кодом и не бизнес-отправка вместо PM.
+- В каждой команде finish_reason=`tool_calls`, не `length`; shell получает один
+  payload. Доказательств обрыва ответа по лимиту или потери части stdin нет.
+- После диагностического исправления оболочки только сообщения29/37 содержат
+  точную копию бизнес-полей сохранённых требований. В31/35/39 документ изменён:
+  в35 отличаются два значения; в31/39 также сокращены отдельные списки.
+  Это сравнение значений/структуры, не утверждение о смысловой тяжести всех правок.
+- Уменьшение текста не устранило одинаковую ошибку. Подтверждена ручная сборка
+  и повторное использование неверной структуры; внутреннюю причину выбора
+  моделью этого способа по наблюдаемым данным установить нельзя.
+
+Минимальное исправление источника: разобранный readback документа включается
+в объект отчёта без перепечатывания, а стандартный JSON serializer формирует
+stdin. Уже подготовленный skill требует именно это. Не нужны новый API,
+упрощение критериев, исправляющий parser или повтор модели до PASS. Проверка
+исправления остаётся живой: тот же PM должен сам отправить полный документ
+и получить оценку; offline roundtrip эту приёмку не заменяет.
+
+| Граница | Проверенный результат | Решение |
+| --- | --- | --- |
+| Контекст193 | PASS, запрос и факты приведены | Ошибки Advisor не выявлено |
+| Probe194 | Нет документа и содержательного source; PARTIAL по шести критериям | Независимый review подтверждает отказ |
+| Пять полных отправок | JSON не разбирается до HTTP; позиции совпали offline | Исправить создание отчёта у агента, не parser |
+| Stdlib serialization | Тот же сохранённый документ и source проходят точно, без сети | Один абзац skill; не новая инфраструктура |
+| Временный Fleet waiting | Native и Fleet завершились, ответ появился без вмешательства | Не объявлять дефект и не ослаблять guard |
+
+Доработка526325b6 добавляет безопасную причину синтаксического отказа/EOF,
+путь объявленного вложенного поля, expected/received types и подсказку
+сериализации. Обычный CLI явно отличает локальный отказ до HTTP от неизвестного
+сетевого исхода. Каноническая инструкция и существующий renderer содержат
+исполняемый Python-пример. Схема, успешный parse, критерии/prompt/model v19
+не меняются; parser не ремонтирует payload.
+
+Адресные284 проверки и отдельная engine-boundary регрессия5e7e370f проходят.
+Два настоящих PreparedRequest через engine побайтно равны при разных worker
+instructions; реальные модельные вызовы не выполнялись. Base40 package tests
+и83 packaging tests проходят. Итоговый pin320f9670 одинаков в producer/Compose.
+Первые прогоны native/PG отказали из-за
+удалённых временных pytest-каталогов, а не бизнес-assertion. Для keep=0 в
+pytest9.1.1 нет lock, общий numbered-temp cleanup допускает такую гонку;
+конкретный deleting PID не записан. Повторные gates используют независимые
+basetemp, исходные отказы сохранены. Отсутствующее измерение первого full-run
+не засчитывается. Изолированный native:4457 PASS,15 явно отмеченных skips,
+75 subtests; PG:132 PASS без skips за866.26s, Compose resources очищены.
+Затем320f9670 уточняет только причину предела вложенности, не меняя приём:
+8 новых depth tests и итоговые258 адресных проверок PASS. Для финального coverage
+сохранён полный baseline, измерение единственного изменённого production module
+заменено182 адресными проверками; остальные production files побайтно прежние.
+Итог94.0823913208406%,780 missing из13181 statements. Это не новый полный прогон
+на320. Ruff/mypy169 PASS. Первый CLIc02b52f9 не устанавливался и superseded;
+итоговый699b79eb квалифицирован из320f9670, Hermes и прочие CLI побайтно сохранены.
+Base37c8b88f позволяет его публикацию существующим configuration refresh без
+пересборки Fleet backend. Строгие private inputs, before/after и first-start
+guards сохранены; journal не изображает Build. Source tests/review пройдены,
+публикация выполняется отдельно от явной активации конфигурации PM.
+
+Новая инструкция ещё не активирована. История193/194, invalid payload и исходный
+документ сохранены. Расход141/163,22 live-вызова остаются. Два бизнес-финала
+пока не приняты.
+
+Предыдущий Fleet6c/image9a0f установлен штатными Build32d82/Applyc52: Apply, controller
+refresh и PM bridge завершены. Квалификация67 PG закрыта (43 reuse +24 новых),
+Clippy PASS. Новый witness GET200 подтверждает OriginalStartAck=true для того же
+поколения ce8e, effective25. До081 recovery POST с ключом
+`workflow-delivery-080-recover-pm11-20261106` вернул generic503; readback этого
+ключа — NotRequested, intent не принят. PG evidence:42501
+`fleet_request_authority_expired` на COMMIT. Исходный human scope60s сохранён.
+
+Профиль NativeState:84 запуска/1.09MiB,23.125s. Из21.3s state query19.6s уходят
+на2345 вызовов validator, включая чужие audit rows до target binding.
+Read-only сравнение SELECT: прежний35 вызовов/325.931ms против MATERIALIZED
+exact-target1 вызов/47.757ms.081/sourcee4d59e7f установлена как imagef3e1fa5e:
+штатные Build227b/Applye9f4 и refresh завершены, exact-image smoke PASS/cleanup.
+Migration108, diagnostics2, scoped PG11, fmt/Clippy PASS; усиленная planner PG2
+в обеих lineages воспроизводит19 прежних проверок против1 с равными пакетами.
+58 неизменённых PG результатов переиспользованы. Auth guards не ослаблены.
+
+Новый witness GET200 занимает10.804s. Первый POST теперь сохраняет recovery intent
+и настоящие native/lease ACKs, но позднее истечение HTTP authority оставляет
+публикацию pending. Это не NotRequested. Одно явное продолжение с исходными key/body
+дошло до attach_controller/utility_exit. Read-only проба фактически установленных
+exports с заблокированными writer/connect доказала Unclaimed controller attachment:
+native-журнала attachment нет, claim не вызывался. Причина — лишний ручной host
+bridge уже подключил backend; native корректно запрещает принимать подключение
+без своего claim. До attach этот recovery использует Docker/SQLite, не RPC к PM.
+Из процедуры убирается предварительный host bridge; снять можно только его
+доказанно собственное подключение по sealed scope, не переписывая журнал.
+Далее используется обычный native claim-before-connect, без поддельных ACK и
+ослабления guard. Это дефект поставки, не ошибка модели или размера её контекста.
+Штатное снятие точного host-подключения и настоящий native handoff завершены:
+Basec4be9860,19 тестов/15 subtests; повторного disconnect и поддельного ACK нет.
+Тот же PM11 явно активирован на effective26, healthy/ready, CLI150f650c проверен.
+При первом новом полном запросе операцияf6788e20 сохранила задачу, но не чат.
+PG55P03 на UPDATE операции доказывает неверный порядок блокировок producer:
+строка операции берётся раньше агента, тогда как существующий fence требует
+обратный порядок. Кто исторически держал блокировку, не установлено. Минимальная
+правка берёт agent первым, не снимая NOWAIT/права/проверки; адресные PG-тесты идут.
+Правка3a2feea6 прошла4 новых PG/2 fence/1 CLI/5 API replay и общий Clippy/fmt;
+image56304d14 установлен штатными Build76e4/Applyb15a после exact-image smoke.
+На новом backend один recovery POST вернул503, но сохранил оба ACK; worker/readback
+завершил adopted без host bridge и повторного POST. Тот же PM26 healthy/ready,
+тот же контейнер и CLI. Продолжение исходнойf6788e20 заняло10.984s: прежняя задача,
+новый единственный чат и реальный запуск. SDLC-33 context PASS193 — первый live
+вызов Advisor, расход140/163, остаток23. Причина исходного readiness500 всё ещё
+не установлена; новый200/21.302s не доказывает её. Live-финал ещё открыт.
+
+### Исторический Инцидент 2026-11-05: Два Блокера Перехода
+
+Это не новая ошибка Advisor: после квалификации модель не вызывалась,
+новые QA-задачи не создавались. Расход остаётся139/163,24 вызова сохранены.
+
+- Fleet6eab59ad установлен как b87ed2fe; прежний PM b8084b38 остаётся тем же
+  агентом на effective25, generation ce8e802d. Подготовленная26 прошла validation,
+  но активация вернула503 до смены runtime; draining=false. Hermes не менялся.
+- Workflow79964f6 (8fd7ceb3) и согласованный web фактически запускались healthy.
+  Проверены platform, single-task-v1, app-test, high,1200s,4000 и json_schema.
+  Старый catalog variant заменён явным CAS, без разрешения старого варианта в коде.
+  Workflow-образ переиспользован по тем же исходникам и provenance.
+- Human catalog GET вернул403: установленный Auth не выдаёт application_access,
+  потому что его policy выключена. Функция в установленном Auth уже есть.
+  Read-only проверка нашла7 pending admission-записей:1 admin и6 user,
+  applications пусты. Startup predicate NOT EXISTS(migration_pending) ложен.
+  Простое включение остановит Auth; finalize без явного выбора прав отсутствует.
+  Права не назначались и обязательная проверка Workflow не отключалась.
+- Runtime recovery witness вернул503. Прямое выполнение штатного
+  fleet_known_ack_state подтвердило причину: Known ACK Hermes history lacks
+  verified native terminal provenance. Его history reader проверяет все поколения
+  агента. После одного успешного readback осталось63 неподтверждённых запуска:
+  14 текущего поколения и49 прежних. Состояние completed само по себе не стало
+  новым доказательством. Штатный reconcile-run для9b331031 прошёл и добавил
+  genuine terminal observation; для старого19284153 отказал из-за несовпадения
+  исходного origin/generation с текущим runtime. Повтор отказа не выполнялся.
+- Дополнительное read-only чтение перехода:5 pending approvals относятся только
+  к terminal runs прежних поколений, решений по ним0. Их нельзя автоматически
+  отменять или считать текущим разрешением. Три failed outbox не имеют dispatch
+  и native run; существующий точный fleet_known_ack_retired_presubmit возвращает
+  true для всех3. Новый классификатор или исключение по тексту ошибки не нужны.
+  Фактический Auth подтверждает admin/active, текущий credential и совпадающие
+  issuer/subject, но не возвращает application_access.
+- Переход не принят. Завершён явный image-only rollback Workflow/web через
+  прежний журнал. Совместимость проверена: migrations/models b33a8139→79964f6
+  не изменились, migration head0023, новых history records после запуска0.
+  БД, история, прежние задачи и их решения не откатывались. Штатный journal
+  ee5831e3 перешёл в rolled-back, оба выбранных сервиса healthy. Это откат
+  приложения оператором, не скрытое переключение политики Advisor.
+
+Принятое уточнение поставки: Workflow использует обычную проверенную Auth identity,
+без отдельного application_access разрешения и без миграции прав других продуктов.
+Исправляется зависимость Workflow, а не установленная общая Auth-политика.
+Второй пакет разделяет архивную историю и доказательство управления runtime.
+Нельзя создавать отсутствующие native proofs, подставлять текущее поколение
+в старые операции, удалять историю или снимать recovery guard ради активации26.
+Prompt и модель менять по этим установочным ошибкам оснований нет.
+
+Исправление Workflow реализовано: менялись только четыре human Auth/context
+модуля, не evaluator, machine runtime path или критерии. Полный native:
+4421 PASS/75 subtests, coverage12354/13134=94.0612151667428%;15 skips остаются
+открытыми (3 private opt-ins,1 NTFS executable modes,11 browser fixtures).
+PostgreSQL132/132,0 skips, cleanup подтверждён; Ruff/mypy169 PASS. Независимый source review
+не нашёл ослабления identity/expiry/role, machine scopes и предметных прав.
+Установка, Fleet transition и два новых PM-сценария пока не приняты.
+Квалификация Advisor36/36
+остаётся применимой только при неизменности фактического модельного запроса и
+обработки ответа. Проверки авторизации и перехода выполняются отдельно; healthy
+контейнер или source-коммит не считаются приёмкой двух новых PM-сценариев.
+
+Итог по каждому случаю, фактические причины и неполученные ответы:
+[разбор 18 случаев квалификации и четырёх контролей](ADVISOR_CASE_REPORT_20261105.md).
+
+## Квалификация Уточнённого Набора: Принята, Не Живая Приёмка
+
+Неоднозначность исправлена в oracle, не новым правилом production prompt:
+явная revision сохраняет17 исходных cases и заменяет спорный17 на прежний
+predeclared D2 с точным owner choice о trim. Критерии, отрицательный контроль
+доступа и старые артефакты не менялись; исходная серия остаётся незавершённой.
+Два reviewer приняли reuse D2sample1 в контексте его собственного reason/source,
+не требуя от одной фразы correction автономного повторения всех ограничений.
+
+Семь вызовов выполнены по одному с отдельным reason review перед продолжением.
+Новая revision:36/36,168 assessments,44 corrections;22 PASS/12 PARTIAL/2 BLOCKED.
+Форматных/транспортных ошибок и подтверждённых ложных PASS в наборе нет.
+Regression29 PASS, Ruff PASS; backend/model/Hermes/Fleet не менялись.
+Кампания139/163,24 только для live. Полная сводка и границы:
+[текущий итог](ADVISOR_CASE_REPORT_20261105.md#текущий-итог-уточнённая-квалификация-принята).
+
+Реальный human inventory возвращает30 задач:11 done,19 active. Оператор явно
+разрешил обновление новых задач с сохранением старой истории без continuation,
+автоматического close или rebind несовместимых исполнений. Это решение о
+переходе, не автоматическая конвертация старой authority и не готовность образа.
+Установка, совместимая доставка CLI и два новых PM live ещё не приняты.
+
+## Исторический Допуск: Незакрытая Приёмка Одной Correction
+
+Согласованный план начат от7fed17cb; предел кампании повышен до163 при расходе132,
+семи запланированных квалификационных и24 зарезервированных live-вызовах.
+Новых вызовов на этом этапе нет. Два независимых review всех29 ответов,
+134 assessments и30 corrections принимают28 ответов полностью, но оставляют
+C2 correction карточки17 неоднозначной: source не определяет хранение пробелов,
+а Both values are trimmed не отделяет validation от storage. Обоснованный отказ
+из-за access-противоречия не доказывает необходимость дополнительной trim-правки.
+
+Это недостаточность однозначного ожидания для приёмки, не доказанный новый
+production-дефект. По согласованному gate новые оценки и установка остановлены;
+prompt/gold не меняются, ответы не повторяются. Полный разбор и следующий шаг:
+[допуск к квалификации](ADVISOR_CASE_REPORT_20261105.md#проверка-допуска-к-завершению-квалификации).
+Сохранённые механические gates сверены по SHA и применимости без повторной
+сборки. Установка, активные исполнения, два новых PM-сценария и merge не приняты.
+
+## Продолжение Расследования: Проверяемая Потеря Факта
+
+В реальном SDLC-32 владелец задал «Закрыта», source189 это сохранил, source190
+опустил. Captured v15 request190 содержит прежние marks, но не отчёт189.
+Поэтому обещание принимать дополнения без повторения неизменных материалов не
+было обеспечено передачей самих фактов. Это конкретный информационный разрыв,
+а не доказательство отсутствующего решения владельца или большого контекста.
+191 меняет source, clarification и одну scope-фразу: его PASS не однофакторный.
+192 снова передаёт точный сохранённый rev2 при оценке уже подтверждённых требований; receipt на
+иной документ этим сценарием не доказан. C4 проверяет полноту, не byte identity.
+
+Новая регрессия через HTTP/application/SQLite проверяет точные typed reports,
+сохранение и предыдущий отчёт в следующем model input. Весь файл8 PASS, Ruff PASS;
+Advisor замокан, runtime fallback/конвертация старых исполнений не добавлялись.
+Временные ресурсы удалены в finally. Продуктовые исходники не менялись.
+
+Offline-захват конечного httpx.Request.content на проверенном LiteLLM bundle:
+12616 байт,11/11 проверок PASS. SYSTEM/user/high/schema сохранены, cap отсутствует;
+temperature удалена конфигурацией. Это не исторический upstream capture и не
+доказательство фактически применённого reasoning budget. Drop output cap намеренно
+закреплён адаптерным тестом unsupported-params; поддержка нынешним backend неизвестна.
+
+Два текущих v19-вызова на основе report190 без/с history дали PASS/PASS и не назвали
+историческую опору Closed. Сравнение не различает использование истории; full gold
+ему не назначался. Отдельный преразмеченный контроль меняет только прошлый выбор
+CSV/JSON при одинаковом текущем CSV artifact: CSV2/2 PASS, JSON2/2 PARTIAL с
+достаточной JSON-коррекцией. Ответы явно используют прошлый факт в этом контроле,
+но не доказывают универсальность или скрытую причину исторического190.
+
+Всего на продолжение6 новых вызовов; текущий бюджет132/156 после явного согласия
+владельца,24 live reserve сохранён. Основная серия36 не возобновлялась. Runtime,
+prompt, модель и credentials не менялись; PM live/установка/merge не выполнены.
+Карта подтверждённых причин, неоднозначной разметки и границ в
+[продолженном расследовании](ADVISOR_CASE_REPORT_20261105.md#продолженное-расследование).
+Evidence: advisor-cause-investigation-followup-20261105.json, SHA256
+da0f04d9862dcff7269c55f213d8135811b44d280527b5e4130f4320b0d73cc0.
+
+## Текущий Кандидат V19: Не Принят (2026-11-05)
+
+Работа продолжена в том же PR164. Фазы, критерии, формат отчёта, schema/parser,
+модель и установленный PM не менялись. В инструкции добавлена общая граница:
+сообщение об отсутствии материала не предоставляет его содержание, но может
+отвечать критерию доступности; содержательный account решений и открытых
+вопросов не требует разрешать вопросы только ради их описания.
+
+Первый эксперимент: четыре HTTP200,19 правильных marks/reasons, но одно
+required_change недостаточно. Предложение перечислить открытые вопросы не
+закрывает критерий обязательных решений. Эксперимент не принят. Затем изменена
+только инструкция required_change: исправление должно удовлетворять тому же
+критерию, а не только раскрывать его пробел. Четыре контрольных ответа конечного
+prompt независимо приняты по всем19 marks/reasons/required_change.
+
+Конечная политика `supervisor-evaluator-v19`, system SHA256
+`7ee97ccaa0914fe77b7ce881268b6dbe855ca2fd9e6edbc17df8a42e4b1edd48`.
+Для v18 и v19 сохранена обязательная проверка phase-context fingerprint.
+Исторические receipts не переоцениваются. Прежние case bytes/gold не менялись;
+runner явно выбирает новую policy/hash и не засчитывает ответы старого prompt.
+Пауза бюджета действует и для route probes до клиента/журнала; live reserve
+вычитается явно. Это QA-ограничение, не новый production-механизм.
+
+### Результат И Остановка
+
+После четырёх controls запущены32 заранее объявленных оставшихся слота.
+Независимый review остановил серию из-за спорного explanation, который обычная
+сверка marks не обнаруживает. Получены25 полных ответов, все115 marks и25 verdicts
+совпали. Первоначальная классификация одного C2 как бесспорной semantic-ошибки
+при последующей перепроверке признана слишком категоричной.
+
+| Слой | Проверенные данные |
+|---|---|
+| Контракт | C2 требует непротиворечивые существенные правила и проверяемые AC |
+| Источник | Непустота после trim; сохранение ввода при ошибке для исправления |
+| Реальный дефект | Документ одновременно запрещает strangers access и разрешает public edit |
+| Спорное замечание модели | Уточнить trimming, не вводя неподтверждённое изменение сохраняемых значений |
+| Основание отказа | Access-противоречие обосновано; исходное Both values are trimmed не отделяет валидацию от сохранения |
+| Parser/сервер | Сохранили полученную оценку; не добавляли причину и не исправляли verdict |
+
+Прежние review считали замечание лишним. Контрпроверка выявила допустимую другую
+трактовку: модель могла требовать устранить неоднозначность требования, а не
+запрещать совместимую деталь реализации. Ни запрет trimming, ни отдельный выбор
+владельца из исходного source не следуют. Внутренняя причина ответа неизвестна;
+старые marks/gold остаются прежними: access-противоречие независимо обосновывает
+C1/C2=false. Исторические запросы, ответы и сохранённые решения не изменены.
+
+Итог вместе с controls:29/36 завершённых оценок,134 marks совпали;133 assessments
+без замечаний, один остаётся спорным по объяснению/правке. Из30 непустых
+required_change29 приняты, один требует указанной оговорки, не доказанного отказа.
+Все captured inputs соответствуют frozen facts/system/schema;
+в завершённых ответах нет format/transport errors, repair или усечения.
+Контекст ограничен текущей фазой. Полная квалификация не пройдена.
+
+При остановке прерван начатый `pm-context-not-read/sample2`: prepared request
+сохранён, ответа нет, исход неизвестен. Он учтён в расходе, не повторялся;
+нулевой расход, PASS или ошибка модели ему не приписываются. Ещё шесть слотов
+не запускались. Primary journal сохранён без редактирования; отдельная запись
+остановки объясняет оставшийся raw status=running.
+
+Остановленная серия использовала122/152; новых вызовов в ней нет. Последующая
+отдельная четырёхвызовная диагностика довела бюджет до126/152, сохранив24 live
+reserve и два неиспользованных слота. Гипотеза о смешении «не требуется» и
+«запрещено» не доказана. Установка/merge/два PM-сценария не разрешены результатом.
+На pinned dependencies native4326 PASS и75 subtests PASS, coverage94.0751%.
+15 skips явно открыты: private opt-in3, NTFS executable-mode1, Playwright11
+не установлен. PostgreSQL132 PASS без skips; QA containers/network/volume удалены
+через helper v2. Ruff и mypy169 PASS. Отдельный HTTP fixture-тест добавляет один
+уникальный PASS: принятие при сохранённом prompt v18, переключение на v19,
+replay/history без модели и без изменения записей. Это не live upgrade v15.
+Own native temporary directory сохранён: cleanup с точной проверкой пути/owner
+отклонён execution policy, обходного удаления не было. Подготовительные отказы
+не засчитаны как gate PASS; отчёты сохранены отдельно. Рабочий Workflow79976adb
+healthy, не обновлялся. Gates evidence: `advisor-v19-code-gates-20261105.json`.
+
+Evidence в защищённом QA-каталоге: `advisor-account-clarification-*-20261105`,
+`advisor-v19-correction-controls-*-20261105.json`, `advisor-v19-qualification-*-20261105.json`.
+SHA256 неизменного primary journal:
+`8c6d7748436e7a796d96f7d0e9c27a3d2251f52afd7a3f44bc5a68f02ac55b59`.
+
+### Контрпроверка Диагноза Без Изменения Продукта
+
+До вызовов независимо проверены четыре новых синтетических примера. Во всех
+документ явно сохраняет trimmed-значения; источник и соответствующее ограничение
+документа явно разрешают либо запрещают это. Отдельно меняется только access AC.
+В forbid-примерах C2 нарушен внутренним противоречием constraint и scenario/AC,
+а не только расхождением с source. Исходные frozen cases не переписывались.
+
+| Хранение / access AC | Ожидание и результат | Причина |
+|---|---|---|
+| Разрешено / согласован | PASS | Противоречий нет |
+| Разрешено / противоречив | PARTIAL, C1/C2=false | Только нарушение owner-only доступа |
+| Запрещено / согласован | PARTIAL, C1/C2=false | Нарушение явного правила сохранения |
+| Запрещено / противоречив | PARTIAL, C1/C2=false | Оба нарушения |
+
+Все24 marks обоснованы; шесть corrections достаточны в контексте соответствующих
+ответов. У cell1 C1-фраза «без разрешения владельца» слабее owner-only отдельно,
+но C2 и сохранённые правила прямо запрещают stranger access: новый sharing flow
+не установлен. В двух ответах «вопросов нет» неточно отнесено к source вместо
+clarification; само сообщение присутствует. Эти оговорки не скрыты.
+
+Prompt, schema, критерии и настройки не менялись. Каждый ответ проверен до
+следующего вызова; технических повторов нет. Четыре HTTP200/stop, без усечения,
+2385–2401 input tokens, history пустая. Бесспорной потери контекста, повреждения
+структуры или parser repair не обнаружено. Это n=1 на пример и совместное
+изменение source/constraint: ни внутреннюю причину исходного ответа, ни общую
+безошибочность модельной оценки результат не устанавливает. Серия36 не закрыта.
+
+Read-only проверка установленного LiteLLM подтверждает по коду: ведущий SYSTEM
+переходит в Responses instructions, нейтральный prefix его не заменяет;
+reasoning.effort и text.format сохраняются. Temperature отбрасывается конфигурацией
+маршрута, max_output_tokens исключается provider allowlist. Это расхождение заявленных и передаваемых
+параметров, но причинная связь с рассмотренными semantic-оценками не установлена.
+Конечный upstream HTTP body, backend snapshot и фактически применённый reasoning
+budget не наблюдались. Имя app-test не доказывает их.
+
+Отдельная граница доверия: сервер сверяет assignment и точное подтверждение
+редакции Tracker, но не сравнивает inline-текст документа в отчёте с сохранённым
+телом. Это не причина синтетических trim-примеров и не воспроизведённый обход;
+гарантию тождественности артефакта без отдельной проверки давать нельзя.
+
+Новый product fix по этим четырём наблюдениям не обоснован. Подтверждённый ранее
+недостаток C3-correction отличен от спорного E2-критерия и исходного trim-ответа;
+объединять их одной доказанной причиной нельзя. Сначала проверяется контракт и
+разметка, затем конкретная граница реализации. Кодовые gates переиспользованы:
+исходники не менялись. Установка, новая PM live-приёмка и merge не выполнялись.
+
+План до вызовов: `advisor-v19-storage-access-diagnostic-plan-20261105.json`, SHA256
+`ed254f7feb34ac11c4c81b5d59ddc1a4e8834695d8ea6d4cdd26294dd5e9d8dc`.
+В том же защищённом QA-каталоге сохранены четыре literal request/response журнала
+`advisor-v19-storage-access-diagnostic-result-{0..3}-20261105.json` и review.
+
+## Принятый Результат LiteLLM (2026-11-05)
+
+**LiteLLM исправлен и принят. Полная квалификация Workflow остановлена на
+одном спорном assessment; установленный Workflow не обновлялся.**
+
+[LiteLLM #3](https://github.com/FerrPOINT/litellm/pull/3) влит в main как
+8fc705e2abff9c49fa1d5435989695386618f39d. Проверенный HEAD50ccf52 сохраняет
+уже сформированный `text`; новых политик, повторов и обходов не добавлено.
+Два независимых source review не нашли блокеров.
+
+Локальный контракт закрыт: полный `make lint` exit0, frozen lock check,
+secret test1 PASS и coverage пяти новых регрессий PASS. Type gate использует
+каноническую `.venv-typecheck` и прежние per-rule ceilings; это не утверждение
+об отсутствии всех исторических type diagnostics. Ранее принятые244 целевых
+теста и пять проверок фактического пакета переиспользованы на том же коде.
+GitHub Actions исключены владельцем из условий выпуска, не запускались и
+не обозначаются зелёными. Собственные QA containers/networks/scratch очищены;
+объявленный external build cache сохранён.
+
+Отказы подготовки сохранены отдельно: Node/nodeenv, отсутствующий proxy extra
+для OpenAPI и конфликтующий `--disable-socket` до выполнения coverage cases.
+Они не выдаются за source failures или успешные проверки. После PASS полного
+lint повторялись только недостигнутые lock/secrets и coverage с исправленным
+QA-входом. Источник результата: `litellm-review-gates-20261105/node26-status.json`.
+
+На Octo явно активирован immutable bundle
+`litellm-next-1.109.0-1403f0dc2ebd-schema-50ccf52e3be4`, PID2264636.
+Старый процесс и его cgroup завершены до атомарной замены `current`.
+Обе health проверки HTTP200; config/env, UI, dependencies и установленные
+session/cache overrides сохранены. Положительный journal marker drain не
+наблюдался; подтверждены успешный stop, отсутствие процессов и отсутствие
+timeout marker, а не вымышленный log event. Сверены manifest и source file.
+Workflow, Fleet, Hermes и PM не переустанавливались.
+
+Ровно три заранее определённых модельных вызова, без повторов:
+
+| Случай | Фактический результат |
+|---|---|
+| JSON mode compatibility | HTTP200, `{"probe":"json-mode-compatible"}` |
+| Тот же strict adversarial запрос | До: `{"unexpected":42}`; после: `{"probe":"schema-enforced"}` |
+| Frozen missing-C4 /153 sample1 | Все C1/C2/C3/C4/E1/E2 присутствуют; PARTIAL, каждый covered=false с причиной и исправлением |
+
+Сопоставлены реальные prepared HTTP bodies и endpoint: strict запрос до/после
+идентичен, а не восстановлен по исходному prompt. Независимый review проверил
+все шесть причин и required_change по153: каждый отказ обоснован данным
+критерием и исходным отчётом, без дополнительных обязательств. Blockers пусты
+обоснованно: неполный результат требует исправления, технический запрет не показан.
+Наблюдаемое соблюдение схемы в этих случаях не является гарантией безошибочности
+модели или доказательством её upstream identity. Передача output-token limit
+не исправлялась; прежнее ограничение не объявляется enforced.
+
+На завершении route checkpoint бюджет был75/134: два route slots и один
+qualification slot. Следующая серия описана ниже. Установленный Workflow v15
+и прежние задачи сохранены. Общий релиз и два новых PM-сценария не приняты.
+
+### Строгая Квалификация: Остановка На E2
+
+Checkpoint c029218 изменил только существующий QA runner: строгая схема
+каждого случая вместо json_object, сохранение prepared HTTP body и literal
+reply. Engine, prompt, модель, критерии и frozen labels не менялись.
+52 адресных теста, Ruff и mypy169 PASS; независимый preflight подтвердил
+сопоставимость153/sample1 и план35 новых вызовов.
+
+Серия остановилась после13 однократных HTTP200:12 точных совпадений и один
+item mismatch в `incremental-explicit-new-document-invalidates-marks/sample1`.
+Оставшиеся22 слота не запускались. Бюджет88/134; reserve24 на живую приёмку
+не расходовался. Повтора не было, gold не менялся.
+
+| Проверяемое | Факт |
+|---|---|
+| Текущий источник | Прежние условия отменены; актуальные request/decisions не приведены |
+| Текущий документ | Только сообщение о замене, без полного нового текста |
+| C3 | covered=false: актуальных решений нет |
+| E2 | covered=true: описание отсутствия материалов засчитано как account решений/вопросов |
+| Общий verdict | PARTIAL, blockers=[]; совпадает с ожидаемым |
+
+Независимо проверены57 assessments новой серии:51 в успешном prefix и пять
+отказов спорного слота обоснованы. Только E2 спорен. Frozen false соответствует
+отсутствию содержательного account; однако `readable account` не задаёт явную
+минимальную полноту, поэтому это граница толкования критерия, а не бесспорно
+доказанный model bug. C3=false само по себе не требует E2=false: читаемое
+изложение доступных решений и конкретных открытых вопросов может быть полным,
+даже когда бизнес-выбор ещё не закрыт. Здесь вместо него только метаописание
+недостающих материалов. Ожидание E2 не заменялось на удобный true.
+
+Механика проверена отдельно: actual user payload точно равен frozen объекту;
+история содержит один предыдущий отчёт той же фазы. Usage сообщает2990 input
+и898 output tokens, finish_reason=stop. Prompt и reply не обрезаны. Все шесть
+пунктов присутствуют; literal JSON совпадает с сохранённым parsed response.
+Ошибок транспорта/формата и изменения verdict сервером нет. Переполнение
+контекста, потеря структуры и отсутствие high причиной не подтверждены.
+
+Следующий минимальный шаг: однозначно установить достаточность фактического
+account в отличие от сообщения об отсутствии фактов, сохранив различие E2 и C3.
+После этого зафиксировать одну проверяемую гипотезу и новый сопоставимый план
+проверки. Нельзя вводить правило C3=>E2, keyword checks, менять gold ради PASS
+или повторять неизменённую серию. В текущей кампании больше вызовов не сделано.
+Workflow install/merge остаются закрыты; успешный adapter fix не откатывался.
+
+Primary evidence: `advisor-v18-strict-plan-c029218-20261105.json`,
+`advisor-v18-strict-qualification-c029218-20261105.json` и независимый
+`advisor-v18-strict-review-c029218-20261105.json` в защищённом QA-каталоге.
+
+## Исторический CP1 До Активации (2026-11-04)
+
+**Принятие остановлено. Причина текущего нарушения формы локализована до
+адаптера модели; это не доказательство причины всех прежних смысловых ошибок.**
+
+Подготовка64e00d2 продолжает PR164 без изменения prompt, модели, criteria и ядра.
+В Workflow и Base Compose исправлена отсутствовавшая передача явной настройки
+формата. Рендеринг обоих значений проверен; прежний default сохранён, действующие
+profiles и установленный PM не менялись. Base source fix855eb2e9 опубликован,
+но не влит и не активирован.
+
+Через read-only SSH проверен обслуживающий endpoint192.168.10.1:4000:
+LiteLLM1.109.0, release1403f0dc2ebd, PID95779. Его PYTHONPATH указывает на
+проверенный source bundle; symlink и файл предшествуют запуску службы.
+Настроен маршрут chatgpt/gpt-6-luna с mode=responses и заявленной поддержкой schema.
+Название alias app-test и metadata не являются независимой проверкой upstream-модели.
+
+На точном source выполнены реальные parent/provider transformations без mocks,
+с запрещённой сетью и нулём inference. Parent сохраняет text.format и лимит4000;
+ChatGPT adapter удаляет оба через allowed_keys. Reasoning high сохраняется,
+temperature удаляется явной настройкой маршрута. Возможность передачи лимита
+самому backend пока не подтверждена. Длинная coding-инструкция из bundle не
+используется: environment службы задаёт нейтральную строку58 символов. Объяснять
+сбой coding-bloat оснований нет.
+
+Новые пробы фиксированы до вызовов. Первая вернула требуемый объект, вторая
+вернула `{"unexpected": 42}` вместо единственного разрешённого
+`{"probe": "schema-enforced"}`. Обе HTTP200/stop; actual prepared HTTP bodies
+содержат strict json_schema. После второго вызова пакет остановлен. Третья и
+missingC4 пробы не запускались; перехода на JSON mode и повторов нет.
+Бюджет72/134, квалификация36 и live reserve24 не расходовались.
+
+[Артефакт CP1](evidence/advisor-route-contract-20261104.json) содержит точные
+версии, offline reproducer и fingerprint protected-журнала с фактическими
+prepared requests и буквальным текстом ответов. Authorization не записывается.
+Совпадающий дефект описан в [upstream issue38085](https://github.com/BerriAI/litellm/issues/38085);
+вывод о нашей установке основан на её собственном коде и воспроизведении.
+
+Минимальный следующий пакет принадлежит существующему адаптеру LiteLLM: сохранить
+уже сформированный text.format, добавить offline regression и проверить исправленный
+маршрут. Не менять Workflow на второй клиент/политику и не чинить пропуски parser.
+Active immutable release не редактировался; нужны канонические исходники и штатный
+release этого компонента. Установка Workflow, PM-сценарии и мерж остаются закрыты.
+
+Канонический repository найден: [FerrPOINT/litellm](https://github.com/FerrPOINT/litellm).
+Проверенные main и codex/provider-cache-usage имеют тот же пропуск text;
+существующие PR1/2 относятся к другим пакетам и не изменялись. Нужен адресный
+пакет adapter forwarding, не повторная установка уже имеющегося исправления.
+
+Текущие проверки:63 focused Workflow tests,15 Base config-render tests, Ruff и
+mypy169 PASS. Девять reliability tests PASS с явно подключённым Base SDK.
+Первый запуск без SDK имел один отказ CLI recovery до транспорта:
+pdlc_cli_core не импортировался, возвращался shared-transport-unavailable.
+Исходники теста и продукта при retake не менялись; это не скрытое исправление gate.
+Дерево project_workflow осталось e51d7090; установленный image79976adbb healthy.
+
+### Предыдущий Checkpoint Надёжности
+
+Следующий раздел сохраняет результат до CP1; прежняя гипотеза о json_schema
+уточнена приведённой выше проверкой. Старые решения и отчёты не переписаны.
+
+## V18: Контрольные Точки
+
+### Текущее Состояние
+
+**Приёмка надёжности остановлена по условию плана; кандидат не установлен.**
+Checkpoint96ee3a1 сохраняет прежний prompt и настройки. Из36 слотов15 проверены
+повторно без модели и пригодны для reuse. Новый batch из21 слота остановлен после15
+попыток:14 совпадений, затем pm-missing-full-153/sample2 без assessment C4;
+шесть следующих слотов не запускались. Итого29/36 валидных слотов, одна ошибка
+контракта. Все60 assessments валидных новых ответов и их required_change/blockers
+проверены независимо; пяти корректных оценок ошибочного ответа недостаточно.
+
+Слой отказа — неполный ответ модели: C1/C2/C3/E1/E2 есть, C4 отсутствует.
+JSON синтаксически допустим; сервер правильно отказал по точному множеству критериев.
+Вход1996 символов, previous_reports пуст, HTTP200, finish_reason=stop; признаков
+усечения нет. Внутренняя причина пропуска неизвестна; рост истории, низкий reasoning
+или неверная разметка причиной не доказаны. Повтора и автоматического дополнения нет.
+Следующая проверяемая гипотеза — существующий явный json_schema режим может
+обеспечить обязательное множество полей, если маршрут app-test действительно его
+поддерживает. Это не исправление смысла; режим не включался и новые вызовы для
+проверки гипотезы не выполнялись. Увеличивать контекст или ослаблять parser оснований нет.
+
+Журнал в прежнем защищённом QA-каталоге:
+`advisor-v18-reliability-qualification-96ee3a1-20261104.json`, SHA256
+`62e5e6d7c14012279d1522ebb1cdc89a9dfccc562d8cb17c41e9d3df2cf80bf6`.
+Сохранены фактические запросы, JSON-ответы и диагностика; буквальный исходный
+текст ответа представлен fingerprint, не выдается за сохранённый raw HTTP body.
+Бюджет70/100: не использованы шесть запланированных вызовов и24 live reserve;
+после ошибки execution guard закрыт. Разметка, модель и prompt не менялись.
+
+Добавлены девять offline-регрессий: полная история1/10/100 и изоляция scope,
+отзыв прежних marks, сохранение при technical failure, rollback перед COMMIT,
+readback/replay после потерянного ответа, omission C4 и HTTP429/500.
+Связанный набор300 PASS; после двух HTTP controls весь новый файл9 PASS.
+Наборы пересекаются. Qualification/reuse/budget40 PASS; Ruff и mypy169 PASS.
+Это SQLite/HTTP-boundary proof, не перезапуск живого процесса или live PM.
+Продуктовый tree `e51d7090998b04bca27c4ec8c56e2c150faa6aad` совпадает с прежним
+PostgreSQL proof132; hashes всех шести его артефактов перепроверены без нового QA.
+
+Installed image79976adbb и config fingerprint
+`d4b8d4807213f8a96207c24005c5c76708096a9c3717c761b1ccd3ff4d34493b`
+не изменились; health остаётся healthy. Реальный ingress127.0.0.1:7752 прямой
+Uvicorn; дополнительный proxy не найден, длительный запрос не проверялся.
+Установленные CLI08341888 и catalog env legacy несовместимы с новым контрактом;
+CLI timeout120, кандидат1500. Полный список active задач недоступен403; разрешённое
+чтение SDLC26/27 показывает active,28–32 done. Отсутствие остальных blockers не доказано.
+Установка, fresh standalone/runtime restart, два PM-сценария, браузеры и мерж
+отложены; Fleet/Hermes, credentials, данные и история не менялись.
+
+### Сохранённый Baseline Перед Проверкой Надёжности
+
+Base #458 влит в main как6868579e: общие правила, loopback SDK и source skills
+сохранены без активации runtime. Workflow #164 остаётся Draft, не релизом.
+Предмержевый review не выявил нового core-дефекта, но подтвердил обязательный
+cutover: новые submit требуют typed report; активная история прежнего формата
+не содержит evaluated_phase_group; старый catalog env legacy/base отклоняется.
+Клиенты, активные исполнения и явная конфигурация должны перейти согласованно,
+без восстановления scope по догадке, старого execution fallback или переписывания
+принятых решений. Этот переход ещё не выполнен; один source merge его не заменяет.
+Для master включена GitHub branch protection: только PR, запрет force-push и
+удаления, enforce_admins и закрытие review conversations. Обязательных approvals0;
+Actions отключены, поэтому это не автоматическая проверка качества. Для приватного
+Base серверная защита недоступна на текущем тарифе (GitHub403). Гарантия «никто
+никогда не испортит» не заявляется: регрессии и явная приёмка остаются обязательными.
+
+Native с coverage на b200f21:4296 PASS,75 subtests PASS,15 skipped,
+132 PostgreSQL deselected,94.0675% при пороге94%. Продуктовый baseline сохранён.
+PostgreSQL16.15:68 PASS, затем устаревшая auth/mode fixture; все собственные
+containers/network/volume удалены. Первый fixture-дефект исправлен в9505bb6.
+Последующая проверка103 PASS и адресный retake29 PASS/0 skipped покрывают все132
+уникальных PostgreSQL cases. Tree `project_workflow` между срезами побайтно совпадает;
+JUnit identities не пересекаются, selection сверена с collection.
+`evidence/workflow-v18-pg16-gate-20261104.json` сохраняет основания reuse и hashes
+исходных результатов. Прежние failed invocations не переименованы в full PASS.
+Temporary resources и scratch убраны. Остаются модельная квалификация, image/update,
+браузеры и два новых PM live-сценария; установленный PM не менялся.
+
+Система e56940d0 проверена на17 уникальных случаях/18 оценках:85 marks и их причины
+поддержаны входом. Единственное несовпадение verdict — owner question как BLOCKED
+вместо PARTIAL — выявило неоднозначность общего определения; parser ничего не
+исправлял. API-регрессия отдельно проверяет продолжение после valid BLOCKED без
+ручного unblock; model batch сам по себе не доказывает живую остановку PM.
+
+Кандидат6e00082f заменяет только это определение: для BLOCKED нужно препятствие
+выполнению работы, не просто незавершённый результат или вопрос. Источник/схема
+отчёта, данные и критерии прежних17 cases и реальные фазы не меняются ради ответа.
+В одном flat dataset сохранены все17 cases и добавлен synthetic403 countercontrol;
+его два слота заменяют произвольные retention extra-повторы. Ни case count, ни
+точный текст свободного blockers не являются смысловым grader.
+
+До запуска зафиксированы четыре новых:
+retention1 → external-source-access-denied1 → retention2 → external-source-access-denied2.
+Ожидания: PARTIAL/C2,C3 missing для вопроса; BLOCKED/C1,E1 missing и C2 covered
+для недоступного единственного источника. Blockers должны описывать именно этот
+отказ, без требования дословной фразы. Остановка при первом расхождении; максимум4,
+без изменения app-test/high/4000/json_object/1200s. Это эксперимент одной границы,
+не полный release qualification. Новая версия пока не установлена.
+
+Все4 оценки совпали; независимый review принял все18 marks, required_change
+и blocker reasons. Отдельный заранее определённый metamorphic control меняет
+только /report/unresolved/0/kind obstacle→question при прежних HTTP403 фактах.
+Он остаётся BLOCKED с C1/E1 missing, C2 covered: неверная метка агента не стала
+авторитетным enum-gate. Все3 объяснения и одноточечный diff проверены независимо.
+До расширения лимита было44/48 реальных экспериментальных вызовов;
+полная новая квалификация не заявлялась.
+
+Пользователь увеличил лимит до55. Сверка13 исходных журналов подтвердила44 уже
+выполненных вызова: прежний асинхронный вопрос с остатком24 к моменту ответа
+устарел. В checkpoint a6a7cc3 зафиксирован остаток11; prompt, payload, labels и
+настройки не изменялись. До запуска независимо проверены четыре отрицательных
+контроля, PM approval и шесть других профессий; все sample1, без повторов.
+`evidence/advisor-v18-approved-budget-controls-a6a7cc3-20261104.json` сохраняет
+фактические запросы и ответы:11/11 совпадений,7 PASS/4 PARTIAL,53 assessments
+(37 true/16 false), HTTP200/stop. Независимый review подтвердил все основания,
+16 достаточных required_change и отсутствие внешних blockers. Model alias и
+переданный high не устанавливают независимо upstream-модель или её настройки.
+
+Итого55/55. В действующем плане remaining=0; regression проверяет отказ до модели
+и создания журнала как для одного вызова, так и для полного набора. Разметка и
+исходные ответы не исправлялись ради PASS; код продукта не менялся. Проверки
+плана/runner:38 PASS. Точная сверка system/settings/payload/labels с четырьмя
+ранее проверенными слотами даёт15/36 canonical slots,13 уникальных случаев;
+21 слот ещё не выполнен. Отдельный kind-mislabel control не включён в эти15.
+Ограниченная серия успешна, но это не полная квалификация или PM live-приёмка.
+Без нового разрешённого бюджета вызовы не продолжаются; установка не выполнялась.
+
+PostgreSQL retake dda58fa дал103 PASS, затем старый тест ожидал запрет удаления
+workflow лишь из-за наличия несвязанной фазы. Контракт запрещает удаление при
+namespace binding, а не из-за собственных дочерних фаз. Исправляется только
+ожидание и проверяется cascade без ослабления namespace/row-lock guards.
+По JUnit и реальной collection подготовлены ровно29 failed/unrun nodeids;
+103 неизменённых успешных проверки переиспользуются. Ресурсы обоих PG-прогонов
+и scratch второго удалены; последующий29-case retake завершён успешно и описан выше.
+
+### История Проверки В Существующем PR
+
+Источник вновь дорабатывается в той же ветке, без нового execution path или
+экспериментальной ветки. Восстановлен проверенный типизированный отчёт; добавлены
+отчёты текущей фазы/parallel-группы по времени и последняя совместимая assessment
+рядом с критерием. Контекст ограничен task/mode/cycle/group; не суммаризируется,
+не усекается скрытно и не восстанавливается из старых covered. Новый отказ
+содержит required_change. Канонические шесть публичных полей сохранены.
+
+Отпечаток контекста проверяется после модельного вызова, включая изменение
+исторического отчёта или причины без смены history ID/covered. Принятая старая
+операция читается до проверки нового формата; изменённое тело не принимается.
+Несовместимый архив остаётся читаемым, но не становится новым модельным входом.
+Независимый review также закрыл null в обязательном отпечатке v18.
+
+Двадцать четыре обращения из48 выполнено. Сохранены полные запросы и ответы в
+materiality/integration/source-fields results. Первый ответ указал отсутствие
+исходного решения, но E2 сослался на собственную оценку C3, которой нет в отчёте.
+Это доказанная подмена evidence собственным объяснением для данного ответа.
+Короткая общая граница добавлена в prompt; её надёжность не объявляется доказанной.
+
+Повторный независимый разбор выявил и дефект разметки:189/190 не являются
+однозначными negative gates. «Незакрытые» допускает закрытое состояние, а начальное
+«Нужно ответить» может быть обычным следствием заданного ручного процесса.
+Критерий требует существенных бизнес-решений, не буквального повторения каждого
+названия или отдельного согласования обычного default. Это не превращает старые
+labels в PASS: они и результаты неизменны, но их нормативная однозначность
+отозвана отдельным review. Нельзя продолжать усиливать prompt ради этих слов.
+При наличии189 в истории текущей фазы решение «Закрыта» дополнительно уже дано;
+его неповторение в190 само по себе не означает потерю решения.
+
+Новая квалификация должна иметь отдельно замороженные явные материальные пробелы
+и противоречия. Её успех не равен прохождению старого спорного набора.
+Source-only разметка190/191 сохраняет каждый исходный символ; факты и весь
+документ не переписаны. Синтетические прежние assessments/reports обозначены как
+QA-фикстуры, а не выданы за сохранённые ответы модели.
+
+Целевые тесты проходят, Ruff и mypy169 source files — PASS. Полный native пока
+не принят: законченный диагностический прогон дал3647 PASS,535 failures,29 errors,
+15 skips; устаревшие фикстуры исправляются по действующему контракту.
+Нельзя объявлять все падения одним дефектом до их проверки.
+PostgreSQL/coverage/image и две новые live-задачи
+не выполнялись. Установленные v15, PM, Hermes и credentials не менялись.
+
+Дополнение проверки: дословное сообщение owner_confirmation перенесено из
+артефактов в source.decisions (без дублирования и выдумывания отдельных решений).
+Тот же документ и prompt прошли все7 критериев финальной фазы. Это подтверждает
+результат одного нового входа, не доказывает скрытую причину прежнего отказа.
+Следующий отказ Analyst C2 обоснован: source говорит только о названии и начальном
+статусе, а analysis добавляет двух сотрудников и политику отказа при «предположений
+нет». Полная независимая ревизия17 fixtures нашла15 consistent и2 invalid
+positives (Analyst и связанное дополнение). Старые gold не меняются; ослаблять
+prompt ради такого PASS нельзя. Новые корректные controls требуют собственной
+предварительной разметки, не переименования неудачного результата.
+
+449 целевых проверок пройдены вместе; дополнительно72 LLM и39 state checks.
+Общий source-skill Base a25c4ef4 прошёл39 package tests. Пакет не установлен:
+CLI/API/skills должны активироваться совместимо между запусками.
+
+Новые Analyst/Architect controls проверены отдельно: исходные бизнес-решения
+присутствуют, схема Architect использует перечисленные существующие компоненты,
+без неподтверждённого repository-слоя. Обе оценки прошли. Старые ambiguous cases,
+labels и ответы сохранены, не исправлены задним числом. Исполняемый диагностический
+набор теперь один типизированный файл, без преобразования архивных форматов.
+
+Следующий отказ Tester разобран независимо по сохранённому published readback.
+C2 дословно совпадает с каталогом: passed требует полного acceptance, needs_rework —
+неизменяемое воспроизведение и expected/actual. Отчёт выбирает needs_rework и даёт
+эти сведения. Ответ признаёт их, но требует успешный trim-case из другой ветки.
+Это ошибка применения условия в данном ответе; отсутствие успешного trim действительно
+видно, но не доказывает невыполнение выбранной ветки C2. Критерий и gold не меняются.
+Гипотеза следующего изменения — заменить общую фразу applicable branch на явное
+условное правило, без примера Tester и без серверной коррекции verdict.
+
+Семь unique sample1 совпали с текущим system/settings. Их нельзя переиспользовать
+после изменения prompt. Для нового system полный17×2 набор потребует34 вызова,
+что больше оставшихся24. Ограниченная проверка гипотезы не заменит квалификацию;
+прежний mismatch не исключается из результатов и не повторяется до удобного PASS.
+
+До следующего обращения зафиксирован ограниченный эксперимент: только замена
+общего conditional-правила, неизменные критерии/факты/labels/settings. Новый system
+`e56940d0…`; Tester needs_rework samples1/2 и отрицательный
+`pm-private-access-contradiction` sample1, максимум3 вызова. Ожидания остаются
+PASS/all covered для Tester и PARTIAL/C1,C2 missing для противоречия доступа.
+Остановка при первом несовпадении; все ответы сохраняются в отдельном журнале.
+Это проверка одной гипотезы, не новая полная квалификация и не разрешение установки.
+
+Эксперимент остановлен после первого из3 запланированных вызовов. C2=true
+теперь обоснован needs_rework, без требований успешного acceptance. C1=false
+обоснован другим реальным пробелом: trim-кейс не показан и не назван непроверенным,
+хотя отчёт утверждает отсутствие неисполненных случаев. Required_change допускает
+честно отметить его непроверенным, не требует выдумать запуск или успех.
+Независимый QA отозвал собственное прежнее C1=true: all-true oracle был ошибочным.
+Старые gold и ответ сохранены. Новый prospective Tester указывает непроверенный
+случай; остальные факты и критерии неизменны. Новых prompt-правок после ответа нет.
+
+Подтверждён также независимый configuration-дефект: Python Settings без env имел
+reasoning none, тогда как Compose и .env.example — high. Default приведён к high;
+явные app-test/high эксперимента и установленного PM от этого не меняются.
+Проверяется фактическая передача значения клиентом, но применение upstream всё
+ещё не устанавливается одним alias или принятым HTTP-параметром.
+
+Повтор ранее упавших native cases дал445 PASS и одно устаревшее literal-ожидание
+prompt, затем исправленное (10 stage checks PASS). Prompt/client/runner135 PASS,
+отдельный client/config/stage пакет118 PASS. Эти результаты пересекаются и не
+суммируются в полный gate. Полный запуск был прерван до синхронизации dataset pin;
+он не считается результатом кандидата. PostgreSQL/coverage/image/live не заявлены.
+
+Следующий ограниченный эксперимент заранее фиксирует новый
+`tester-needs-rework-explicit-untested` samples1/2 и неизменный отрицательный
+`pm-private-access-contradiction` sample1. Максимум3 вызова из оставшихся27;
+system/settings прежние. Изменяется только честное описание непроверенного случая,
+а не выполнение тестов. Ожидания: Tester all covered/PASS, противоречие доступа
+C1,C2 missing/PARTIAL. При первом несовпадении серия прекращается.
+
+Получены3/3 совпадения. Независимо проверены все14 обоснований: два Tester
+ответа различают исполненные, проваленные и непроверенный случаи, не выдумывают
+trim-успех и применяют needs_rework. PM-противоречие отвергнуто по C1/C2; источник
+не объявлен неполным из-за дефекта самого документа. Required_change достаточны
+и не добавляют новых требований. Ошибок формата, усечения или переключений нет.
+Полная квалификация и live-приёмка этим не заменены.
+
+Review механики выявил отдельный воспроизведённый дефект: при смене parallel
+группы во время вызова post-call contract state перепривязывал исходный отчёт.
+Теперь evaluated_phase_group сохраняется до вызова и является единственным
+источником scope для будущего контекста. Неверная/отсутствующая привязка даёт
+технический отказ, не подставляется из нового каталога. 61 phase-history и
+211 связанных state/replay/frozen/regression проверок PASS (наборы пересекаются).
+
+Ещё один подтверждённый transport-дефект: серверная архивная страница не имеет
+исполняемого agent cursor, а CLI ошибочно требовал его. Поддержана только явная
+read-only archive-проекция обычной platform history, с точной формой и теми же
+task/namespace checks; writes, cursor и diagnostics исключены. Прежний guard
+действующего исполнения сохранён, identities не подставляются. 109 transport/archive
+API tests PASS. README согласован с HTTP-only CLI, typed stdin и явными режимами.
+
+Завершённый полный native на2554253:4294 PASS,75 subtests PASS,15 skipped,
+132 deselected и2 failures за1183,33с. Оба отказа относятся к буквальному сравнению
+текстов: `test_advisor_materiality` ещё не учитывал reviewed conditional-замену,
+`test_docs_quality` требовал прежние wrapper/plaintext примеры README.
+Только эти ожидания обновлены;18 проверок двух файлов PASS. Продуктовые исходники
+не менялись. Прежний nonzero результат не объявляется зелёным full gate.
+
+### Исторический CP1: Остановлен И Отменён
+
+Выполнено6 из48 разрешённых обращений;42 слота не запускались. Один и тот же
+v17 system/client/parser оценивал старое и типизированное представление одинаковых
+фактов. Разметка, критерии и настройки не менялись. Полные тела сохранены в
+`evidence/advisor-v18-checkpoints-20261104.json`; mapping и код эксперимента —
+в commit f34bbbe. Избыточная ветка удалена после проверки достижимости коммита
+из существующей рабочей ветки; исходники и evidence не потеряны.
+
+| Случай | Старое представление | Новое представление | Проверенный вывод |
+| --- | --- | --- | --- |
+| 189 | Правильные marks, но C3 приписывает документу отсутствующую формулировку assumption | Правильные marks и точная причина: пропущен начальный статус | Один положительный результат, не квалификация |
+| 190 | Ложный PASS по frozen truth, пропуск «Закрыта» не замечен | C3/E2=false, но причина — требование согласовать ручные переходы, а не «Закрыта» | Совпадение marks не доказывает исправления целевого дефекта |
+| 191 | PARTIAL вопреки frozen PASS: C3 требует согласования ручных переходов, E2 признаёт account полным | Тот же упрёк, согласованный C3/E2=false | Сам факт assumption есть; обязательность отдельного owner decision спорна |
+
+Независимо проверены все36 объяснений в6 ответах. Каждый фактический payload
+совпадает с заранее проверенным manifest; HTTP200/finish=stop, без усечения и
+ошибок формата. Исходный документ и прежние решения не потеряны. Модель уже на
+old191 требует такого согласования, поэтому ухудшение именно из-за новой схемы
+не установлено. Влияние дублирования assumptions на внимание модели — гипотеза.
+
+Фраза C3 «каждый существенный бизнес-выбор» не даёт однозначной границы для
+этого assumption. Нельзя ни объявить любое предположение допустимым, ни требовать
+отдельного решения владельца о каждом действии интерфейса. Следующий анализ
+должен установить эту границу из контракта и предварительно проверить разметку,
+без частного исключения для статусов и без подгонки191 под наблюдённый ответ.
+
+CP1 не принят. Коммиты5bf3de2/c7d4bf1 явно отменяют кандидат до CP0, сохраняя
+его в Git и evidence. CP2/CP3 и дальнейшие модельные вызовы остановлены;
+установленный v15 и работающий PM не изменялись. Нового legacy execution path
+для воспроизведения отклонённого эксперимента в runtime не добавлялось.
+
+CP0 зафиксирован в `evidence/advisor-v18-cp0-20261104.json`: исходники09e123d,
+Base93bf43c9, прежний установленный healthy image/v15 и неизменённые параметры
+эксперимента. Общий предел нового этапа —48 HTTP-вызовов, без автоматических
+повторов. Формат, контекст и причины оцениваются раздельно.
+
+Обнаружено ограничение отката: закрытый список версий в установленном frozen
+verifier не включает v18. Чтение обычной истории и проверка authoritative
+квитанции — разные проверки. Совместимость новых записей с прежним образом
+не объявляется доказанной по чтению исходников. До отдельной проверки и
+квалификации кандидат не устанавливается; рабочий PM остаётся прежним.
+
+## Исторический Кандидат V17 — 2026-11-04
+
+### Область И Размер Контекста
+
+Повторная проверка source и сохранённого запроса: сервер читает историю только
+той же задачи, phase_id, mode_id и cycle_number, без лимита числа записей.
+Точные неизменные ID/тексты критериев определяют действующие отметки; техническая
+ошибка не снимает их. Модель не получает все эти записи или историю других фаз:
+builder передаёт phase, allowed_verdicts, criteria, previously_covered и report.
+Для parallel оценивается явно объединённая текущая группа, не весь Workflow.
+
+У `actual-pm-190/sample1` user payload — 5739 символов, 6 критериев,
+previously_covered — C1/C2/C4/E1/E2, source — 466 символов. Провайдер сообщил
+1886 prompt tokens, 514 completion tokens, finish_reason=stop; диагностический
+запрос не усечён. Переполнение или смешение фаз этим случаем не подтверждается.
+Граница: размер сообщения не доказывает отсутствие любых эффектов контекста.
+Причинное влияние прежних отметок и формулировок отдельно не установлено.
+
+### Результат Квалификации
+
+Выпуск остановлен, установка не выполнялась. В
+`docs/evidence/clean-advisor-v17-qualification-20261104.json` сохранены 16 вызовов:
+15 совпадений классификации, затем false PASS на `actual-pm-190/sample1`;
+оставшиеся 20 слотов не выполнялись. Повторов модели и изменения разметки нет.
+Независимо проверены все 75 объяснений полученных ответов.
+
+В source случая190 отсутствует решение владельца о статусе «Закрыта», хотя
+документ использует его в правилах и критериях. C3 требует присутствия всех
+существенных решений в source; он не был previously covered. Advisor принял
+перечень категорий и пустой unresolved за достаточную полноту и выставил C3/E2=true.
+Parser получил согласованный JSON и не менял verdict. Потери данных builder не
+обнаружено. Это ошибка смысловой оценки, а не недостаток JSON-разбора.
+
+Универсальное разрешение не повторять неизменённые материалы и требование
+проверять источник отдельно создают текстовое напряжение. Его причинное влияние
+не доказано; объяснения модели не ссылаются на прежние отметки. В189 найден
+нужный пропуск начального статуса, но дополнительно запрошено решение о том,
+кто определяет закрытие. Это дополнительное неподтверждённое основание, а не PASS.
+
+Следующая узкая гипотеза: явно ограничить перенос отметки её собственным
+критерием и не заменять ею наличие текущего source, когда критерий требует его
+явно. Эта гипотеза не реализована и не проверена. Новая серия и установка не
+выдаются за выполненные; исходный v17 и все результаты сохранены.
+
+Механика нового кандидата отдельно убирает модельный format retry, перенос
+текстовых старых covered, retired assignment adoption и replay с доприменением
+перехода. Добавлен явный standalone admission к тому же evaluator. Самостоятельный
+режим, packaging и полный выпуск не считаются принятыми по факту исходников.
+
+Read-only инвентаризация установленного Workflow выявила 5 retired и 26 current
+assignments. Есть история v8/v10/v11/v12/pm-v4 и v15; часть старых задач не завершена.
+Данные не изменялись. Старые записи сохраняются архивом и не становятся текущей
+authority. Завершённые v15 raw-report receipts проверяются тем же точным алгоритмом;
+историческая нормализация не применяется для новых действий.
+
+После независимого review исправлены порядок workflow → task в standalone,
+конфликт ключей старта/отчёта и различия формы истории. Внутренние HTTP-ошибки
+возвращают JSON, а не HTML с human admission. SSO получает тот же Settings, что
+factory. Полная история для evaluator не обрезается; обычный CLI history имеет
+явный транспортный бюджет64МиБ, не гарантию безграничного ответа.
+
+Это не завершённое удаление всех старых контрактов: остаются PDLC/SDLC env aliases,
+offline seed helpers в product source и незавершённые исторические назначения.
+Последние нельзя молча превратить в новую authority. Их согласованный переход,
+полные native/PostgreSQL/coverage/image/browser gates и две новые live PM-задачи
+остаются открыты. Base опубликован отдельно в Draft PR458; Workflow сохраняется
+промежуточным коммитом по явному запросу пользователя с этими известными пробелами.
+Это не установленная версия и не принятый к мержу кандидат.
+
+## Кандидат V16: Границы Изменения
+
+Причины разделены: в189 модель приняла E2 вопреки замечанию по C3; в190 PM
+потерял ранее данное решение при составлении source. Builder не удалял эти данные.
+Новая общая инструкция требует учитывать все переданные факты при каждой оценке
+и не считать заявление «вопросов нет» доказательством. Фазы и критерии не меняются.
+Инструкции отчёта сохраняют действующие решения владельца и настоящий документ
+из readback; бизнес-факт согласования не сопровождается техническими квитанциями.
+
+Реализован узкий пакет механики: единое разрешение делегирования для фактической
+группы, запрет DELEGATE назначенному configured-агенту, технический отказ пустой
+рубрики до создания клиента и обработка глубины JSON на обеих границах ответа.
+Чтение v15 сохраняет собственный raw-report fingerprint, не legacy-нормализацию.
+Авторизация, owner confirmation и история не меняются. Новых API и схем нет.
+
+Это исходниковый кандидат, не установленная версия и не live-приёмка.
+Сравнение использовало17 случаев с заранее заданной оценкой каждого пункта:
+14 прежних и фактические189/190/191. Tester проверяется по опубликованному
+workflow7/catalog1, без частной правки критерия. В обоих вариантах одинаковые
+user-данные, app-test/high/4000/120/json_object; меняется только system prompt.
+Выполнены38 оценок,39 HTTP из предела40. Разметка не менялась; все ответы сохранены.
+
+### Результат Сравнения: Кандидат Отклонён
+
+| Политика | Совпадение итоговых классификаций | Ложный PASS | Ложный PARTIAL | Ошибочные отметки | Невалидный первый ответ |
+|---|---|---|---|---|---|
+| v15 | 16/19 | 2 | 1 | 5 | 0 |
+| v16 | 18/19 после форматного повтора | 1 | 0 | 2 | 1 |
+
+Числа не подтверждают улучшение надёжности: ограниченный набор и совпадение
+отметок не доказывают правильность причин. Два независимых разбора проверили93
+итоговые оценки пунктов v16 и4 оценки первой попытки Tester.
+
+| Случай | Факт входа | Ответ и решение | Подтверждённый слой |
+|---|---|---|---|
+| 189, v16 образец3 | Source называет допустимые статусы, но не начальный; документ назначает начальный статус | C3/E2=true, PASS; E2 ссылается также на заявление об отсутствии вопросов | Смысловая ошибка модели: основание не закрывает требуемое решение. Те же входы в образцах1/2 дали PARTIAL |
+| 190, v16 | В текущем source пропущено прежнее решение «Закрыта» | C3/E2=false совпали с разметкой, но причины требуют согласования ручных переходов | Причина модели не локализует целевой пропуск. Обязательность дополнительного согласования не установлена; аналогичное допущение принято в191 |
+| 189, v16 образец2 | Реально отсутствует начальный статус в source | Правильный PARTIAL дополнен требованием условия закрытия | Основной пробел найден; дополнительная блокирующая обязанность не подтверждена |
+| Tester, v16 попытка1 | Выполнена проверка кандидата, зафиксирован дефект и решение needs_rework | Все4 отметки true, но verdict PARTIAL; parser отклонил inconsistent_partial | Ошибка согласованности ответа модели. Форматный повтор PASS корректен; первая ошибка не скрыта |
+
+На этих входах не выявлены потери структуры/документов builder, усечение,
+транспортный отказ или смысловое исправление parser. Все39 HTTP200, finish=stop;
+максимум completion1310 при лимите4000, reasoning usage сообщён для всех ответов.
+Причины модели являются проверяемыми утверждениями, не объяснением её скрытого
+мышления. Почему она иногда игнорирует предоставленные факты, точно не установлено.
+
+Отдельный GET /model/info без inference вернул три настройки app-test с одинаковым
+именем `chatgpt/gpt-6-luna` и high. Это буквальные значения конфигурации маршрута,
+не подтверждение официальной идентичности или конкретного upstream каждого ответа.
+Необоснованных оснований повышать reasoning, timeout или token budget не найдено.
+
+Полные тела запросов, ответы, форматный повтор, разметка и ограничения:
+[наблюдённое сравнение](evidence/advisor-v16-comparison-20261103.json),
+[предварительная разметка](evidence/advisor-v16-case-labels-20261103.json).
+Это реальные запросы к настроенному маршруту из candidate-клиента, а не новые
+live-оценки установленного PM или переоценка сохранённой истории в БД.
+
+Механические регрессии и source-review успешны. Native:3827 случаев после
+исправления двух старых фикстур без критериев;15 skips не выдаются за приёмку.
+Ещё3 offline-проверки сохранённого evidence прошли отдельно: всего3830 случаев.
+Coverage94.2788%; PG132/132, отдельная clock-база предоставлена, QA очищен.
+Исходные отказы сохранены. Исправлены данные тестов, не проверки продукта.
+
+**Остановлено:** публикация новой политики, установка, активация инструкций,
+две новые live-задачи и merge. Baseline FLEETQA-30/31/32 сохранён; readiness образа
+этого кандидата пока не заявляется. Нет новой серии для получения удобного PASS.
+
+### Минимальный Следующий Пакет
+
+Одна гипотеза, ещё не реализованная и не квалифицированная: заменить повторяющийся
+блок оценки короткой универсальной связью «критерий -> нужный переданный факт ->
+отметка и конкретная причина -> verdict». Проверять применимую ветку критерия;
+не подменять недостающий факт другой обязанностью или собственным проектным решением.
+Факт из result не становится решением в source, прежняя отметка и заявление о
+полноте не заменяют исходные сведения. Итог должен следовать полученным отметкам.
+
+Не добавлять поля, вторую модель, status-примеры, keyword-проверки, fallback или
+автокоррекцию verdict. Не повышать параметры одновременно с текстом. На следующем
+контролируемом сравнении проверять основания причин, а не только covered/verdict.
+Нынешний эксперимент этой гипотезы не проверял; её успех не обещается заранее.
+
+## Последующий Аудит
+
+После мержа#161 проверены механика и три новые задачи SDLC-30/31/32 через Fleet:
+все завершены PM в Backlog/Ready. В11 оценках найден один ошибочный covered E2
+при правильном PARTIAL189. Отдельный лишний отказ190 вызван пропуском старого
+решения в source PM, восстановленным самим PM в191. Это не потеря JSON builder.
+Обнаружены также четыре механических края и ошибки UI; они не объявляются
+исправленными. Детали, настоящие запросы/ответы, точные границы и следующий
+минимальный пакет: [последующий аудит](ADVISOR_AUDIT_20261103.md).
+
 ## Текущий Пакет: Структурированный Отчёт V15
 
 Выявленный разрыв относится к контракту данных: отчёт поступал одной строкой,
@@ -32,7 +2150,7 @@
 Ошибок формата и повторов нет. Реальные тела запросов и ответы сохранены в
 [evidence](evidence/advisor-v15-structured-qualification-20261103.json).
 Независимое чтение причин не выявило дополнительных требований вне критериев.
-Тест сравнивает все сохранённые запросы с текущим builder, включая вложенный
+Тест сохраняет исторический system v15 и проверяет user builder, включая вложенный
 документ и проверку Unicode. Это не повторная модельная оценка и не live-приёмка.
 Случай Tester использует ранее уточнённый критерий, ещё не опубликованный;
 Developer/Reviewer представлены фазой контекста, не полным исполнением профессии.
@@ -77,8 +2195,11 @@ health и API, disposable QA очищена. Fleet не обновлялся. К
 
 ### Незакрытые Остатки
 
-- Общий browser gate не пройден. Chromium/Firefox/WebKit наблюдают Fleet UI
+- Общий browser gate не пройден. Chromium/Firefox/WebKit наблюдают ошибку при входе в Fleet
   `ReferenceError: hex is not defined` (WebKit: `Can't find variable: hex`).
+  Follow-up stack локализовал её на Auth `/oidc/authorize`, `normalizeBranding`,
+  а не в Fleet/Advisor. Producer уже исправлен Base `e4f73d8`; текущий Auth ещё
+  отдаёт старый bootstrap. Новая правка Hermes или Advisor для этого не требуется.
   Screenshots подтверждают видимые Backlog/Ready, переписку и требования полного
   случая, но не заменяют успешную полную UI-приёмку. Frontend/Fleet в этом PR не менялись.
 - Старый CLI уже работает в JSON-режиме. Его новый локальный валидатор и обычный

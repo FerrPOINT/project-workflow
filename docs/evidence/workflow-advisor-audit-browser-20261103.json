@@ -1,0 +1,440 @@
+{
+  "scope": "Read-only real browser observations, not a clean release gate",
+  "engines": [
+    {
+      "engine": "chromium",
+      "version": "149.0.7827.55",
+      "results": [
+        {
+          "scenario": "shopping",
+          "messages": [
+            {
+              "kind": "user_prompt",
+              "complete_and_in_order": true
+            },
+            {
+              "kind": "assistant_message",
+              "complete_and_in_order": true
+            },
+            {
+              "kind": "user_prompt",
+              "complete_and_in_order": true
+            },
+            {
+              "kind": "assistant_message",
+              "complete_and_in_order": true
+            }
+          ],
+          "requirements_fields": {
+            "goal": true,
+            "scope": true,
+            "exclusions": true,
+            "scenarios": true,
+            "acceptance_criteria": true,
+            "constraints": true,
+            "dependencies": true,
+            "assumptions": true,
+            "checklist": true,
+            "prerequisites": true
+          },
+          "backlog_ready_visible": true,
+          "misleading_confirmation_unavailable": true,
+          "misleading_waiting_unavailable": true
+        },
+        {
+          "scenario": "expenses",
+          "messages": [
+            {
+              "kind": "user_prompt",
+              "complete_and_in_order": true
+            },
+            {
+              "kind": "assistant_message",
+              "complete_and_in_order": true
+            },
+            {
+              "kind": "user_prompt",
+              "complete_and_in_order": true
+            },
+            {
+              "kind": "assistant_message",
+              "complete_and_in_order": true
+            }
+          ],
+          "requirements_fields": {
+            "goal": true,
+            "scope": true,
+            "exclusions": true,
+            "scenarios": true,
+            "acceptance_criteria": true,
+            "constraints": true,
+            "dependencies": true,
+            "assumptions": true,
+            "checklist": true,
+            "prerequisites": true
+          },
+          "backlog_ready_visible": true,
+          "misleading_confirmation_unavailable": true,
+          "misleading_waiting_unavailable": true
+        },
+        {
+          "scenario": "sparse",
+          "messages": [
+            {
+              "kind": "user_prompt",
+              "complete_and_in_order": true
+            },
+            {
+              "kind": "assistant_message",
+              "complete_and_in_order": true
+            },
+            {
+              "kind": "user_prompt",
+              "complete_and_in_order": true
+            },
+            {
+              "kind": "assistant_message",
+              "complete_and_in_order": true
+            },
+            {
+              "kind": "user_prompt",
+              "complete_and_in_order": true
+            },
+            {
+              "kind": "assistant_message",
+              "complete_and_in_order": true
+            },
+            {
+              "kind": "user_prompt",
+              "complete_and_in_order": true
+            },
+            {
+              "kind": "assistant_message",
+              "complete_and_in_order": true
+            }
+          ],
+          "requirements_fields": {
+            "goal": true,
+            "scope": true,
+            "exclusions": true,
+            "scenarios": true,
+            "acceptance_criteria": true,
+            "constraints": true,
+            "dependencies": true,
+            "assumptions": true,
+            "checklist": true,
+            "prerequisites": true
+          },
+          "backlog_ready_visible": true,
+          "misleading_confirmation_unavailable": true,
+          "misleading_waiting_unavailable": true
+        }
+      ],
+      "failed_or_blocked_requests": [],
+      "page_errors": [
+        {
+          "name": "ReferenceError",
+          "message": "hex is not defined",
+          "origin": "Auth /oidc/authorize",
+          "function": "normalizeBranding"
+        },
+        {
+          "name": "ReferenceError",
+          "message": "hex is not defined",
+          "origin": "Auth /oidc/authorize",
+          "function": "normalizeBranding"
+        }
+      ]
+    },
+    {
+      "engine": "firefox",
+      "version": "151.0",
+      "results": [
+        {
+          "scenario": "shopping",
+          "messages": [
+            {
+              "kind": "user_prompt",
+              "complete_and_in_order": true
+            },
+            {
+              "kind": "assistant_message",
+              "complete_and_in_order": true
+            },
+            {
+              "kind": "user_prompt",
+              "complete_and_in_order": true
+            },
+            {
+              "kind": "assistant_message",
+              "complete_and_in_order": true
+            }
+          ],
+          "requirements_fields": {
+            "goal": true,
+            "scope": true,
+            "exclusions": true,
+            "scenarios": true,
+            "acceptance_criteria": true,
+            "constraints": true,
+            "dependencies": true,
+            "assumptions": true,
+            "checklist": true,
+            "prerequisites": true
+          },
+          "backlog_ready_visible": true,
+          "misleading_confirmation_unavailable": true,
+          "misleading_waiting_unavailable": true
+        },
+        {
+          "scenario": "expenses",
+          "messages": [
+            {
+              "kind": "user_prompt",
+              "complete_and_in_order": true
+            },
+            {
+              "kind": "assistant_message",
+              "complete_and_in_order": true
+            },
+            {
+              "kind": "user_prompt",
+              "complete_and_in_order": true
+            },
+            {
+              "kind": "assistant_message",
+              "complete_and_in_order": true
+            }
+          ],
+          "requirements_fields": {
+            "goal": true,
+            "scope": true,
+            "exclusions": true,
+            "scenarios": true,
+            "acceptance_criteria": true,
+            "constraints": true,
+            "dependencies": true,
+            "assumptions": true,
+            "checklist": true,
+            "prerequisites": true
+          },
+          "backlog_ready_visible": true,
+          "misleading_confirmation_unavailable": true,
+          "misleading_waiting_unavailable": true
+        },
+        {
+          "scenario": "sparse",
+          "messages": [
+            {
+              "kind": "user_prompt",
+              "complete_and_in_order": true
+            },
+            {
+              "kind": "assistant_message",
+              "complete_and_in_order": true
+            },
+            {
+              "kind": "user_prompt",
+              "complete_and_in_order": true
+            },
+            {
+              "kind": "assistant_message",
+              "complete_and_in_order": true
+            },
+            {
+              "kind": "user_prompt",
+              "complete_and_in_order": true
+            },
+            {
+              "kind": "assistant_message",
+              "complete_and_in_order": true
+            },
+            {
+              "kind": "user_prompt",
+              "complete_and_in_order": true
+            },
+            {
+              "kind": "assistant_message",
+              "complete_and_in_order": true
+            }
+          ],
+          "requirements_fields": {
+            "goal": true,
+            "scope": true,
+            "exclusions": true,
+            "scenarios": true,
+            "acceptance_criteria": true,
+            "constraints": true,
+            "dependencies": true,
+            "assumptions": true,
+            "checklist": true,
+            "prerequisites": true
+          },
+          "backlog_ready_visible": true,
+          "misleading_confirmation_unavailable": true,
+          "misleading_waiting_unavailable": true
+        }
+      ],
+      "failed_or_blocked_requests": [],
+      "page_errors": [
+        {
+          "name": "ReferenceError",
+          "message": "hex is not defined",
+          "origin": "Auth /oidc/authorize",
+          "function": "normalizeBranding"
+        },
+        {
+          "name": "ReferenceError",
+          "message": "hex is not defined",
+          "origin": "Auth /oidc/authorize",
+          "function": "normalizeBranding"
+        }
+      ]
+    },
+    {
+      "engine": "webkit",
+      "version": "26.5",
+      "results": [
+        {
+          "scenario": "shopping",
+          "messages": [
+            {
+              "kind": "user_prompt",
+              "complete_and_in_order": true
+            },
+            {
+              "kind": "assistant_message",
+              "complete_and_in_order": true
+            },
+            {
+              "kind": "user_prompt",
+              "complete_and_in_order": true
+            },
+            {
+              "kind": "assistant_message",
+              "complete_and_in_order": true
+            }
+          ],
+          "requirements_fields": {
+            "goal": true,
+            "scope": true,
+            "exclusions": true,
+            "scenarios": true,
+            "acceptance_criteria": true,
+            "constraints": true,
+            "dependencies": true,
+            "assumptions": true,
+            "checklist": true,
+            "prerequisites": true
+          },
+          "backlog_ready_visible": true,
+          "misleading_confirmation_unavailable": true,
+          "misleading_waiting_unavailable": true
+        },
+        {
+          "scenario": "expenses",
+          "messages": [
+            {
+              "kind": "user_prompt",
+              "complete_and_in_order": true
+            },
+            {
+              "kind": "assistant_message",
+              "complete_and_in_order": true
+            },
+            {
+              "kind": "user_prompt",
+              "complete_and_in_order": true
+            },
+            {
+              "kind": "assistant_message",
+              "complete_and_in_order": true
+            }
+          ],
+          "requirements_fields": {
+            "goal": true,
+            "scope": true,
+            "exclusions": true,
+            "scenarios": true,
+            "acceptance_criteria": true,
+            "constraints": true,
+            "dependencies": true,
+            "assumptions": true,
+            "checklist": true,
+            "prerequisites": true
+          },
+          "backlog_ready_visible": true,
+          "misleading_confirmation_unavailable": true,
+          "misleading_waiting_unavailable": true
+        },
+        {
+          "scenario": "sparse",
+          "messages": [
+            {
+              "kind": "user_prompt",
+              "complete_and_in_order": true
+            },
+            {
+              "kind": "assistant_message",
+              "complete_and_in_order": true
+            },
+            {
+              "kind": "user_prompt",
+              "complete_and_in_order": true
+            },
+            {
+              "kind": "assistant_message",
+              "complete_and_in_order": true
+            },
+            {
+              "kind": "user_prompt",
+              "complete_and_in_order": true
+            },
+            {
+              "kind": "assistant_message",
+              "complete_and_in_order": true
+            },
+            {
+              "kind": "user_prompt",
+              "complete_and_in_order": true
+            },
+            {
+              "kind": "assistant_message",
+              "complete_and_in_order": true
+            }
+          ],
+          "requirements_fields": {
+            "goal": true,
+            "scope": true,
+            "exclusions": true,
+            "scenarios": true,
+            "acceptance_criteria": true,
+            "constraints": true,
+            "dependencies": true,
+            "assumptions": true,
+            "checklist": true,
+            "prerequisites": true
+          },
+          "backlog_ready_visible": true,
+          "misleading_confirmation_unavailable": true,
+          "misleading_waiting_unavailable": true
+        }
+      ],
+      "failed_or_blocked_requests": [],
+      "page_errors": [
+        {
+          "name": "ReferenceError",
+          "message": "Can't find variable: hex",
+          "origin": "Auth /oidc/authorize",
+          "function": "normalizeBranding"
+        },
+        {
+          "name": "ReferenceError",
+          "message": "Can't find variable: hex",
+          "origin": "Auth /oidc/authorize",
+          "function": "normalizeBranding"
+        }
+      ]
+    }
+  ]
+}

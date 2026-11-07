@@ -53,6 +53,7 @@ def pm(monkeypatch):
 
 
 def install_auth(monkeypatch, namespace_id, *, status=200, value=None, response_headers=None):
+    monkeypatch.setenv("PROJECT_WORKFLOW_MODE", "platform")
     monkeypatch.setenv("AUTH_ISSUER", ISSUER)
     monkeypatch.setenv("AUTH_INTERNAL_BASE_URL", ISSUER)
     monkeypatch.setenv("AUTH_SESSION_SECRET", "x" * 40)

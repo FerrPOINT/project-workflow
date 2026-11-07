@@ -43,10 +43,15 @@ class TestSupervisorFullContext:
 
     def test_report_template_is_the_generic_structured_envelope(self):
         ctx = supervisor.SupervisorEngine("RUN-1").get_full_context()
-        assert ctx["report_template"] == {"source": "", "result": {}, "unresolved": []}
-        ctx["report_template"]["result"]["document"] = "Profession-specific work"
-        ctx["report_template"]["unresolved"].append("Actual gap")
-        assert SupervisorContextBuilder._report_template() == {"source": "", "result": {}, "unresolved": []}
+        template = {"source": {"request": "", "decisions": []},
+                    "result": {"artifacts": [], "assumptions": []}, "unresolved": []}
+        assert ctx["report_template"] == template
+        ctx["report_template"]["source"]["decisions"].append({"subject": "Access", "value": "Shared"})
+        ctx["report_template"]["result"]["artifacts"].append(
+            {"name": "document", "content": "Profession-specific work"},
+        )
+        ctx["report_template"]["unresolved"].append({"kind": "question", "text": "Actual gap"})
+        assert SupervisorContextBuilder._report_template() == template
 
     def test_all_phases_present(self):
         engine = supervisor.SupervisorEngine("RUN-1")

@@ -8,6 +8,13 @@ ROOT = Path(__file__).resolve().parents[1]
 README_VALIDATOR = ROOT / "scripts" / "verify_readme.py"
 
 
+def test_native_schema_is_not_a_selectable_compose_setting():
+    from project_workflow.config import Settings
+
+    assert "OPENAI_EVALUATOR_RESPONSE_FORMAT" not in Settings.model_fields
+    assert "OPENAI_EVALUATOR_RESPONSE_FORMAT" not in (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+
+
 def _load_readme_validator():
     spec = importlib.util.spec_from_file_location("verify_readme", README_VALIDATOR)
     assert spec is not None
@@ -84,7 +91,7 @@ def test_hosted_ci_covers_quality_and_compose_readiness() -> None:
 
 
 def test_quality_gate_supplies_qualified_cli_source_independently_of_sdk() -> None:
-    revision = "278be4a2eb0b3ce49dac2cd14ea7e2871f2ffe1d"
+    revision = "25b0b2aafaa9feaa854ca86f11043ff825842229"
     workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
     script = (ROOT / "scripts/quality.ps1").read_text(encoding="utf-8")
     guide = (ROOT / "docs/quality-gate.md").read_text(encoding="utf-8")
@@ -101,15 +108,19 @@ def test_quality_gate_supplies_qualified_cli_source_independently_of_sdk() -> No
     assert "test_configured_cli_transport.py" in guide
 
 
-def test_readme_cli_examples_use_configured_wrapper_commands() -> None:
+def test_readme_cli_examples_use_explicit_http_modes_and_typed_stdin() -> None:
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
 
-    assert "workflow-run step --task RUN-123" in readme
-    assert "workflow-run history --task RUN-123" in readme
-    assert "workflow-qa step --task RUN-42" in readme
-    assert "workflow-dev history --task RUN-42" in readme
-    assert "project-workflow step --task" not in readme
-    assert "project-workflow history --task" not in readme
+    assert "PROJECT_WORKFLOW_MODE=standalone" in readme
+    assert "PROJECT_WORKFLOW_MODE=platform" in readme
+    assert "PROJECT_WORKFLOW_API_TOKEN=" in readme
+    assert "project-workflow --json step --task LOC-1" in readme
+    assert "--report - --operation-key report-LOC-1-1 --expected-version 1" in readme
+    assert "project-workflow --json history --task LOC-1 --operation-key report-LOC-1-1" in readme
+    assert '"source":{"request":' in readme and '"decisions":[]' in readme
+    assert '"result":{"artifacts":' in readme and '"unresolved":[]' in readme
+    assert 'export DATABASE_URL=' not in readme[readme.index("## 🖥️ CLI"):readme.index('<a name="ui">')]
+    assert 'export SDLC_API_TOKEN=' not in readme
 
 
 def test_compose_and_env_example_forward_runtime_settings() -> None:
@@ -118,7 +129,7 @@ def test_compose_and_env_example_forward_runtime_settings() -> None:
 
     assert "OPENAI_MODEL: ${OPENAI_MODEL:-app-test}" in compose
     assert (
-        "PLATFORM_SERVICES_URL: ${PLATFORM_SERVICES_URL:-http://host.docker.internal:7771/api/v1/runtime/services}"
+        "PLATFORM_SERVICES_URL: ${PLATFORM_SERVICES_URL:-}"
     ) in compose
     for key in ("PROJECT_WORKFLOW_BASE_READER_SUBJECTS_JSON", "PROJECT_WORKFLOW_CONFIGURED_TRACKER_URL",
                 "PROJECT_WORKFLOW_CONFIGURED_TRACKER_READ_TOKEN"):

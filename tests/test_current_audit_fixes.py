@@ -238,7 +238,8 @@ def test_request_uow_is_closed_and_rolled_back_on_error(monkeypatch: pytest.Monk
     async def fail() -> None:
         raise RuntimeError("boom")
 
-    with TestClient(application, raise_server_exceptions=False) as client:
+    with TestClient(application, base_url="http://127.0.0.1", client=("127.0.0.1", 50000),
+                    raise_server_exceptions=False) as client:
         response = client.get("/__test_failure")
 
     assert response.status_code == 500

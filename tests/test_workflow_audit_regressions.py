@@ -1,18 +1,52 @@
 """Behavioral checks for restrictions unrelated to the execution contract."""
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 
+from project_workflow import config
 from project_workflow.application.project import ProjectService
 from project_workflow.application.workflow import WorkflowService
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.interfaces.ui.app import create_app
+from tests._human_access_helpers import human_identity, human_token
 from tests.test_managed_catalog_hardening import (
     _bootstrap_global_managed_catalog,
     _install_runtime_credentials,
 )
 
 pytestmark = pytest.mark.unit
+
+
+@pytest.fixture
+def platform_client(monkeypatch):
+    issuer = "http://auth.fixture.invalid"
+    monkeypatch.setenv("PROJECT_WORKFLOW_MODE", "platform")
+    monkeypatch.setenv("AUTH_ISSUER", issuer)
+    monkeypatch.setenv("AUTH_INTERNAL_BASE_URL", issuer)
+    monkeypatch.setenv("AUTH_PUBLIC_ORIGIN", "http://127.0.0.1")
+    monkeypatch.setenv("AUTH_SESSION_SECRET", "test-only-secret-with-at-least-thirty-two-bytes")
+    config.get_settings.cache_clear()
+    original_client = httpx.AsyncClient
+    authorization = "Bearer " + human_token("administrator", issuer=issuer)
+
+    def identity(request):
+        assert str(request.url) == issuer + "/auth/me"
+        assert request.headers["authorization"] == authorization
+        return httpx.Response(200, json=human_identity("administrator", role="admin"))
+
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: original_client(
+        transport=httpx.MockTransport(identity), **kwargs,
+    ))
+    return TestClient(create_app(), base_url="http://127.0.0.1", client=("127.0.0.1", 50000),
+                      headers={"Authorization": authorization})
+
+
+@pytest.fixture
+def standalone_mode(monkeypatch):
+    monkeypatch.setenv("PROJECT_WORKFLOW_MODE", "standalone")
+    monkeypatch.setenv("PROJECT_WORKFLOW_STANDALONE_CONTAINER_NETWORK", "false")
+    config.get_settings.cache_clear()
 
 
 def _current_runtime_with_retained_catalog(monkeypatch, tmp_path):
@@ -30,11 +64,11 @@ def _current_runtime_with_retained_catalog(monkeypatch, tmp_path):
     "theme", "other_workflow", "namespace_caption", "workflow_caption", "mode_caption",
     "other_role_instruction",
 ])
-def test_unrelated_editor_changes_do_not_disable_runtime_discovery(monkeypatch, tmp_path, edit):
+def test_unrelated_editor_changes_do_not_disable_runtime_discovery(monkeypatch, tmp_path, platform_client, edit):
     runtime_token, catalog_token = _current_runtime_with_retained_catalog(monkeypatch, tmp_path)
     monkeypatch.setattr("project_workflow.infrastructure.db.session.schema_is_ready", lambda _engine: True)
 
-    with TestClient(create_app()) as client:
+    with platform_client as client:
         with SAUnitOfWork() as uow:
             if edit == "theme":
                 namespace = uow.projects.get_by_cli_command("workflow-developer")
@@ -78,11 +112,9 @@ def test_unrelated_editor_changes_do_not_disable_runtime_discovery(monkeypatch, 
 
 
 @pytest.mark.parametrize("path", ["/api/workflows", "/workflows"])
-def test_blocked_catalog_read_does_not_block_other_http_requests(monkeypatch, path):
+def test_blocked_catalog_read_does_not_block_other_http_requests(monkeypatch, standalone_mode, path):
     import asyncio
     from threading import Event
-
-    import httpx
 
     from project_workflow.interfaces.ui import services
     from project_workflow.interfaces.ui.routes import pages
@@ -100,7 +132,10 @@ def test_blocked_catalog_read_does_not_block_other_http_requests(monkeypatch, pa
     monkeypatch.setattr("project_workflow.infrastructure.db.session.schema_is_ready", lambda _engine: True)
 
     async def exercise():
-        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=create_app()), base_url="http://test") as client:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=create_app(), client=("127.0.0.1", 50000)),
+            base_url="http://127.0.0.1",
+        ) as client:
             pending = asyncio.create_task(client.get(path))
             try:
                 assert await asyncio.to_thread(entered.wait, 3)
@@ -115,7 +150,7 @@ def test_blocked_catalog_read_does_not_block_other_http_requests(monkeypatch, pa
 
 
 @pytest.mark.parametrize("edit", ["order", "parallel", "new_phase"])
-def test_retained_phase_graph_edits_do_not_disable_current_runtime(monkeypatch, tmp_path, edit):
+def test_retained_phase_graph_edits_do_not_disable_current_runtime(monkeypatch, tmp_path, platform_client, edit):
     runtime_token, _ = _current_runtime_with_retained_catalog(monkeypatch, tmp_path)
     monkeypatch.setattr("project_workflow.infrastructure.db.session.schema_is_ready", lambda _engine: True)
     with SAUnitOfWork() as uow:
@@ -124,7 +159,7 @@ def test_retained_phase_graph_edits_do_not_disable_current_runtime(monkeypatch, 
         phases = uow.phases.list(namespace.workflow_id, mode_id=mode.id)
         ids = [phase.id for phase in phases]
 
-    with TestClient(create_app()) as client:
+    with platform_client as client:
         if edit == "order":
             changed = client.put("/api/phases/order", json={
                 "orders": [{"phase_id": phase_id, "phase_order": position}
@@ -146,11 +181,9 @@ def test_retained_phase_graph_edits_do_not_disable_current_runtime(monkeypatch, 
         assert capabilities.status_code == 200, capabilities.text
 
 
-def test_blocked_health_probe_does_not_block_other_http_requests(monkeypatch):
+def test_blocked_health_probe_does_not_block_other_http_requests(monkeypatch, standalone_mode):
     import asyncio
     from threading import Event
-
-    import httpx
 
     entered, release, timed_out = Event(), Event(), Event()
 
@@ -163,7 +196,10 @@ def test_blocked_health_probe_does_not_block_other_http_requests(monkeypatch):
     monkeypatch.setattr("project_workflow.infrastructure.db.session.schema_is_ready", blocked_schema_check)
 
     async def exercise():
-        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=create_app()), base_url="http://test") as client:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=create_app(), client=("127.0.0.1", 50000)),
+            base_url="http://127.0.0.1",
+        ) as client:
             pending = asyncio.create_task(client.get("/health"))
             try:
                 assert await asyncio.to_thread(entered.wait, 3)
@@ -178,33 +214,61 @@ def test_blocked_health_probe_does_not_block_other_http_requests(monkeypatch):
 
 
 @pytest.mark.parametrize("damage", ["foreign_skill", "namespace_binding", "invalid_graph"])
-def test_execution_contract_and_directory_links_remain_checked(monkeypatch, tmp_path, damage):
-    _bootstrap_global_managed_catalog()
+def test_execution_contract_and_directory_links_remain_checked(monkeypatch, tmp_path, platform_client, damage):
+    from project_workflow.infrastructure.db.single_task_catalog import ensure_single_task_catalog
+
+    monkeypatch.setattr(config, "CATALOG_VARIANT", "single-task-v1")
+    with SAUnitOfWork() as uow:
+        installation = ensure_single_task_catalog(uow)
+        uow.commit()
+    binding = next(item for item in installation.bindings if item.role_key == "developer")
     runtime_token, catalog_token = _install_runtime_credentials(monkeypatch, tmp_path)
     monkeypatch.setattr("project_workflow.infrastructure.db.session.schema_is_ready", lambda _engine: True)
-    with SAUnitOfWork() as uow:
-        namespace = uow.projects.get_by_cli_command("workflow-developer")
-        if damage == "invalid_graph":
-            mode = uow.workflows.list_modes(namespace.workflow_id)[0]
-            phase = uow.phases.list(namespace.workflow_id, mode_id=mode.id)[0]
-            updates = {"execution_type": "parallel", "parallel_with_phase_id": phase.id}
-            uow.phases.update(phase.id, updates)
-        elif damage == "foreign_skill":
-            from project_workflow.application.instruction_service import InstructionService
+    with platform_client as client:
+        runtime_headers = {"Authorization": f"Bearer {runtime_token}"}
+        catalog_headers = {"Authorization": f"Bearer {catalog_token}"}
+        baseline = client.get("/internal/runtime/capabilities", headers=runtime_headers)
+        assert baseline.status_code == 200, baseline.text
+        assert baseline.json()["readiness"] == {"service": "ready", "schema": "ready", "catalog": "ready"}
+        assert baseline.json()["role_key"] == binding.role_key
+        assert baseline.json()["instruction_profile"] == "single-task-v1"
+        assert baseline.json()["instruction_manifest_sha256"] == installation.instruction_manifest_sha256
+        assert baseline.json()["workflow_catalog_sha256"] == installation.workflow_catalog_sha256
+        directory = client.get("/internal/runtime/catalog", headers=catalog_headers)
+        assert directory.status_code == 200, directory.text
+        assert {item["id"] for item in directory.json()["workflows"]} == {
+            int(item.workflow_id) for item in installation.bindings
+        }
+        assert {item["id"] for item in directory.json()["namespaces"]} == {
+            int(item.namespace_id) for item in installation.bindings
+        }
 
-            mode = uow.workflows.list_modes(namespace.workflow_id)[0]
-            phase = uow.phases.list(namespace.workflow_id, mode_id=mode.id)[0]
-            instruction = uow.phase_instructions.list(phase.id)[0]
-            InstructionService(uow).update_instruction(instruction["id"], {"skills": ["unavailable-role-skill"]})
-        else:
-            other = uow.projects.get_by_cli_command("workflow-architect")
-            uow.projects.update(namespace.id, {"workflow_id": other.workflow_id})
-    with TestClient(create_app()) as client:
+        # Corrupt persisted active rows directly; public editor guards remain unchanged.
+        with SAUnitOfWork() as uow:
+            mode = binding.modes[0]
+            phase_id = int(mode.phase_ids[0])
+            if damage == "invalid_graph":
+                phases = uow.phases.list(int(binding.workflow_id), mode_id=int(mode.mode_id))
+                uow.phases.update(phase_id, {"phase_order": max(phase.phase_order for phase in phases) + 1})
+            elif damage == "foreign_skill":
+                instruction = uow.phase_instructions.list(phase_id)[0]
+                uow.phase_instructions.update(instruction["id"], {"skills": ["unavailable-role-skill"]})
+            else:
+                other = next(item for item in installation.bindings if item.role_key == "architect")
+                uow.projects.update(int(binding.namespace_id), {"workflow_id": int(other.workflow_id)})
+            uow.commit()
+
         capabilities = client.get(
-            "/internal/runtime/capabilities", headers={"Authorization": f"Bearer {runtime_token}"},
+            "/internal/runtime/capabilities", headers=runtime_headers,
         )
-        assert capabilities.status_code == 503
+        assert capabilities.status_code == 503, capabilities.text
+        assert capabilities.json()["error_code"] == "runtime-capabilities-not-ready"
+        assert capabilities.json()["readiness"] == {
+            "service": "not_ready", "schema": "ready", "catalog": "not_ready",
+        }
+        assert "capabilities" not in capabilities.json()
         catalog = client.get(
-            "/internal/runtime/catalog", headers={"Authorization": f"Bearer {catalog_token}"},
+            "/internal/runtime/catalog", headers=catalog_headers,
         )
-        assert catalog.status_code == (503 if damage == "namespace_binding" else 200)
+        assert catalog.status_code == 503, catalog.text
+        assert catalog.json() == {"ok": False, "error": "Single-task installation missing or divergent"}

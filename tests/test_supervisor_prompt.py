@@ -161,7 +161,26 @@ def test_prompt_delegated():
     assert "профиль запуска: code_profile" in result
 
 
-def patch_contract_builder(delegate_agent=None, hermes_profile=None):
+@pytest.mark.parametrize("execution_type", ["sync", "parallel"])
+def test_current_cli_reads_declared_skill_files_before_work(execution_type):
+    phase = _phase("p1", execution_type)
+    with patch_contract_builder(skills=["project-workflow-executor", "tracker-operator"]):
+        result = format_current_phase_instructions("T-1", {"p1": phase}, [], "p1", _ctx())
+    assert result.count("phase_contract.skills") == 1
+    assert "executor's configured skills directory" in result
+    assert "HERMES_HOME" not in result
+    assert result.startswith("Before doing this phase")
+    assert "do not substitute another name" in result
+
+
+def test_current_cli_does_not_invent_a_skill_requirement():
+    phase = _phase("p1")
+    with patch_contract_builder():
+        result = format_current_phase_instructions("T-1", {"p1": phase}, [], "p1", _ctx())
+    assert "phase_contract.skills" not in result
+
+
+def patch_contract_builder(delegate_agent=None, hermes_profile=None, skills=None):
     from unittest.mock import MagicMock, patch
 
     from project_workflow.supervisor import prompt as prompt_mod
@@ -177,6 +196,7 @@ def patch_contract_builder(delegate_agent=None, hermes_profile=None):
             "required_evidence": ["e1"],
             "delegate_agent": delegate_agent,
             "hermes_profile": hermes_profile,
+            "skills": skills or [],
         }
         cb.build.return_value = contract
         group_contract = MagicMock()
@@ -187,6 +207,7 @@ def patch_contract_builder(delegate_agent=None, hermes_profile=None):
             "instructions": ["i1"],
             "required_checks": ["c1"],
             "required_evidence": ["e1"],
+            "skills": skills or [],
         }
         cb.build_parallel.return_value = group_contract
         cb.get_parallel_group.return_value = []

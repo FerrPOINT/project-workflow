@@ -6,6 +6,10 @@ checks и evidence семи профессий для одной Tracker зад�
 [Полный процесс аналитика](analyst-workflow.md). Исходный baseline Workflow:
 `6a50985841daa22aa6513868548a5d0b897fac44`.
 
+Текущий execution-контракт — [единый CLI/API](configured-cli-v1.md).
+Условия bootstrap и source-квалификации ниже относятся к своим историческим
+пакетам; текущие установка и приёмка ведутся в [диагнозе](ADVISOR_DIAGNOSIS_20261101.md).
+
 Source-only чтение подготовленных инструкций (не точка активации):
 
 ```python
@@ -17,7 +21,8 @@ professions = load_single_task_professions()
 Исходный loader остаётся source-only. Реальная opt-in установка использует отдельные
 profile artifacts, existing bootstrap и persisted readback:
 [single-task installation](single-task-installation.md). Установка не разрешает live
-исполнение: Tracker registration и assignment DB adaptation остаются pending parent.
+исполнение: в исходном пакете Tracker registration и assignment DB adaptation
+оставались pending parent, что не описывает статус нынешней установки.
 Результат этого loader нельзя выдавать за installed binding.
 
 Функция возвращает независимые определения профессий с существующими workflow keys,
@@ -26,9 +31,9 @@ mode keys, phase codes, namespace/profile и именами skills. Каждый
 default инструкций для выбранного preset, а не установка в runtime. Функция ничего
 не пишет в БД, не запускает агентов и не модифицирует Hermes.
 
-## Совместимая Активация
+## Исторический Пакет Совместимой Активации
 
-Актуальное предложение интегратору: отдельные namespaces/workflows/launch profiles
+Исходное предложение интегратору: отдельные namespaces/workflows/launch profiles
 семейства `single-task-v1`, catalog version 1 внутри нового семейства, явный opt-in
 через реализованные bootstrap и installed readback, без live dispatch. Прежнее предложение переиспользовать
 legacy identities отозвано: Tracker связывает их со старым package и metadata.
@@ -46,14 +51,22 @@ Preset не заявляет, что новые инструкции опубл�
 исполнителя. Интегратор должен сохранить старые назначения и receipts и выбирать
 новый preset явно, без перепривязки history к новым инструкциям.
 
+## Текущий Путь Исполнителя
+
 Обычный terminal вызывает установленные `project-workflow`, `task-tracker`,
-`cicd-cli`. Первое рабочее действие каждого агента — Workflow step без report
-в назначенном namespace; только затем читаются Tracker и рабочие входы.
-Workflow task key и canonical Tracker task UUID различаются; mapping выдаёт launcher.
-Если выдан scoped runtime context, применяются существующие runtime flags без
-понижения авторизации. Это не требование использовать Fleet и не добавление нового
-протокола admission. Подготовка назначения/namespace и разрешённой identity
-остаётся зависимостью интегратора.
+`cicd-cli`. В platform агент сначала читает назначение через Tracker context,
+откуда берёт server-issued workflow_task_key, затем получает текущую инструкцию
+через `project-workflow --json step --task <workflow-task-key>`.
+Workflow key и Tracker task UUID не взаимозаменяемы. Отчёт передаётся typed JSON
+на stdin `step --report -`, со стабильным operation key и текущей Workflow version,
+через HTTP API; прежние runtime flags не являются альтернативным исполнением.
+Standalone использует явный `step --start` без обязательных Fleet/Auth/Tracker.
+
+Канонический Base задаёт общие инструкции/skills работы с инструментами и
+профессиональные инструкции/skills роли. Отдельно настраиваемая публикация Workflow
+задаёт порядок фаз, их текущие instructions/checks/evidence. Ни SOUL, ни skills
+не копируют этот маршрут и не выдают права; см. [границы](architecture.md#ответственность).
+Исходники и совпадение имён skills не доказывают materialization или live-приёмку.
 
 ## Роли И Передачи
 

@@ -1,0 +1,30 @@
+{
+  "schema": "advisor-controlled-experiment-v1",
+  "baseline_commit": "b8b3d7f0d566ed46a55771831d3504cd39c1dba2",
+  "hypothesis": "The prompt does not distinguish an unresolved material requirement from a routine compatible implementation or usage detail. Clarify this boundary without changing phase criteria, reports or model settings.",
+  "changed_factor": "One universal instruction block in the system prompt; policy v18",
+  "unchanged": ["criteria", "report", "previously_covered", "parser", "app-test", "high", "4000 response tokens", "1200 second timeout", "temperature 0.1", "json_object"],
+  "baseline_evidence": "advisor-v18-checkpoints-20261104.json slots 3 and 5 (old representations)",
+  "cases": [
+    {
+      "id": "actual-pm-190",
+      "expected_verdict": "PARTIAL",
+      "expected_missing": ["C3", "E2"],
+      "reason_basis": "Source lacks the owner's Closed status decision used by the document; the refusal must identify that actual gap, not demand separate approval of manual use."
+    },
+    {
+      "id": "actual-pm-191",
+      "expected_verdict": "PASS",
+      "expected_missing": [],
+      "reason_basis": "Owner source supplies the allowed and initial statuses. A personal manually maintained list without integrations does not require a new owner choice solely because the document describes manual use as an assumption."
+    }
+  ],
+  "campaign_budget": {
+    "maximum_http_calls": 48,
+    "already_attempted": 6,
+    "this_experiment_maximum": 2,
+    "remaining_if_both_called": 40,
+    "allocation": "Use the two unused CP1 slots; CP2 4 and final qualification 36 remain reserved."
+  },
+  "acceptance": "Both criterion classifications and reasons must match the predeclared basis. Compare the exact payload with saved baseline before calling. No retries; preserve an unknown outcome and stop this experiment on a mismatch. Matching marks alone do not qualify the prompt."
+}

@@ -20,7 +20,7 @@ from project_workflow.domain.configured_cli import (
     ConfiguredTerminalResponse,
 )
 from project_workflow.domain.exceptions import ConflictError, NotFoundError
-from project_workflow.domain.runtime_assignment import canonical_json, payload_sha256
+from project_workflow.domain.runtime_assignment import MANAGED_WORKFLOW_KEYS, canonical_json, payload_sha256
 from project_workflow.domain.single_task_profile import CATALOG_SHA256, MANIFEST_SHA256
 from project_workflow.infrastructure import configured_cli_tracker, namespace_auth
 from project_workflow.infrastructure.db import models as m
@@ -54,6 +54,8 @@ def _catalog(uow: SAUnitOfWork, namespace_id: int, *, workflow_key: str | None =
     if (workflow is None or workflow.id is None or workflow.key is None
             or execution and not uow.workflows.belongs_to_profession(workflow.id, namespace_id)):
         raise ConflictError("Profession workflow changed during admission")
+    if execution and workflow.key in MANAGED_WORKFLOW_KEYS:
+        raise ConflictError("Retired catalog is an archive, not an executable workflow")
     mode = uow.workflows.get_mode_by_key(workflow.id, mode_key) if mode_key is not None else None
     if mode_key is not None and mode is None:
         raise ConflictError("Installed profession mode required")
@@ -129,42 +131,10 @@ def _row(uow: SAUnitOfWork, task: str, namespace_id: int, *,
                                                                execution_ref=execution_ref, execution=execution))
 
 
-def _legacy_cursor(uow: SAUnitOfWork, stored: tuple[Any, Any, dict[str, Any], Any]) -> dict[str, Any]:
-    """Decode the retired assignment only for history/CAS adoption, never execution.
-
-    Tracker proves the new current assignment. Native quiescence belongs to the
-    cutover/Fleet gate, not to a second Workflow execution/bind protocol.
-    """
-    current, assignment, payload, workflow = stored
-    mode = uow.workflows.get_mode(assignment.mode_id, workflow.id)
-    if (payload.get("interaction_protocol") is not None
-            or not isinstance(payload.get("single_task_context"), dict)
-            or assignment.payload_sha256 != payload_sha256(payload)
-            or payload.get("task_key") != current.task_key or payload.get("project_id") != current.project_id
-            or payload.get("workflow_id") != current.workflow_id or payload.get("workflow_key") != workflow.key
-            or payload.get("business_task_ref") != assignment.business_task_ref
-            or payload.get("root_task_ref") != assignment.root_task_ref
-            or assignment.business_task_ref != assignment.root_task_ref
-            or payload.get("role_key") != assignment.role_key
-            or workflow.key != f"single-task-v1:{assignment.role_key}"
-            or payload.get("assignment_ref") != assignment.assignment_ref
-            or mode is None or payload.get("mode_key") != mode.key):
-        raise ConflictError("Unrecognized historical single-task assignment")
-    last = _records(uow, current.id, limit=1)
-    # Both terms are monotonic retained Workflow ledger coordinates. This CAS
-    # token is unrelated to Tracker's fencing counter or the old native fence.
-    version = current.assignment_revision + (last[0].id if last else 0)
-    return {"interaction_protocol": PROTOCOL, "task": current.task_key, "namespace_id": current.project_id,
-            "version": version, "legacy_read_only": True, "records": []}
-
-
 def enroll(uow: SAUnitOfWork, request: ConfiguredAssignment) -> dict[str, Any]:
     from project_workflow.interfaces.cli.core import _require_valid_key
 
     _require_valid_key(request.task)
-    project, workflow, mode = _catalog(uow, request.namespace_id,
-                                     workflow_key=request.workflow_key, workflow_id=request.workflow_id,
-                                     mode_key=request.mode_key, execution=True)
     request_data = request.model_dump(mode="json", exclude_none=True)
     saved = uow.session.scalar(select(m.TaskRuntimeAssignment).where(
         m.TaskRuntimeAssignment.operation_key == request.operation_key,
@@ -180,7 +150,10 @@ def enroll(uow: SAUnitOfWork, request: ConfiguredAssignment) -> dict[str, Any]:
         if not isinstance(original, dict):
             raise ConflictError("Historical enrollment has no original cursor; use history readback")
         return original
-    configured_cli_tracker.assignment(request_data)
+    project, workflow, mode = _catalog(uow, request.namespace_id,
+                                     workflow_key=request.workflow_key, workflow_id=request.workflow_id,
+                                     mode_key=request.mode_key, execution=True)
+    configured_cli_tracker.assignment(request_data, purpose="initial_read")
     phases = list(uow.phases.list(workflow.id, mode_id=mode.id))
     if not phases:
         raise ConflictError("Assigned mode has no initial phase")
@@ -206,24 +179,15 @@ def enroll(uow: SAUnitOfWork, request: ConfiguredAssignment) -> dict[str, Any]:
             "status": "active", "assignment_operation_key": request.operation_key, "assignment_revision": revision})
     else:
         stored = _stored_row(uow, request.task, request.namespace_id)
-        legacy = stored[2].get("interaction_protocol") != PROTOCOL
-        if legacy:
-            current, assignment, old, _ = stored
-            current_version = _legacy_cursor(uow, stored)["version"]
-            accepted = {"assignment_ref": assignment.assignment_ref, "business_task_ref": assignment.business_task_ref,
-                        "role_key": assignment.role_key}
-        else:
-            current, _, old = _configured_row(uow, request.task, request.namespace_id, stored)
-            accepted = old["request"]
-            current_version = version(uow, current.id, old)
-            if current.status != "done" and workflow.key.startswith("single-task-v1:"):
-                pinned = uow.workflows.get_mode(current.mode_id, workflow.id)
-                if pinned is not None and pinned.key == request.mode_key:
-                    # Recovery of an unfinished cycle retains its published
-                    # snapshot; publication only selects new tasks/cycles.
-                    mode = pinned
+        current, _, old = _configured_row(uow, request.task, request.namespace_id, stored)
+        accepted = old["request"]
+        current_version = version(uow, current.id, old)
+        if current.status != "done" and workflow.key.startswith("single-task-v1:"):
+            pinned = uow.workflows.get_mode(current.mode_id, workflow.id)
+            if pinned is not None and pinned.key == request.mode_key:
+                mode = pinned
         if (request.expected_version != current_version
-                or not legacy and request.assignment_version <= accepted["assignment_version"]
+                or request.assignment_version <= accepted["assignment_version"]
                 or request.assignment_ref == accepted["assignment_ref"]
                 or request.business_task_ref != accepted["business_task_ref"]
                 or request.role_key != accepted["role_key"]
@@ -329,14 +293,15 @@ def _principal(authorization: str | None, *, write: bool) -> namespace_auth.Name
 
 
 def _assignment(principal: namespace_auth.NamespacePrincipal, payload: dict[str, Any], *,
-                allow_completed_read: bool = False) -> None:
+                allow_completed_read: bool = False,
+                purpose: configured_cli_tracker.AssignmentPurpose = "current") -> None:
     if principal.subject != payload["request"]["machine_subject"]:
         raise namespace_auth.NamespaceAuthError(403)
-    configured_cli_tracker.assignment(payload["request"], allow_completed_read=allow_completed_read)
+    configured_cli_tracker.assignment(payload["request"], allow_completed_read=allow_completed_read, purpose=purpose)
 
 
 def authorize(authorization: str | None, payload: dict[str, Any], *, write: bool) -> None:
-    _assignment(_principal(authorization, write=write), payload)
+    _assignment(_principal(authorization, write=write), payload, purpose="report" if write else "current")
 
 
 def _replay(uow: SAUnitOfWork, fence: ConfiguredCliFence) -> dict[str, Any] | None:
@@ -361,7 +326,12 @@ def step(uow: SAUnitOfWork, command: ConfiguredStep, authorization: str | None) 
 
     principal = _principal(authorization, write=command.report is not None)
     task, assignment, payload = _row(uow, command.task, command.namespace_id, execution=True)
-    _assignment(principal, payload, allow_completed_read=task.status == "done")
+    purpose: configured_cli_tracker.AssignmentPurpose = "current"
+    if command.report is not None and task.status != "done":
+        purpose = "report"
+    elif task.status == "active" and version(uow, task.id, payload) == payload["initial_version"]:
+        purpose = "initial_read"
+    _assignment(principal, payload, allow_completed_read=task.status == "done", purpose=purpose)
     fence = ConfiguredCliFence(task.id, task.project_id, task.workflow_id, task.mode_id, task.cycle_number,
         task.assignment_revision, task.assignment_operation_key, payload_sha256(payload), task.current_phase_id,
         task.status, version(uow, task.id, payload), command, payload, authorization or "")
@@ -492,7 +462,8 @@ def history(uow: SAUnitOfWork, task: str, namespace_id: int, authorization: str 
     if stored[2].get("interaction_protocol") != PROTOCOL:
         if trusted is None or trusted != stored[1].role_key:
             raise namespace_auth.NamespaceAuthError(403)
-        result = _legacy_cursor(uow, stored)
+        result = {"interaction_protocol": PROTOCOL, "task": stored[0].task_key,
+                  "namespace_id": namespace_id, "archived": True}
         if assignment_operation_key is not None:
             raise NotFoundError("Configured enrollment operation not found")
         if operation_key is not None or execution_ref is not None:

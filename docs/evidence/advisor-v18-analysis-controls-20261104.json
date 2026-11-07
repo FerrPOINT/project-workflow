@@ -1,0 +1,197 @@
+{
+  "schema": "advisor-v18-analysis-controls-v1",
+  "status": "prospective_labels_frozen_not_run",
+  "date": "2026-11-04",
+  "source": {
+    "checkpoint": "b4d55a8f4a07a86e3beb8c139235afcd3f962536",
+    "frozen_cases": {"file": "docs/evidence/clean-workflow-case-labels-20261104.json", "sha256": "0fbc357de5ec2f26d1636f319025c5f20aab61250fc396be353537e0475eefce", "immutable": true},
+    "original_gold": {"file": "docs/evidence/advisor-v16-case-labels-20261103.json", "sha256": "1ef1f4590b1242a35c6423189c8774ed844e15fec98821248d7c9631d0bfdeb3", "immutable": true},
+    "reviewed_controls": {"file": "docs/evidence/advisor-v18-reviewed-controls-20261104.json", "sha256": "d3a819128866304e617c7c63fe5baa7df5be2b0f4230b05aa1edeaa613dab214", "immutable": true}
+  },
+  "settings": {
+    "model": "app-test", "reasoning_effort": "high", "max_tokens": 4000, "temperature": 0.1, "timeout": 1200,
+    "response_format": {"type": "json_object"}, "max_model_calls_per_evaluation": 1,
+    "format_retry": false, "transport_retry": false, "semantic_retry": false
+  },
+  "execution_binding": {
+    "policy": "supervisor-evaluator-v18",
+    "system_sha256": "95f558095cd62b01deed27e3bda9e53f71b5229e8a14ab3ab144e72b438c9583",
+    "llm_file_sha256": "17531a6456dddac071bb0d78cef30426a96f0d1f5048140cef35203fc6de4e54",
+    "input": "Build user_payload with the production PromptBuilder, each case's exact criteria, report, previous_reports and previous_assessments. Transmit no manifest metadata.",
+    "stop": "Stop on any technical error or unexpected classification; one provider call per new slot, no repairs or retries. No calls authorized by this manifest."
+  },
+  "quarantine": [
+    {
+      "id": "analyst-role-work-complete", "status": "invalid_positive_gold_quarantined_not_relabelled",
+      "original_expected_verdict": "PASS", "old_labels_preserved": true,
+      "labels_sha256": "72965850d72d55cd4f3d0e94115105b49ac466422255e2658e73af2b50fb5d80",
+      "origin_user_payload_sha256": "7e09bc8c4c9749ed9d1006374e2d1a99dd6b2ccb1bd93e75a800a266823e994c",
+      "reason": "The source limits requirements to title validation and initial status. result.assumptions_permissions_and_failures adds two-employee access and storage-failure/input-retention policy while claiming no assumptions. C2=true is not a valid positive oracle. Do not add owner facts to the archived report."
+    },
+    {
+      "id": "incremental-remaining-analysis-complete", "status": "invalid_positive_gold_quarantined_not_relabelled",
+      "original_expected_verdict": "PASS", "old_labels_preserved": true,
+      "labels_sha256": "6d2172ef020e55b75fbb1a49ed9c2a4b2b30dee22a4d4c520aedc96487d445ef",
+      "origin_user_payload_sha256": "c77c5b2a034a78e9f01d53e75d81859b2942e8ca527a8743ccfbe1a5e2b7846e",
+      "reason": "The supplement repeats the unsupported permission/failure policy; its added parent report is the same invalid positive Analyst fixture. Prior marks do not supply missing source facts. The old reason saying the matrix is not transmitted also does not describe the current supplied history."
+    }
+  ],
+  "cases": [
+    {
+      "id": "analyst-explicit-source-complete",
+      "role": "analyst", "mode": "analysis", "phase": "AN-ANALYSIS-02", "phase_name": "Role work on one task",
+      "allowed_verdicts": ["PASS", "PARTIAL", "BLOCKED"],
+      "criteria": [
+        {"id": "AN-ANALYSIS-02:check:1", "text": "Every approved requirement has a source and positive/negative/boundary verification coverage."},
+        {"id": "AN-ANALYSIS-02:check:2", "text": "Analysis assumptions and permission/failure cases are explicit; material contradictions are resolved."},
+        {"id": "AN-ANALYSIS-02:check:3", "text": "Unresolved blockers remain explicit; no additional Tracker tasks were created."},
+        {"id": "AN-ANALYSIS-02:evidence:1", "text": "Analysis report, input references and requirement/criterion/verification coverage matrix."}
+      ],
+      "aliases": {"C1": "AN-ANALYSIS-02:check:1", "C2": "AN-ANALYSIS-02:check:2", "C3": "AN-ANALYSIS-02:check:3", "E1": "AN-ANALYSIS-02:evidence:1"},
+      "report": {
+        "source": {
+          "request": "The owner explicitly requests one record-creation form with exactly four requirements. R1: trim leading and trailing whitespace from the title; accept lengths 1 through 200 inclusive after trimming, store the trimmed title, and reject an empty or longer title without saving a record. R2: every newly created record automatically receives status New. R3: exactly two designated employees have equal read and write access to the records; everyone else, including an unauthenticated stranger, is denied both read and write access. R4: if a storage operation fails before its transaction commits, save no new or partial record, leave previously stored records unchanged, and retain the exact entered form values for correction or a later save attempt. A successful storage operation saves the complete valid record. These four requirements are explicitly supplied by the owner for this synthetic task; there are no further requirements or pending choices.",
+          "decisions": []
+        },
+        "result": {
+          "artifacts": [
+            {
+              "name": "coverage_matrix",
+              "content": {"verification_context": "Run title/status success cases as a designated employee with successful storage. Permission and injected storage-failure checks use their stated conditions.", "requirements": [
+                {"id": "R1", "source": "source.request, R1", "acceptance_criterion": "With authorized access and successful storage, a title is saved trimmed if and only if its trimmed length is 1 through 200; invalid titles create no record.", "positive": "Enter ' A ': the saved title is 'A'.", "negative": "Submit only spaces or a trimmed title of length 201: no record is saved.", "boundaries": "After trim, lengths 0 and 201 are rejected; lengths 1 and 200 are accepted."},
+                {"id": "R2", "source": "source.request, R2", "acceptance_criterion": "Every successful creation automatically saves status New.", "positive": "Create a valid record and read it back: status is New.", "negative": "A newly created record with a missing or different status fails this acceptance criterion.", "boundaries": "Verify automatic New on the first valid creation and on creations at the minimum and maximum accepted title lengths; invalid creation leaves no record to carry a status."},
+                {"id": "R3", "source": "source.request, R3", "acceptance_criterion": "Each of the two designated employees can read and write records with equal rights; every other identity is denied both actions.", "positive": "Exercise read and write as each designated employee: both actions are allowed for each.", "negative": "Exercise read and write as a stranger: both actions are denied and no record is modified.", "boundaries": "Check both identities in the allowed set of exactly two, an identity outside that set and an unauthenticated request; only the designated two have access."},
+                {"id": "R4", "source": "source.request, R4", "acceptance_criterion": "Successful storage saves a complete valid record; pre-commit storage failure creates no new or partial record, changes no existing record and preserves the entered form values.", "positive": "Save valid input without a storage failure: the complete trimmed title and New status are stored.", "negative": "Inject a pre-commit storage failure: no new or partial record appears, existing records are unchanged, and all entered form values remain exactly as entered.", "boundaries": "Check failure with empty storage and with existing records, including failure immediately before commit; compare with successful commit to distinguish the no-save and complete-save outcomes."}
+              ]}
+            },
+            {"name": "analysis_summary", "content": "The matrix traces all four explicit owner requirements to source.request and positive, negative and boundary verification. Permission cases are R3; storage-failure and retained-input cases are R4. No assumptions, extra requirements or material contradictions remain. There are no unresolved blockers. No child cards or additional Tracker tasks were created."}
+          ],
+          "assumptions": []
+        },
+        "unresolved": []
+      },
+      "previous_reports": [], "previous_assessments": {}, "previously_covered": [],
+      "expected": {"verdict": "PASS", "covered": ["AN-ANALYSIS-02:check:1", "AN-ANALYSIS-02:check:2", "AN-ANALYSIS-02:check:3", "AN-ANALYSIS-02:evidence:1"], "missing": [], "blockers": []},
+      "expected_assessments": {
+        "C1": {"covered": true, "reason_basis": "The current report provides the complete R1-R4 matrix with an explicit source reference, acceptance criterion and positive, negative and boundary checks for every owner requirement."},
+        "C2": {"covered": true, "reason_basis": "The owner source itself explicitly supplies the two-employee permission boundary and atomic storage-failure/input-retention policy. R3/R4 analyze exactly those rules; no extra policy or undeclared assumption is introduced."},
+        "C3": {"covered": true, "reason_basis": "The report explicitly states no unresolved blockers and no child cards or additional Tracker tasks; unresolved is empty and no contrary obstacle is reported."},
+        "E1": {"covered": true, "reason_basis": "The actual source account, analysis summary and full requirement/criterion/verification matrix are included in the current report."}
+      },
+      "provenance": {"synthetic": true, "timing": "New prospective fixture authored and labelled before any calls on this case.", "owner_facts": "All owner requirements are synthetic QA choices explicitly authorized for this new control; none are attributed retroactively to the old Analyst fixture.", "criteria_from": "analyst-role-work-complete in the immutable frozen_cases file; exact item IDs and texts unchanged."}
+    },
+    {
+      "id": "incremental-explicit-source-analysis-complete",
+      "role": "analyst", "mode": "analysis", "phase": "AN-ANALYSIS-02", "phase_name": "Role work on one task",
+      "allowed_verdicts": ["PASS", "PARTIAL", "BLOCKED"],
+      "criteria": [
+        {"id": "AN-ANALYSIS-02:check:1", "text": "Every approved requirement has a source and positive/negative/boundary verification coverage."},
+        {"id": "AN-ANALYSIS-02:check:2", "text": "Analysis assumptions and permission/failure cases are explicit; material contradictions are resolved."},
+        {"id": "AN-ANALYSIS-02:check:3", "text": "Unresolved blockers remain explicit; no additional Tracker tasks were created."},
+        {"id": "AN-ANALYSIS-02:evidence:1", "text": "Analysis report, input references and requirement/criterion/verification coverage matrix."}
+      ],
+      "aliases": {"C1": "AN-ANALYSIS-02:check:1", "C2": "AN-ANALYSIS-02:check:2", "C3": "AN-ANALYSIS-02:check:3", "E1": "AN-ANALYSIS-02:evidence:1"},
+      "report": {
+        "source": {"request": "", "decisions": []},
+        "result": {
+          "artifacts": [
+            {"name": "analysis_supplement", "content": "This supplements the unchanged R1-R4 analysis whose complete owner source and coverage matrix are supplied in the preceding report of this same phase. There are no new or changed requirements and no assumptions. The two designated employees have equal read/write access and every stranger is denied both, exactly as source R3 specifies. On a pre-commit storage failure, no new or partial record is saved, existing records remain unchanged and the exact entered form values remain available, exactly as source R4 specifies. Permission and failure cases are included in that matrix; no material contradiction or unresolved blocker remains. No child cards or additional Tracker tasks were created."}
+          ],
+          "assumptions": []
+        },
+        "unresolved": []
+      },
+      "previous_reports": [
+        {
+          "source": {
+            "request": "The owner explicitly requests one record-creation form with exactly four requirements. R1: trim leading and trailing whitespace from the title; accept lengths 1 through 200 inclusive after trimming, store the trimmed title, and reject an empty or longer title without saving a record. R2: every newly created record automatically receives status New. R3: exactly two designated employees have equal read and write access to the records; everyone else, including an unauthenticated stranger, is denied both read and write access. R4: if a storage operation fails before its transaction commits, save no new or partial record, leave previously stored records unchanged, and retain the exact entered form values for correction or a later save attempt. A successful storage operation saves the complete valid record. These four requirements are explicitly supplied by the owner for this synthetic task; there are no further requirements or pending choices.",
+            "decisions": []
+          },
+          "result": {
+            "artifacts": [
+              {
+                "name": "coverage_matrix",
+                "content": {"verification_context": "Run title/status success cases as a designated employee with successful storage. Permission and injected storage-failure checks use their stated conditions.", "requirements": [
+                  {"id": "R1", "source": "source.request, R1", "acceptance_criterion": "With authorized access and successful storage, a title is saved trimmed if and only if its trimmed length is 1 through 200; invalid titles create no record.", "positive": "Enter ' A ': the saved title is 'A'.", "negative": "Submit only spaces or a trimmed title of length 201: no record is saved.", "boundaries": "After trim, lengths 0 and 201 are rejected; lengths 1 and 200 are accepted."},
+                  {"id": "R2", "source": "source.request, R2", "acceptance_criterion": "Every successful creation automatically saves status New.", "positive": "Create a valid record and read it back: status is New.", "negative": "A newly created record with a missing or different status fails this acceptance criterion.", "boundaries": "Verify automatic New on the first valid creation and on creations at the minimum and maximum accepted title lengths; invalid creation leaves no record to carry a status."},
+                  {"id": "R3", "source": "source.request, R3", "acceptance_criterion": "Each of the two designated employees can read and write records with equal rights; every other identity is denied both actions.", "positive": "Exercise read and write as each designated employee: both actions are allowed for each.", "negative": "Exercise read and write as a stranger: both actions are denied and no record is modified.", "boundaries": "Check both identities in the allowed set of exactly two, an identity outside that set and an unauthenticated request; only the designated two have access."},
+                  {"id": "R4", "source": "source.request, R4", "acceptance_criterion": "Successful storage saves a complete valid record; pre-commit storage failure creates no new or partial record, changes no existing record and preserves the entered form values.", "positive": "Save valid input without a storage failure: the complete trimmed title and New status are stored.", "negative": "Inject a pre-commit storage failure: no new or partial record appears, existing records are unchanged, and all entered form values remain exactly as entered.", "boundaries": "Check failure with empty storage and with existing records, including failure immediately before commit; compare with successful commit to distinguish the no-save and complete-save outcomes."}
+                ]}
+              },
+              {"name": "analysis_summary", "content": "The matrix traces all four explicit owner requirements to source.request and positive, negative and boundary verification. Permission cases are R3; storage-failure and retained-input cases are R4. No assumptions, extra requirements or material contradictions remain. There are no unresolved blockers. No child cards or additional Tracker tasks were created."}
+            ],
+            "assumptions": []
+          },
+          "unresolved": []
+        }
+      ],
+      "previous_assessments": {
+        "AN-ANALYSIS-02:check:1": {"covered": true, "reason": "The supplied preceding same-phase report contains the full owner source and R1-R4 matrix, each with source, acceptance criterion and positive, negative and boundary verification.", "required_change": null},
+        "AN-ANALYSIS-02:evidence:1": {"covered": true, "reason": "The supplied preceding same-phase report actually includes the analysis, inline input reference and full requirement/criterion/verification matrix.", "required_change": null}
+      },
+      "previously_covered": ["AN-ANALYSIS-02:check:1", "AN-ANALYSIS-02:evidence:1"],
+      "expected": {"verdict": "PASS", "covered": ["AN-ANALYSIS-02:check:1", "AN-ANALYSIS-02:check:2", "AN-ANALYSIS-02:check:3", "AN-ANALYSIS-02:evidence:1"], "missing": [], "blockers": []},
+      "expected_assessments": {
+        "C1": {"covered": true, "reason_basis": "The full R1-R4 owner source and positive/negative/boundary matrix are actually provided in previous_reports[0] of this same phase. The current supplement explicitly leaves them unchanged; a prior mark alone is not the evidence."},
+        "C2": {"covered": true, "reason_basis": "The supplied earlier source explicitly requires the permission and storage-failure policies, its matrix covers both, and the current supplement accurately restates them without new assumptions or unresolved material contradictions."},
+        "C3": {"covered": true, "reason_basis": "The current supplement explicitly reports no unresolved blockers and no child cards or additional Tracker tasks; no contrary current or earlier facts are supplied."},
+        "E1": {"covered": true, "reason_basis": "The full analysis, source account and matrix are actually supplied in previous_reports[0], with the current analysis supplement. Current-source emptiness does not erase the provided unchanged same-phase facts."}
+      },
+      "provenance": {"synthetic": true, "timing": "New prospective fixture authored and labelled before any calls on this case.", "previous_reports": "Exactly the full typed report of analyst-explicit-source-complete, copied here as scoped synthetic same-phase history, not saved actual runtime history.", "previous_assessments": "Synthetic latest C1/E1 assessments with factual reasons; C2/C3 have no prior assessment and serialize as null. No prior negative result or model reason is fabricated.", "criteria_from": "analyst-role-work-complete in the immutable frozen_cases file; exact item IDs and texts unchanged."}
+    }
+  ],
+  "qualification_set": {
+    "claim": "Qualification of this new reviewed 17-case set only; no credit from quarantined cases or old campaigns without the explicit reuse checks below.",
+    "inherited_quarantine": ["actual-pm-189", "actual-pm-190"],
+    "retained_case_ids": ["pm-context-164", "pm-preparation-search-defined", "pm-final-163", "architect-role-work-complete", "developer-context-complete", "reviewer-context-complete", "tester-role-work-complete", "devops-role-work-complete", "pm-missing-full-153", "negative-defined-search-contradictory-reopening", "pm-context-not-read", "incremental-explicit-new-document-invalidates-marks", "actual-pm-191", "pm-unresolved-retention-policy", "pm-private-access-contradiction"],
+    "new_case_ids": ["analyst-explicit-source-complete", "incremental-explicit-source-analysis-complete"],
+    "distinct_cases": 17, "evaluation_slots": 36, "samples_per_case": 2,
+    "extra_samples": {"pm-unresolved-retention-policy": [3, 4]},
+    "campaign_calls_already_spent": 14, "campaign_http_limit": 48, "remaining_http_budget": 34,
+    "reused_slots": 3, "new_calls_if_reuse_revalidated": 33, "campaign_total_if_completed_without_error": 47,
+    "reuse_rule": "Revalidate exact production-built user payload, labels, complete system text/hash, settings including fixed JSON mode, matched response and nontruncated diagnostics against each named saved sample1. Do not use pm-final-163's earlier mismatched pre-mapping payload. If any check fails, stop and replan within the remaining campaign budget; do not silently spend replacement calls.",
+    "reuse_candidates": [
+      {"case_id": "pm-context-164", "sample": 1, "file": "docs/evidence/advisor-v18-reviewed-qualification-20261104.json", "user_payload_sha256": "28f767909574d77e5e5b60ccfdf9bd30580889008a36779e82675de33f6c0690"},
+      {"case_id": "pm-preparation-search-defined", "sample": 1, "file": "docs/evidence/advisor-v18-reviewed-qualification-20261104.json", "user_payload_sha256": "14f4d33bfb0b3369a5770168a3abdb6d478410a85c14c431a808e91a271b627d"},
+      {"case_id": "pm-final-163", "sample": 1, "file": "docs/evidence/advisor-v18-approval-mapping-results-20261104.json", "user_payload_sha256": "75ddcee21a285d3b48fb637a09f301f678e348c088cf021179b38328aa2ff195"}
+    ]
+  },
+  "planned_evaluations": [
+    {"case_id": "pm-context-164", "sample": 1},
+    {"case_id": "pm-preparation-search-defined", "sample": 1},
+    {"case_id": "pm-final-163", "sample": 1},
+    {"case_id": "analyst-explicit-source-complete", "sample": 1},
+    {"case_id": "architect-role-work-complete", "sample": 1},
+    {"case_id": "developer-context-complete", "sample": 1},
+    {"case_id": "reviewer-context-complete", "sample": 1},
+    {"case_id": "tester-role-work-complete", "sample": 1},
+    {"case_id": "devops-role-work-complete", "sample": 1},
+    {"case_id": "pm-missing-full-153", "sample": 1},
+    {"case_id": "negative-defined-search-contradictory-reopening", "sample": 1},
+    {"case_id": "pm-context-not-read", "sample": 1},
+    {"case_id": "incremental-explicit-source-analysis-complete", "sample": 1},
+    {"case_id": "incremental-explicit-new-document-invalidates-marks", "sample": 1},
+    {"case_id": "actual-pm-191", "sample": 1},
+    {"case_id": "pm-unresolved-retention-policy", "sample": 1},
+    {"case_id": "pm-private-access-contradiction", "sample": 1},
+    {"case_id": "pm-context-164", "sample": 2},
+    {"case_id": "pm-preparation-search-defined", "sample": 2},
+    {"case_id": "pm-final-163", "sample": 2},
+    {"case_id": "analyst-explicit-source-complete", "sample": 2},
+    {"case_id": "architect-role-work-complete", "sample": 2},
+    {"case_id": "developer-context-complete", "sample": 2},
+    {"case_id": "reviewer-context-complete", "sample": 2},
+    {"case_id": "tester-role-work-complete", "sample": 2},
+    {"case_id": "devops-role-work-complete", "sample": 2},
+    {"case_id": "pm-missing-full-153", "sample": 2},
+    {"case_id": "negative-defined-search-contradictory-reopening", "sample": 2},
+    {"case_id": "pm-context-not-read", "sample": 2},
+    {"case_id": "incremental-explicit-source-analysis-complete", "sample": 2},
+    {"case_id": "incremental-explicit-new-document-invalidates-marks", "sample": 2},
+    {"case_id": "actual-pm-191", "sample": 2},
+    {"case_id": "pm-unresolved-retention-policy", "sample": 2},
+    {"case_id": "pm-private-access-contradiction", "sample": 2},
+    {"case_id": "pm-unresolved-retention-policy", "sample": 3},
+    {"case_id": "pm-unresolved-retention-policy", "sample": 4}
+  ]
+}

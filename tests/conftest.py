@@ -3,10 +3,15 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
 import pytest
+
+# Importing the ASGI app uses a real, explicit configuration, never an implicit no-auth fallback.
+os.environ["PROJECT_WORKFLOW_MODE"] = "standalone"
+os.environ.setdefault("DATABASE_URL", "sqlite://")
 
 from project_workflow import config
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
@@ -123,7 +128,9 @@ def supervisor_llm(monkeypatch):
                 "verdict": verdict,
                 "assessments": {
                     item_id: {"covered": item_id in covered_ids,
-                              "reason": f"Test Supervisor criterion: {by_id_text}"}
+                              "reason": f"Test Supervisor criterion: {by_id_text}",
+                              "required_change": None if item_id in covered_ids else
+                              f"Supply fixture evidence for {by_id_text}"}
                     for item_id, by_id_text in items
                 },
                 "blockers": blockers or (["Test blocker"] if verdict == "BLOCKED" else []),

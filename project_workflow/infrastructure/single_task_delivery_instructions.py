@@ -4,6 +4,12 @@ FIRST_STEP = (
     "If only the Tracker task UUID is known, read task-tracker sdlc context --task <task-uuid> and take "
     "its server-issued workflow_task_key (SDLC-N); never guess the key or create another task. Read this "
     "task's current Workflow instructions using project-workflow --json step --task <workflow-task-key>. "
+    "These initial context/instruction reads are allowed in Ready. Before business work, explicitly "
+    "start the current Ready stage using the installed tracker-operator skill's Stage Start contract "
+    "and verify the same assignment is InProgress. That skill owns the command, typed fences and "
+    "original-key readback; never fabricate a delivery lease for PM. If that assignment is already "
+    "InProgress, continue it without another Start. Reports require InProgress. Start fences are "
+    "command metadata, not substantive business-report content. "
     "Use the permanently configured namespace and agent credential. Missing configuration or denied "
     "access is a blocker; never use a human token or local database fallback. No native binding or "
     "temporary files are required. Before reporting this phase, include an 'Actual first Workflow step "
@@ -47,11 +53,12 @@ TARGETS = {
     "developer": "Review / Ready for both initial and rework, followed by fresh Testing",
     "reviewer": (
         "Testing / Ready for approved; Rework / Ready for rework while cycle < 3; "
-        "on rework at cycle 3 preserve Review / Ready with waiting_reason=rework_limit_reached and runtime=Terminal"
+        "on rework at cycle 3 preserve Review / Completed with waiting_reason=rework_limit_reached and runtime=Terminal"
     ),
     "tester": (
         "Deployment / Ready for passed; Rework / Ready for rework while cycle < 3; "
-        "on rework at cycle 3 preserve Testing / Ready with waiting_reason=rework_limit_reached and runtime=Terminal"
+        "on rework at cycle 3 preserve Testing / Completed with waiting_reason=rework_limit_reached "
+        "and runtime=Terminal"
     ),
     "devops": "Deployment / Completed",
 }
@@ -279,7 +286,7 @@ def sealed_artifacts_instruction(role: str) -> str:
         f"{upload}. Use only the current supplied "
         "assignment/execution/agent/fence and run context. Tracker enforces exact routing, "
         "Running/InProgress and a live lease; the lease holder is the scheduler, not the agent. Do not "
-        "renew it as scheduler or set status yourself. Preserve the exact uploaded bytes, filename and "
+        "renew it as scheduler or choose the stage yourself. Preserve the exact uploaded bytes, filename and "
         "MIME for replay. Use the actual server-returned artifact.receipt {reference,sha256}, with "
         "reference=tracker-attachment:<UUID> and SHA256 of raw bytes, and artifact.binding "
         "{assignment_id,execution_id,role}. Read the saved metadata back with attachment list, download "
@@ -483,12 +490,15 @@ def completion_instruction(role: str) -> str:
                 ", idempotency_key=delivery-result:<assignment_id>. Send JSON on stdin using task-tracker "
                 "sdlc result propose --task <task-uuid> --from-file -. Read task-tracker sdlc result "
                 "operation --task <task-uuid> --key <same-key>. Unknown acceptance requires original-key "
-                "readback. Return the real proposal result and finish the run. Fleet verifies real terminal "
+                "readback. The accepted proposal records the current stage as Completed but is not a stage "
+                "handoff. Return the real proposal result and finish the run. Fleet verifies real terminal "
                 "before Tracker Complete; a proposal is not a transition. Tracker chooses "
             )
             + f"{TARGETS[role]}"
             + (
-                ". Repaired candidates repeat Review and Testing; honor the server Rework limit. Never borrow"
+                ". Only an actual next-stage handoff resets Ready; at the Rework limit and final DevOps "
+                "completion keep Completed. Repaired candidates repeat Review and Testing; honor the server "
+                "Rework limit. Never borrow"
                 " scheduler credentials, choose a new stage or manufacture evidence."
             )
         )
@@ -515,10 +525,10 @@ PM_COMPLETION_INSTRUCTION = (
     "Read the exact operation using task-tracker sdlc pm completion operation --task <task-uuid> --key "
     "<same-completion-key>, then task-tracker sdlc pm completion read --task <task-uuid>. Verify "
     "operation.result and completion read.current match the submitted task/root and approved revision/hash. "
-    "The immutable PM receipt records Backlog / Ready; current human/server context can already show "
-    "system-queued Analysis. The completed PM need not read the next profession's current context after "
+    "The immutable PM receipt records Draft / Completed; current human/server context can already show "
+    "system-queued Analysis / Ready. The completed PM need not read the next profession's current context after "
     "completion. After unknown POST acceptance use original-key readback, never a new key or blind "
-    "resubmit. Do not require Backlog before Workflow completion. A pasted receipt alone is not "
+    "resubmit. Do not claim Tracker Completed before Workflow completion. A pasted receipt alone is not "
     "authority. Business completion requires a valid saved document, resolved questions and actual owner "
     "consent, not an external verifier checklist. Configured CLI readiness is a separate runtime check. "
     "Finish after verifying the saved PM receipt; the system owns Analysis intent and dispatch. "
@@ -538,7 +548,7 @@ def terminal_instruction(role: str) -> str:
         return common + (
             "The FULL latest saved requirements document, resolved feedback and blocking questions, and "
             "the actual human owner's confirmation must match the exact task/revision/hash/owner in Draft. "
-            "Do not claim Backlog before completion or require an external verifier checklist or Analyst. "
+            "Do not claim Tracker Completed before acceptance or require an external verifier checklist or Analyst. "
             "Submit project-workflow --json step --task <workflow-task-key> --operation-key <stable-key> "
             "--expected-version <current-version> --report - --requirements-revision <confirmed-revision> "
             "--requirements-sha256 <confirmed-content-hash>. Supply the actual report on stdin and use "

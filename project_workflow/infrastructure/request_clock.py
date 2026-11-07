@@ -18,7 +18,7 @@ class RequestClock:
     def from_access(cls, access: HumanAccess) -> RequestClock:
         now = time.time()
         remaining = min(60.0, access.monotonic_deadline() - time.monotonic())
-        expires_at = min(now + remaining, access.proof.expires_at.timestamp()) if access.proof else now + remaining
+        expires_at = min(now + remaining, access.expires_at.timestamp())
         result = cls(access.monotonic_deadline(), expires_at)
         result.require_current()
         return result
@@ -28,7 +28,7 @@ class RequestClock:
 
     def require_current(self) -> None:
         if not 0 < self.remaining() <= 60:
-            raise SpaceAccessDenied("Original application admission expired")
+            raise SpaceAccessDenied("Original human identity expired")
 
 
 current_clock: ContextVar[RequestClock | None] = ContextVar("workflow_request_clock", default=None)

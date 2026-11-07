@@ -8,7 +8,7 @@ import pytest
 from project_workflow.infrastructure.llm import OpenAICompatibleClient, PromptBuilder
 from project_workflow.supervisor import SupervisorEngine
 from project_workflow.supervisor.diagnostics import history_diagnostic
-from tests._report_helpers import report_json
+from tests._report_helpers import historical_normalize, report_json
 
 pytestmark = pytest.mark.supervisor
 
@@ -56,8 +56,8 @@ def test_provider_format_is_explicit_and_frozen(supervisor_llm, monkeypatch):
 
 
 @pytest.mark.parametrize("policy", ["supervisor-evaluator-v13", "supervisor-evaluator-v14"])
-def test_historical_frozen_history_does_not_require_new_assessments(policy):
-    from project_workflow.supervisor.checks import normalize_text
+def test_historical_normalized_proof_is_refused_without_rewriting_history(policy):
+    from project_workflow.domain.exceptions import ConflictError
     from project_workflow.supervisor.evaluate import _fingerprint_contract_state, _report_fingerprint
     from project_workflow.supervisor.evidence import validate_frozen_evaluation
 
@@ -70,22 +70,23 @@ def test_historical_frozen_history_does_not_require_new_assessments(policy):
         state["evaluator_response_format"] = "json_object"
     fingerprint = _fingerprint_contract_state(state)
     step = {"task_id": 7, "worker_report": "Prepared result", "covered_item_ids": [items[0]["id"]],
-            "replay_fingerprint": _report_fingerprint(7, normalize_text("Prepared result"), fingerprint)}
+            "replay_fingerprint": _report_fingerprint(7, historical_normalize("Prepared result"), fingerprint)}
     snapshot = {"prompt_version": policy, "contract_snapshot": {
         **contract, "evaluation_items": items}, "contract_fingerprint": fingerprint,
         "evaluated_contract_fingerprint": fingerprint, "contract_fingerprint_state": state,
         "covered_item_ids": [items[0]["id"]], "raw_evaluator": {"verdict": "PASS",
         "covered": [items[0]["id"]], "missing": [], "blockers": [], "message": "Complete", "confidence": 1.0}}
-    before = json.dumps(snapshot, sort_keys=True)
-    assert validate_frozen_evaluation(step, snapshot) == [items[0]["id"]]
-    assert json.dumps(snapshot, sort_keys=True) == before
+    before = json.dumps((step, snapshot), sort_keys=True)
+    with pytest.raises(ConflictError):
+        validate_frozen_evaluation(step, snapshot)
+    assert json.dumps((step, snapshot), sort_keys=True) == before
     assert PromptBuilder.PROMPT_VERSION != snapshot["prompt_version"]
 
 
 @pytest.mark.parametrize(
     ("outcome", "reason"),
     [
-        ("incomplete", "лимит токенов"),
+        ("incomplete", "не завершён провайдером"),
         ("refusal", "отказался"),
         ("content_filter", "фильтром"),
     ],

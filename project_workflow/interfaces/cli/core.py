@@ -200,21 +200,6 @@ def out_json(data: dict[str, Any], exit_code: int | None = None) -> None:
     sys.exit(exit_code if exit_code is not None else (0 if data.get("ok", True) else 1))
 
 
-def _get_task_key_validator(uow=None, project_id: int | None = None) -> task_validator.TaskKeyValidator:
-    from project_workflow.infrastructure.db.uow import SAUnitOfWork
-
-    if uow is None:
-        with SAUnitOfWork() as owned_uow:
-            projects_raw = owned_uow.projects.list()
-            projects = [p.to_dict() for p in projects_raw]
-    else:
-        projects_raw = uow.projects.list()
-        projects = [p.to_dict() for p in projects_raw]
-    if project_id is not None:
-        projects = [p for p in projects if p.get("id") == project_id]
-    return task_validator.TaskKeyValidator.from_projects(projects)
-
-
 def _require_valid_key(task_key: str, uow=None, project_id: int | None = None) -> str:
     """Validate task-key shape; selected workflow is resolved separately."""
     _ = (uow, project_id)

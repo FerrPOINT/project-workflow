@@ -1,0 +1,33 @@
+{
+  "schema": "advisor-independent-adjudication-v1",
+  "original_labels_immutable": true,
+  "original_response_files_immutable": true,
+  "independent_reviewers": 2,
+  "campaign_calls": {"maximum": 48, "attempted": 9, "remaining": 39},
+  "findings": [
+    {
+      "cases": ["actual-pm-189", "actual-pm-190"],
+      "classification": "ambiguous_gold",
+      "reason": "Material business choice is not equivalent to a literally repeated status name or separate approval of an ordinary default. Closed can be implied by unclosed records; initial Needs reply can follow the stated manual personal-list workflow. The contract does not establish a separate mandatory decision for those details.",
+      "action": "Keep old labels and mismatch records unchanged; do not use these cases as mandatory negatives or tune the prompt to reject their missing words."
+    },
+    {
+      "case": "actual-pm-190",
+      "classification": "context_dependency",
+      "reason": "If report189 is supplied as previous history of the same phase, the source decision Closed is already available. Omission from the current report does not revoke it."
+    },
+    {
+      "case": "actual-pm-191",
+      "classification": "positive_control",
+      "reason": "Owner source explicitly supplies allowed and initial statuses. An extra question about ordinary manual operation is not required solely because it is described as an assumption."
+    },
+    {
+      "evidence": "advisor-v18-materiality-results-20261104.json",
+      "classification": "confirmed_reason_error",
+      "reason": "E2 cites a gap found in the evaluator's C3 reason as though the worker report itself accounted for that gap. Model explanations are not worker evidence.",
+      "limitation": "This identifies an error in the supplied explanation, not the model's hidden causal reasoning."
+    }
+  ],
+  "release_status": "not_qualified_not_installed",
+  "next_control_requirement": "Declare a required v1 business decision explicitly unresolved or provide an explicit source/artifact contradiction. Grade source completeness and existence of readable unanswered questions separately, before new calls."
+}

@@ -303,7 +303,7 @@ def test_pm_ownership_catalog_lock_order_and_incomplete_schema(pg_url, winner):
     assert not schema_is_ready(engine)
     with pytest.raises(DatabaseRecreateRequired):
         ensure_migrated(engine)
-    assert database_revisions(engine) == {"0030_analyst_baseline_ledger"}
+    assert database_revisions(engine) == {"0031_explicit_stage_start"}
 
 
 @pytest.mark.integration
@@ -339,6 +339,7 @@ def test_pm_ownership_postgres_actual_bounded_auth_and_readback(pg_url, monkeypa
     thread = Thread(target=server.serve_forever, daemon=True)
     thread.start()
     root = f"http://127.0.0.1:{server.server_port}"
+    monkeypatch.setenv("PROJECT_WORKFLOW_MODE", "platform")
     monkeypatch.setenv("AUTH_ISSUER", root)
     monkeypatch.setenv("AUTH_INTERNAL_BASE_URL", root)
     monkeypatch.setenv("AUTH_SESSION_SECRET", "x" * 40)
@@ -534,7 +535,7 @@ class TestPostgresInitialMigration:
             version = conn.execute(
                 text("SELECT version_num FROM project_workflow.alembic_version")
             ).scalar_one()
-        assert version == migration_head() == "0030_analyst_baseline_ledger"
+        assert version == migration_head() == "0031_explicit_stage_start"
         assert schema_is_ready(engine) is True
 
     def test_managed_bootstrap_serializes_with_public_catalog_creation(self, pg_url):
@@ -583,6 +584,7 @@ class TestPostgresInitialMigration:
             InstructionService(uow).update_instruction(instruction_id, {"description": "Saved on PostgreSQL"})
 
         monkeypatch.setenv("DATABASE_URL", pg_url)
+        monkeypatch.setenv("PROJECT_WORKFLOW_MODE", "platform")
         config_module.get_settings.cache_clear()
         assert init_db.main() == 0
         with SAUnitOfWork(pg_url) as readback:
@@ -1193,21 +1195,29 @@ class TestPostgresInitialMigration:
                     {"task_id": task_ids[0]},
                 )
 
-    def test_bootstrap_is_idempotent(self, pg_url):
+    def test_bootstrap_is_idempotent(self, pg_url, monkeypatch):
+        from project_workflow.infrastructure.db.single_task_catalog import observe_installation
         from scripts.init_db import main
 
+        monkeypatch.setenv("PROJECT_WORKFLOW_MODE", "platform")
+        config_module.get_settings.cache_clear()
         assert main() == 0
         assert main() == 0
 
         engine = get_engine(pg_url)
+        with SAUnitOfWork(engine) as uow:
+            installation = observe_installation(uow)
         with engine.connect() as conn:
             counts = {
                 table: conn.execute(
                     text(f"SELECT count(*) FROM project_workflow.{table}")
                 ).scalar_one()
-                for table in ("workflows", "projects", "phases")
+                for table in ("workflows", "projects", "workflow_modes", "phases", "tasks")
             }
-        assert counts == {"workflows": 7, "projects": 7, "phases": 33}
+        assert counts == {
+            "workflows": installation.workflows, "projects": installation.namespaces,
+            "workflow_modes": installation.modes, "phases": installation.phases, "tasks": 0,
+        }
 
     def test_two_concurrent_init_processes_are_idempotent(self, pg_url):
         env = os.environ.copy()
@@ -1215,6 +1225,7 @@ class TestPostgresInitialMigration:
             {
                 "DATABASE_URL": pg_url,
                 "DB_SCHEMA": "project_workflow",
+                "PROJECT_WORKFLOW_MODE": "platform",
                 "PYTHONUTF8": "1",
             }
         )
@@ -1703,14 +1714,16 @@ class TestPostgresUoW:
             assert delete_started_lock.wait(10)
             release_creator.set()
             assert create_result.result(timeout=20) == "created"
-            assert delete_result.result(timeout=20) == "rejected"
+            assert delete_result.result(timeout=20) == ("rejected" if operation == "project" else "deleted")
 
         verify = SAUnitOfWork(pg_url)
-        assert verify.workflows.get_by_id(workflow_id) is not None
         if operation == "project":
-            assert verify.projects.get_by_code("DELETE-RACE") is not None
+            assert verify.workflows.get_by_id(workflow_id) is not None
+            project = verify.projects.get_by_code("DELETE-RACE")
+            assert project is not None and project.workflow_id == workflow_id
         else:
-            assert verify.phases.get_by_code(workflow_id, "delete.race.phase") is not None
+            assert verify.workflows.get_by_id(workflow_id) is None
+            assert verify.phases.get_by_code(workflow_id, "delete.race.phase") is None
         verify.close()
 
     def test_project_move_serializes_with_task_creation(self, pg_url):
@@ -1859,14 +1872,17 @@ class TestPostgresUoW:
         assert after[0]["description"] == second["description"]
         assert after[1]["description"] == first["description"]
 
-    def test_noop_catalog_save_during_provider_call_keeps_verdict_and_replay(self, pg_url):
+    def test_noop_catalog_save_keeps_verdict_but_changed_history_requires_a_new_direct_evaluation(self, pg_url):
         from project_workflow.supervisor import SupervisorEngine
 
         _initialize_legacy_database(pg_url)
         provider_started = Event()
         release_provider = Event()
+        prompts = []
+        report = report_json("still working")
 
         def provider(*_args, **kwargs):
+            prompts.append(json.loads(kwargs["user"]))
             provider_started.set()
             assert release_provider.wait(10)
             return _partial_response(str(kwargs["user"]))
@@ -1874,8 +1890,10 @@ class TestPostgresUoW:
         def evaluate() -> dict:
             uow = SAUnitOfWork(pg_url)
             try:
-                with patch.object(OpenAICompatibleClient, "respond", side_effect=provider):
-                    return SupervisorEngine("RUN-90003", uow=uow).evaluate(report_json("still working"))
+                with patch.object(OpenAICompatibleClient, "respond", side_effect=provider) as first_provider:
+                    result = SupervisorEngine("RUN-90003", uow=uow).evaluate(report)
+                    first_provider.assert_called_once()
+                    return result
             finally:
                 uow.close()
 
@@ -1914,19 +1932,31 @@ class TestPostgresUoW:
             release_provider.set()
             result = result_future.result(timeout=20)
 
-        replay_uow = SAUnitOfWork(pg_url)
-        try:
-            with patch.object(OpenAICompatibleClient, "respond") as replay_provider:
-                replay = SupervisorEngine("RUN-90003", uow=replay_uow).evaluate(
-                    report_json("still working")
-                )
-        finally:
-            replay_uow.close()
+        with SAUnitOfWork(pg_url) as repeat_uow:
+            with patch.object(OpenAICompatibleClient, "respond", side_effect=provider) as repeat_provider:
+                repeated = SupervisorEngine("RUN-90003", uow=repeat_uow).evaluate(report)
+            repeat_provider.assert_called_once()
+            runs = repeat_uow.step_history.list(task_key="RUN-90003", limit=None)
 
         assert result["verdict"] == "PARTIAL"
         assert result["retryable"] is False
-        assert replay["replayed"] is True
-        replay_provider.assert_not_called()
+        assert result["replayed"] is False
+        assert repeated["verdict"] == "PARTIAL" and repeated["retryable"] is False
+        assert repeated["replayed"] is False
+        assert repeated["phase_code"] == result["phase_code"]
+        assert len(prompts) == 2
+        assert prompts[0]["previous_reports"] == []
+        assert all(item["previous_assessment"] is None for item in prompts[0]["criteria"])
+        assert prompts[1]["previous_reports"] == [json.loads(report)]
+        assert all(item["previous_assessment"] == {
+            "covered": False, "reason": "work remains", "required_change": "Complete the fixture criterion",
+        } for item in prompts[1]["criteria"])
+        assert len(runs) == 2 and all(run.worker_report == report for run in runs)
+        assert len({run.replay_fingerprint for run in runs}) == 2
+        for run in runs:
+            snapshot = run.evaluation_snapshot
+            assert snapshot["contract_fingerprint"] == snapshot["evaluated_contract_fingerprint"]
+            assert "configured_cli" not in snapshot and "standalone" not in snapshot
 
 
     @pytest.mark.parametrize("operation", ["update", "delete", "reorder"])
@@ -2009,7 +2039,8 @@ def _pass_response(user_prompt: str) -> dict:
     return {
         "verdict": "PASS",
         "assessments": {
-            item_id: {"covered": True, "reason": "Fixture criterion is satisfied."} for item_id in item_ids
+            item_id: {"covered": True, "reason": "Fixture criterion is satisfied.", "required_change": None}
+            for item_id in item_ids
         },
         "blockers": [],
         "confidence": 1.0,
@@ -2025,7 +2056,7 @@ def _partial_response(user_prompt: str) -> dict:
         }
     )
     for assessment in response["assessments"].values():
-        assessment.update(covered=False, reason="work remains")
+        assessment.update(covered=False, reason="work remains", required_change="Complete the fixture criterion")
     return response
 
 
@@ -2124,7 +2155,7 @@ def test_concurrent_distinct_partial_reports_do_not_apply_stale_snapshot(pg_url)
         response = _pass_response(user_prompt)
         response["verdict"] = "PARTIAL"
         for assessment in response["assessments"].values():
-            assessment.update(covered=False, reason="partial")
+            assessment.update(covered=False, reason="partial", required_change="Complete the fixture criterion")
         return response
 
     def provider(*_args, **kwargs):
@@ -2246,7 +2277,7 @@ class TestPostgresContinuationCatalogVersioning:
 def _health_probe_client(pg_url):
     engine = health_db_session.get_engine(pg_url)
     health_db_session.ensure_migrated(engine)
-    return engine, TestClient(create_app())
+    return engine, TestClient(create_app(), base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
 
 
 @pytest.mark.integration

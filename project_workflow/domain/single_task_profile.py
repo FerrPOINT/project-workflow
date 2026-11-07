@@ -2,17 +2,19 @@
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from project_workflow.domain.base_admission import Sha256
 from project_workflow.domain.base_binding import DatabaseId
 
 PROFILE = "single-task-v1"
-CATALOG_SHA256 = "9db2e982d93ead86a16c0b88785cbb9a5e1306e74cd56dc929ab7f7d1342f605"
-MANIFEST_SHA256 = "2f16635c0f588d1f285393b4ad8c163119b4dba4b9918335c821f295e88a4f64"
+CATALOG_SHA256 = "2e5e8451aefe681c4482ca81dd54df9b8139a6dc458cab87c6c50553e68a74c9"
+MANIFEST_SHA256 = "e502e0e1bed9f4a16e08423a4ac1f0162e5ef6b006d9a9a7540137ac0ec5c08f"
 RETAINED_CATALOG_SHA256 = "86e6c983b7aa6a2c99da11d1d4b1f1b4563ff913262236903a19bc86bdec2d67"
 RETAINED_MANIFEST_SHA256 = "652a38c0f7bdb48a569aa3fcd5c2e81e153db6e22b5201cfb6ce15c988dd57f3"
 RETAINED_PROFILE_CATALOGS = {
+    "2f16635c0f588d1f285393b4ad8c163119b4dba4b9918335c821f295e88a4f64":
+        "9db2e982d93ead86a16c0b88785cbb9a5e1306e74cd56dc929ab7f7d1342f605",
     "7aa0e6c758e2c31cd1dd69ce30826aecaf565e25e4f5fcedcdf9215fcddd1075":
         "976f1272340189178fcab2b778ceead46f6f965be8150281e7b80afe31cb0afe",
     "62762bf58f337d9e063226aef58ea6c89cdfb2e87159056f1a6b2b6c4d1ddf3a":
@@ -103,3 +105,14 @@ class SingleTaskInstallationResponse(_Observation):
 class SingleTaskBindingResponse(_Observation):
     ok: Literal[True] = True
     binding: SingleTaskNamespaceBinding
+    required_skills: list[str]
+
+    @field_validator("required_skills")
+    @classmethod
+    def _safe_sorted_skills(cls, value: list[str]) -> list[str]:
+        if value != sorted(set(value)) or any(
+            not name or any(not (char.isascii() and (char.isalnum() or char in "-_")) for char in name)
+            for name in value
+        ):
+            raise ValueError("Required skills must be sorted unique safe directory names")
+        return value

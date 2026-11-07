@@ -64,7 +64,7 @@ def test_concurrent_identical_saves_reuse_one_unpublished_version(configured):
     base = publication.active(client, publication.enroll(configured)["workflow_id"])
     barrier = Barrier(2)
     modes = publication.architect_modes() if configured[1]["role_key"] == "architect" else base["modes"]
-    command = {"expected_version": 1, "expected_sha256": base["content_sha256"], "modes": modes}
+    command = {"expected_version": base["catalog_version"], "expected_sha256": base["content_sha256"], "modes": modes}
 
     def save(_index):
         barrier.wait(timeout=15)
@@ -74,9 +74,12 @@ def test_concurrent_identical_saves_reuse_one_unpublished_version(configured):
         responses = list(pool.map(save, (0, 1)))
     assert [response.status_code for response in responses] == [200, 200]
     assert responses[0].json() == responses[1].json()
+    saved = responses[0].json()["revision"]
+    assert saved["catalog_version"] == base["catalog_version"] + 1
     with SAUnitOfWork() as uow:
         assert sorted(uow.session.scalars(select(m.WorkflowMode.catalog_version).where(
-            m.WorkflowMode.workflow_id == base["workflow_id"]))) == [1, 2]
+            m.WorkflowMode.workflow_id == base["workflow_id"]))) == [
+                base["catalog_version"], saved["catalog_version"]]
         assert operator_publication_count(uow) == 0
 
 

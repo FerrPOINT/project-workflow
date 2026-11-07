@@ -26,6 +26,10 @@ SUBJECT, AGENT, OWNER, TRACKER_TASK = (str(uuid4()) for _ in range(4))
 
 @pytest.fixture
 def configured(monkeypatch, request):
+    monkeypatch.setenv("PROJECT_WORKFLOW_MODE", "platform")
+    monkeypatch.setenv("AUTH_ISSUER", "https://auth.test")
+    monkeypatch.setenv("AUTH_INTERNAL_BASE_URL", "https://auth.test")
+    monkeypatch.setenv("AUTH_SESSION_SECRET", "configured-cli-unit-session-secret-only")
     role, mode = getattr(request, "param", ("project_manager", "draft"))
     monkeypatch.setattr(config, "CATALOG_VARIANT", "single-task-v1")
     monkeypatch.setenv("PROJECT_WORKFLOW_BASE_READER_SUBJECTS_JSON", json.dumps({CONTROLLER: role}))
@@ -563,6 +567,106 @@ def test_first_phase_response_evidence_reaches_verifier_without_forcing_pass(
     assert result["verdict"] == "PARTIAL" and required in result["missing"]
     assert result["phase_code"] == "PM-DRAFT-01" and result["version"] == 2
     assert result["complete"] is False and "terminal_receipt" not in result
+
+
+def test_valid_blocked_report_allows_continuation_and_preserves_old_readback(configured, supervisor_llm, monkeypatch):
+    """Exercise API mechanics with explicit verdict fixtures, not model semantics."""
+    from unittest.mock import Mock
+
+    from project_workflow.infrastructure.llm import OpenAICompatibleClient
+
+    client, assignment = configured
+    enroll(configured)
+    response = step(configured)
+    assert response.status_code == 200, response.text
+    initial = response.json()["result"]
+    assert initial["phase_code"] == "PM-DRAFT-01" and initial["status"] == "active"
+
+    blocker = "The required context source returned HTTP 403; its contents cannot be read."
+    blocked_report = report_json(blocker, unresolved=[blocker])
+    supervisor_llm("BLOCKED", blockers=[blocker])
+    blocked_model = Mock(wraps=OpenAICompatibleClient.respond)
+    monkeypatch.setattr(OpenAICompatibleClient, "respond", blocked_model)
+    response = step(configured, report=blocked_report, operation_key="context-blocked",
+                    expected_version=initial["version"])
+    assert response.status_code == 200, response.text
+    blocked = response.json()["result"]
+    assert blocked["verdict"] == "BLOCKED" and blocked["retryable"] is False
+    assert blocked["phase_code"] == initial["phase_code"] and blocked["status"] == "blocked"
+    assert blocked["version"] == initial["version"] + 1
+    assert blocked["blockers"] == [blocker] and blocked["next_phase_code"] is None
+    assert blocked["complete"] is False
+    blocked_model.assert_called_once()
+
+    with SAUnitOfWork() as uow:
+        task = uow.session.scalar(select(m.Task).where(
+            m.Task.task_key == assignment["task"], m.Task.project_id == assignment["namespace_id"]))
+        assert task is not None and task.status == "blocked"
+        task_id, first_phase_id = task.id, task.current_phase_id
+        assert uow.phases.get_by_id(first_phase_id).code == "PM-DRAFT-01"
+        assert list(uow.session.scalars(select(m.TaskPhaseEvent.event_type).where(
+            m.TaskPhaseEvent.task_id == task_id).order_by(m.TaskPhaseEvent.id))) == ["entered", "blocked"]
+
+    restored_report = report_json(
+        "Access was restored. The assigned request and existing owner decisions have now been read and understood.",
+        source="The owner requests a private notebook for customer requests.",
+    )
+    supervisor_llm("PASS")
+    restored_model = Mock(wraps=OpenAICompatibleClient.respond)
+    monkeypatch.setattr(OpenAICompatibleClient, "respond", restored_model)
+    response = step(configured, report=restored_report, operation_key="context-restored",
+                    expected_version=blocked["version"])
+    assert response.status_code == 200, response.text
+    advanced = response.json()["result"]
+    assert advanced["verdict"] == "PASS" and advanced["retryable"] is False
+    assert advanced["phase_code"] == "PM-DRAFT-02" and advanced["status"] == "active"
+    assert advanced["version"] == blocked["version"] + 1 and advanced["complete"] is False
+    assert advanced["blockers"] == []
+    assert advanced["execution_ref"] == initial["execution_ref"] == blocked["execution_ref"]
+    assert advanced["assignment_ref"] == initial["assignment_ref"] == blocked["assignment_ref"]
+    restored_model.assert_called_once()
+
+    def persisted_state():
+        with SAUnitOfWork() as uow:
+            task_state = uow.session.execute(select(
+                m.Task.current_phase_id, m.Task.status, m.Task.assignment_operation_key,
+                m.Task.assignment_revision, m.Task.mode_id, m.Task.cycle_number,
+            ).where(m.Task.id == task_id)).one()
+            history = list(uow.session.execute(select(
+                m.TaskStepHistoryEntry.id, m.TaskStepHistoryEntry.worker_report,
+                m.TaskStepHistoryEntry.supervisor_response,
+            ).where(m.TaskStepHistoryEntry.task_id == task_id).order_by(m.TaskStepHistoryEntry.id)))
+            events = list(uow.session.execute(select(
+                m.TaskPhaseEvent.phase_id, m.TaskPhaseEvent.event_type,
+            ).where(m.TaskPhaseEvent.task_id == task_id).order_by(m.TaskPhaseEvent.id)))
+            assignments = list(uow.session.execute(select(
+                m.TaskRuntimeAssignment.operation_key, m.TaskRuntimeAssignment.payload,
+            ).where(m.TaskRuntimeAssignment.task_id == task_id).order_by(m.TaskRuntimeAssignment.id)))
+            return task_state, history, events, assignments
+
+    before_readback = persisted_state()
+    task_state, history, events, assignments = before_readback
+    second_phase_id = task_state[0]
+    assert second_phase_id != first_phase_id
+    assert task_state[1:4] == ("active", assignment["operation_key"], 1)
+    assert [row[1] for row in history] == [blocked_report, restored_report]
+    assert [json.loads(row[2]) for row in history] == [blocked, advanced]
+    assert events == [(first_phase_id, "entered"), (first_phase_id, "blocked"),
+                      (first_phase_id, "resumed"), (first_phase_id, "completed"), (second_phase_id, "entered")]
+    assert len(assignments) == 1 and assignments[0][0] == assignment["operation_key"]
+
+    forbidden_model = Mock(side_effect=AssertionError("Operation readback must not invoke the model"))
+    monkeypatch.setattr(OpenAICompatibleClient, "respond", forbidden_model)
+    response = client.get("/internal/runtime/history", headers=MACHINE, params={
+        "interaction_protocol": "configured-cli-v1", "task": assignment["task"],
+        "namespace_id": assignment["namespace_id"], "operation_key": "context-blocked",
+    })
+    assert response.status_code == 200, response.text
+    records = response.json()["result"]["records"]
+    assert len(records) == 1 and records[0]["worker_report"] == blocked_report
+    assert records[0]["result"] == blocked
+    forbidden_model.assert_not_called()
+    assert persisted_state() == before_readback
 
 
 def test_exact_report_replay_and_changed_payload_conflict(configured, supervisor_llm):
@@ -1344,7 +1448,7 @@ def retired_assignment(configured):
     ("developer", "initial"), ("developer", "rework"), ("reviewer", "delivery"),
     ("tester", "delivery"), ("devops", "delivery"),
 ], indirect=True)
-def test_new_assignment_adopts_retired_business_cursor_without_rewriting_history(configured, supervisor_llm):
+def test_retired_business_cursor_is_archive_and_cannot_be_adopted(configured, supervisor_llm):
     client, assignment = configured
     task_id, phase_id, old_rows, old_assignment = retired_assignment(configured)
     query={"interaction_protocol":"configured-cli-v1","task":assignment["task"],"namespace_id":assignment["namespace_id"]}
@@ -1352,7 +1456,8 @@ def test_new_assignment_adopts_retired_business_cursor_without_rewriting_history
     historical=client.get("/internal/runtime/history",headers=WRITER,params=query)
     assert historical.status_code == 200, historical.text
     cursor=historical.json()["result"]
-    assert cursor["legacy_read_only"] is True and cursor["records"][0]["worker_report"] == "Retained old report"
+    assert cursor["archived"] is True and "version" not in cursor
+    assert cursor["records"][0]["worker_report"] == "Retained old report"
     summary = client.get("/internal/runtime/history", headers=WRITER,
                          params={**query, "projection": "fleet-summary-v1", "n": 1})
     assert summary.status_code == 200, summary.text
@@ -1360,25 +1465,23 @@ def test_new_assignment_adopts_retired_business_cursor_without_rewriting_history
     assert client.get("/internal/runtime/history",headers=WRITER,
         params={**query,"assignment_operation_key":assignment["operation_key"]}).status_code == 404
     assert client.post("/internal/runtime/assign",headers=WRITER,
-        json={**assignment,"expected_version":cursor["version"]-1}).status_code == 409
+        json={**assignment,"expected_version":1}).status_code == 409
     foreign_task = str(uuid4())
     for invalid in ({"assignment_ref": old_assignment["assignment_ref"]},
                     {"business_task_ref": foreign_task, "tracker_task_id": foreign_task},
                     {"mode_key": "rework"} if assignment["mode_key"] == "initial" else {"expected_version": 0}):
         rejected = client.post("/internal/runtime/assign", headers=WRITER,
-                               json={**assignment, "expected_version": cursor["version"], **invalid})
+                               json={**assignment, "expected_version": 2, **invalid})
         assert rejected.status_code == 409, rejected.text
     response=client.post("/internal/runtime/assign",headers=WRITER,
-        json={**assignment,"expected_version":cursor["version"]})
-    assert response.status_code == 200, response.text
-    assert response.json()["result"]["version"] == cursor["version"]+1
+        json={**assignment,"expected_version":2})
+    assert response.status_code == 409, response.text
     with SAUnitOfWork() as uow:
         assert uow.tasks.get_by_id(task_id).current_phase_id == phase_id
         assert [row.to_dict() for row in uow.step_history.list(task_id=task_id)] == old_rows
         assert uow.tasks.get_assignment_by_operation_key(old_assignment["operation_key"]).to_dict() == old_assignment
-    supervisor_llm("PASS")
-    assert step(configured,report=report_json("Completed remaining phase"),operation_key="after-adoption",
-                expected_version=response.json()["result"]["version"]).status_code == 200
+    assert step(configured,report=report_json("Must not resume a retired execution"),operation_key="after-adoption",
+                expected_version=2).status_code == 409
 
 
 @pytest.mark.parametrize("corruption", ["payload", "custody", "unknown_family"])
@@ -1403,7 +1506,9 @@ def test_retired_history_and_adoption_refuse_unknown_or_tampered_assignment(conf
         uow.commit()
     query = {"interaction_protocol": "configured-cli-v1", "task": assignment["task"],
              "namespace_id": assignment["namespace_id"]}
-    assert client.get("/internal/runtime/history", headers=WRITER, params=query).status_code == 409
+    archived = client.get("/internal/runtime/history", headers=WRITER, params=query)
+    assert archived.status_code == 200 and archived.json()["result"]["archived"] is True
+    assert "version" not in archived.json()["result"]
     assert client.post("/internal/runtime/assign", headers=WRITER,
                        json={**assignment, "expected_version": 2}).status_code == 409
     with SAUnitOfWork() as uow:

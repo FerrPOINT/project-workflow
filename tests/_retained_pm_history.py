@@ -2,14 +2,11 @@
 
 import json
 
-from fastapi.testclient import TestClient
-
 from project_workflow import config
 from project_workflow.domain.pm_execution import PMIdentity, RuntimeObservation
 from project_workflow.domain.runtime_assignment import canonical_json, payload_sha256
 from project_workflow.infrastructure.db import models as m
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
-from project_workflow.interfaces.ui.app import create_app
 from project_workflow.interfaces.ui.schemas import RuntimeAssignmentRequest
 from tests.test_runtime_api import _assignment, _bind_payload, _namespace
 
@@ -122,5 +119,4 @@ def retained_pm(monkeypatch, task_key="PM-1"):
             )
         )
         uow.commit()
-    with TestClient(create_app()) as client:
-        yield client, identity.model_dump(mode="json"), binding, {}, bound
+    yield None, identity.model_dump(mode="json"), binding, {}, bound

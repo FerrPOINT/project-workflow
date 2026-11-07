@@ -47,7 +47,7 @@ class StepRequest(StrictRequest):
     """Legacy human step payload used by the two-command CLI surface."""
 
     task: str = Field(min_length=1, max_length=128)
-    report: str | None = Field(default=None, max_length=32_000)
+    report: str | None = None
 
     @field_validator("task")
     @classmethod

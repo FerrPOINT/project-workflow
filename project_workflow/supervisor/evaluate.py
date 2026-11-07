@@ -11,7 +11,8 @@ from sqlalchemy.exc import IntegrityError
 
 from ..domain.configured_cli import ConfiguredCliFence
 from ..domain.exceptions import ConcurrentTransitionError
-from ..domain.phase_report import PhaseReport
+from ..domain.phase_report import PhaseReport, PhaseReportFormatError
+from ..domain.standalone import StandaloneFence
 from ..infrastructure.llm import (
     LlmConfigurationError,
     LlmVerdict,
@@ -23,7 +24,9 @@ from .diagnostics import capture_attempt, evaluation_diagnostic
 from .models import Phase
 from .types import VERDICT_LABELS
 
-_MAX_EVALUATOR_RESPONSE_ATTEMPTS = 2
+
+class PhaseCriteriaConfigurationError(LlmConfigurationError):
+    """An evaluated phase/group has no configured criteria."""
 
 
 def _contract_fingerprint_state(
@@ -36,15 +39,17 @@ def _contract_fingerprint_state(
     previously_covered_ids: set[str],
     transition_routes: dict[str, tuple[str | None, str | None, str | None]],
     prompt_version: str | None = None,
+    delegation_allowed: bool | None = None,
+    phase_context_fingerprint: str | None = None,
 ) -> dict[str, Any]:
     contract_data = contract.to_dict()
-    return {
+    state = {
         "prompt_version": PromptBuilder.PROMPT_VERSION if prompt_version is None else prompt_version,
         "evaluator_response_format": "responses-json_schema",
         "contract": contract_data,
         "evaluation_items": [{"id": item_id, "text": text} for item_id, text in evaluation_items],
         "previously_covered_ids": sorted(previously_covered_ids),
-        "delegation_allowed": phase.delegate is not None,
+        "delegation_allowed": phase.delegate is not None if delegation_allowed is None else delegation_allowed,
         "group": [member.code for member in group],
         "transition_routes": transition_routes,
         "phase_graph": [
@@ -80,6 +85,9 @@ def _contract_fingerprint_state(
             for item in builder.all_phases
         ],
     }
+    if phase_context_fingerprint is not None:
+        state["phase_context_fingerprint"] = phase_context_fingerprint
+    return state
 
 
 def _fingerprint_contract_state(state: dict[str, Any]) -> str:
@@ -92,11 +100,15 @@ def _contract_fingerprint(
     evaluation_items: list[tuple[str, str]], previously_covered_ids: set[str],
     transition_routes: dict[str, tuple[str | None, str | None, str | None]],
     prompt_version: str | None = None,
+    delegation_allowed: bool | None = None,
+    phase_context_fingerprint: str | None = None,
 ) -> str:
     return _fingerprint_contract_state(_contract_fingerprint_state(
         builder=builder, phase=phase, group=group, contract=contract, evaluation_items=evaluation_items,
         previously_covered_ids=previously_covered_ids, transition_routes=transition_routes,
         prompt_version=prompt_version,
+        delegation_allowed=delegation_allowed,
+        phase_context_fingerprint=phase_context_fingerprint,
     ))
 
 
@@ -106,13 +118,18 @@ def _report_fingerprint(task_id: int, report: str, contract_fingerprint: str) ->
 
 def _blocked(exc: Exception, *, provider_outcome: str | None = None) -> LlmVerdict:
     provider_blockers = {
-        "incomplete": "Ответ проверяющего LLM не завершён: достигнут лимит токенов.",
-        "limit_exceeded": "Провайдер проверяющего LLM превысил заданный лимит токенов.",
+        "incomplete": "Ответ проверяющего LLM не завершён провайдером.",
+        "limit_exceeded": "Провайдер превысил настроенный лимит ответа проверяющего LLM.",
         "refusal": "Провайдер проверяющего LLM отказался формировать ответ.",
         "content_filter": "Ответ проверяющего LLM остановлен фильтром провайдера.",
     }
     if provider_outcome is not None and provider_outcome in provider_blockers:
         blocker = provider_blockers[provider_outcome]
+    elif isinstance(exc, PhaseCriteriaConfigurationError):
+        blocker = "У фазы или параллельной группы не настроены критерии проверки. Настройте checks или evidence."
+    elif isinstance(exc, PhaseReportFormatError):
+        blocker = ("История текущей фазы содержит несовместимый отчёт. Оценка не выполнена; "
+                   "требуется явный переход данных на текущий контракт.")
     elif isinstance(exc, LlmConfigurationError):
         blocker = "Проверяющий LLM не настроен или настроен неверно."
     elif isinstance(exc, (requests.Timeout, TimeoutError)):
@@ -162,7 +179,6 @@ def _replay(
     *,
     after_run_id: int | None = None,
 ) -> dict[str, Any] | None:
-    runtime_fence = getattr(engine, "runtime_fence", None)
     run = engine.db.step_history.get_by_fingerprint(
         task_id, phase_id, fingerprint, mode_id=int(engine.task.get("mode_id") or 0),
         cycle_number=int(engine.task.get("cycle_number") or 0),
@@ -193,27 +209,9 @@ def _replay(
     current_status = str(getattr(task, "status", "") or "")
     if (current_phase_code, current_status) == (expected_phase, expected_status):
         return result
-    if runtime_fence is not None:
-        raise ConcurrentTransitionError(
-            "Сохранённый runtime step не совпадает с текущим cursor задачи"
-        )
-    if current_phase_code != evaluated_phase or run_id is None:
-        return None
-    phase = engine.phase_map.get(evaluated_phase)
-    if phase is None:
-        return None
-    try:
-        engine._record_evaluation(
-            phase,
-            verdict,
-            next_phase_code,
-            None,
-            int(run_id),
-        )
-    except ConcurrentTransitionError:
-        engine.db.rollback()
-        return _concurrent_result(result)
-    return result
+    raise ConcurrentTransitionError(
+        "Сохранённый step не совпадает с текущим cursor задачи; replay не изменяет состояние"
+    )
 
 
 def _latest_run_id(engine: Any, task_id: int) -> int | None:
@@ -251,52 +249,29 @@ def _evaluate_strict_response(
     attempts: list[dict[str, Any]] | None = None,
     system: str = PromptBuilder.SYSTEM_PROMPT,
     response_format: dict[str, Any],
+    delegation_allowed: bool | None = None,
 ) -> tuple[dict[str, Any], LlmVerdict]:
-    """Retry only malformed evaluator output and never relax the wire contract."""
-    attempt_system = system
-    last_error: Exception | None = None
-    for attempt_number in range(1, _MAX_EVALUATOR_RESPONSE_ATTEMPTS + 1):
-        raw: dict[str, Any] | None = None
-        error: Exception | None = None
-        submitted_system = attempt_system
-        try:
-            raw = client.respond(
-                system=submitted_system,
-                user=user,
-                response_format=response_format,
-            )
-            llm = ResponseParser.parse_assessments(raw, evaluation_items=evaluation_items)
-            if llm.verdict == "DELEGATE" and phase.delegate is None:
-                raise ValueError("Для текущей фазы не настроено делегирование")
-            return raw, llm
-        except (TypeError, ValueError, KeyError, IndexError, AttributeError) as exc:
-            error = exc
-            last_error = exc
-            provider_diagnostic = getattr(client, "last_call_diagnostics", None)
-            if (isinstance(provider_diagnostic, dict)
-                    and provider_diagnostic.get("outcome") in {
-                        "refusal", "content_filter", "incomplete", "limit_exceeded"}):
-                raise
-            if attempt_number == _MAX_EVALUATOR_RESPONSE_ATTEMPTS:
-                raise
-            attempt_system = (
-                system
-                + "\n\nPREVIOUS RESPONSE WAS INVALID. Return a new response that satisfies "
-                "the exact JSON schema and assesses every required criterion exactly once. "
-                "Return only one bare JSON object without Markdown or commentary."
-            )
-        except (requests.RequestException, OSError) as exc:
-            error = exc
-            raise
-        finally:
-            if attempts is not None:
-                try:
-                    attempts.append(capture_attempt(client, number=attempt_number, prompt=user,
-                                                    raw=raw, error=error, system=submitted_system))
-                except Exception as diagnostic_error:
-                    attempts.append({"number": attempt_number, "capture_error": type(diagnostic_error).__name__})
-    assert last_error is not None
-    raise last_error
+    """Evaluate exactly once; malformed output is a technical failure."""
+    allowed = PromptBuilder.allowed_verdicts(
+        phase.delegate is not None if delegation_allowed is None else delegation_allowed,
+    )
+    raw: dict[str, Any] | None = None
+    error: Exception | None = None
+    try:
+        raw = client.respond(system=system, user=user, response_format=response_format)
+        llm = ResponseParser.parse_assessments(raw, evaluation_items=evaluation_items)
+        if llm.verdict not in allowed:
+            raise ValueError("Для текущей фазы не настроено делегирование")
+        return raw, llm
+    except (TypeError, ValueError, KeyError, IndexError, AttributeError, requests.RequestException, OSError) as exc:
+        error = exc
+        raise
+    finally:
+        if attempts is not None:
+            try:
+                attempts.append(capture_attempt(client, number=1, prompt=user, raw=raw, error=error, system=system))
+            except Exception as diagnostic_error:
+                attempts.append({"number": 1, "capture_error": type(diagnostic_error).__name__})
 
 
 def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any]:
@@ -317,6 +292,7 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
 
     builder = engine.contract_builder
     group = builder.get_parallel_group(phase) if phase.execution_type == "parallel" else [phase]
+    evaluated_phase_group = [member.code for member in group]
     current_contract = builder.build_parallel(group) if len(group) > 1 else builder.build(phase)
     evaluation_phase = phase
     if len(group) > 1:
@@ -341,11 +317,20 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
     )
     item_ids = [item_id for item_id, _ in evaluation_items]
     item_text = dict(evaluation_items)
-    configured = engine.runtime_fence if isinstance(engine.runtime_fence, ConfiguredCliFence) else None
+    configured = (engine.runtime_fence
+                  if isinstance(engine.runtime_fence, (ConfiguredCliFence, StandaloneFence)) else None)
+    delegation_allowed = configured is None and current_contract.delegate_agent is not None
     system = PromptBuilder.SYSTEM_PROMPT
     prompt_version = PromptBuilder.PROMPT_VERSION
-    previously = engine._get_previously_covered(phase.code)
-    previously_ids = set(item_ids) & previously
+    context_error: PhaseReportFormatError | None = None
+    try:
+        phase_context = engine._get_phase_evaluation_history(phase.code)
+    except PhaseReportFormatError as exc:
+        context_error = exc
+        phase_context = {"reports": [], "assessments": {}}
+    initial_phase_context_fingerprint = _fingerprint_contract_state(phase_context)
+    previously_ids = {item_id for item_id, assessment in phase_context["assessments"].items()
+                      if item_id in item_ids and assessment["covered"]}
     initial_previously_ids = set(previously_ids)
     catalog_error: ValueError | None = None
     try:
@@ -365,6 +350,8 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
         previously_covered_ids=previously_ids,
         transition_routes=transition_routes,
         prompt_version=prompt_version,
+        delegation_allowed=delegation_allowed,
+        phase_context_fingerprint=initial_phase_context_fingerprint,
     )
     fingerprint = _report_fingerprint(task_id, report, initial_contract_fingerprint)
     if configured is not None:
@@ -382,8 +369,10 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
         engine.task_key,
         evaluation_phase,
         parsed_report.model_dump(mode="json"),
-        previously_covered=sorted(previously_ids) or None,
+        previous_reports=phase_context["reports"],
+        previous_assessments=phase_context["assessments"],
         evaluation_items=evaluation_items,
+        delegation_allowed=delegation_allowed,
     )
     evaluated_items = list(evaluation_items)
 
@@ -395,8 +384,12 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
     technical_error = False
     attempts: list[dict[str, Any]] = []
     try:
+        if context_error is not None:
+            raise context_error
         if catalog_error is not None:
             raise catalog_error
+        if not evaluation_items:
+            raise PhaseCriteriaConfigurationError()
         client = OpenAICompatibleClient()
         raw, llm = _evaluate_strict_response(
             client,
@@ -405,7 +398,8 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
             phase=phase,
             attempts=attempts,
             system=system,
-            response_format=PromptBuilder.response_schema(evaluation_items),
+            response_format=PromptBuilder.response_schema(evaluation_items, delegation_allowed=delegation_allowed),
+            delegation_allowed=delegation_allowed,
         )
     except (
         requests.RequestException,
@@ -454,8 +448,16 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
     )
     item_ids = [item_id for item_id, _ in evaluation_items]
     item_text = dict(evaluation_items)
-    previously = engine._get_previously_covered(phase.code)
-    previously_ids = set(item_ids) & previously
+    current_delegation_allowed = configured is None and current_contract.delegate_agent is not None
+    try:
+        phase_context = engine._get_phase_evaluation_history(phase.code)
+    except PhaseReportFormatError as exc:
+        technical_error = True
+        llm = _blocked(exc)
+        phase_context = {"reports": [], "assessments": {}}
+    phase_context_fingerprint = _fingerprint_contract_state(phase_context)
+    previously_ids = {item_id for item_id, assessment in phase_context["assessments"].items()
+                      if item_id in item_ids and assessment["covered"]}
     try:
         transition_routes = {
             verdict: engine._resolve_transition(phase, verdict, group)
@@ -474,6 +476,8 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
         previously_covered_ids=previously_ids,
         transition_routes=transition_routes,
         prompt_version=prompt_version,
+        delegation_allowed=current_delegation_allowed,
+        phase_context_fingerprint=phase_context_fingerprint,
     )
     current_contract_fingerprint = _fingerprint_contract_state(current_contract_state)
     current_snapshot_fingerprint = _contract_fingerprint(
@@ -485,6 +489,8 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
         previously_covered_ids=initial_previously_ids,
         transition_routes=transition_routes,
         prompt_version=prompt_version,
+        delegation_allowed=current_delegation_allowed,
+        phase_context_fingerprint=initial_phase_context_fingerprint,
     )
     if current_snapshot_fingerprint == initial_contract_fingerprint:
         # Another identical evaluation may have committed while this provider
@@ -594,6 +600,7 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
         "evaluation_snapshot": {
             "phase_code": phase.code,
             "phase_name": evaluation_phase.name,
+            "evaluated_phase_group": evaluated_phase_group,
             "model": client.model if client is not None else None,
             "endpoint_mode": "openai-compatible",
             "prompt_version": prompt_version,
@@ -617,6 +624,10 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
         from ..application.configured_cli import prepare_history
 
         prepare_history(runtime_fence, run_data)
+    elif isinstance(runtime_fence, StandaloneFence):
+        from ..application.standalone import prepare_history as prepare_local_history
+
+        prepare_local_history(runtime_fence, run_data)
 
     try:
         step_history_id = engine.db.record_step(**run_data)
@@ -632,10 +643,14 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
             from ..application.configured_cli import finish_history
 
             finish_history(engine.db, runtime_fence, step_history_id, result)
+        elif isinstance(runtime_fence, StandaloneFence):
+            from ..application.standalone import finish_history as finish_local_history
+
+            finish_local_history(engine.db, runtime_fence, step_history_id, result)
         engine.db.commit()
     except IntegrityError:
         engine.db.rollback()
-        if isinstance(getattr(engine, "runtime_fence", None), ConfiguredCliFence):
+        if isinstance(getattr(engine, "runtime_fence", None), (ConfiguredCliFence, StandaloneFence)):
             raise
         replayed = _replay(engine, task_id, phase_id, fingerprint)
         if replayed is not None:

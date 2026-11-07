@@ -21,6 +21,7 @@ REAL_CLIENT = httpx.Client
 
 @pytest.fixture
 def registered_readers(monkeypatch):
+    monkeypatch.setenv("PROJECT_WORKFLOW_MODE", "platform")
     subjects = {
         DEVELOPER_SUBJECT: "developer", PM_SUBJECT: "project_manager",
         TESTER_SUBJECT: "tester", CATALOG_SUBJECT: "catalog",
