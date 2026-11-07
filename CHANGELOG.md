@@ -4,6 +4,14 @@
 
 ### Current Status (2026-11-07)
 
+- Read-only PM audit separates document quality, report omissions, tool errors,
+  Fleet admission and test-harness limitations. SDLC35 saved/presented the exact
+  requirements, but report202 omitted the presentation account; its PARTIAL is
+  justified. The harness injected explicit Workflow/Tracker instructions after
+  consent, so this case is not no-hint autonomous acceptance. SOUL still exposes
+  hash/obsolete lease wording. See the existing diagnosis for evidence and the
+  minimal instruction/test correction; no Advisor prompt/model change or new
+  inference was made for this audit.
 - Normal Apply completed for Fleet25feca25/image632666ac and Workflowe0b8/imagef985.
   The exact DATABASE_PROOF, saved history and catalog publications are unchanged.
   Required skill names now come from the selected Workflow publication; Fleet
