@@ -1,5 +1,6 @@
 import json
 import os
+import stat
 import subprocess
 import sys
 import tempfile
@@ -8,6 +9,26 @@ from pathlib import Path
 
 
 class RunPytestTests(unittest.TestCase):
+    @unittest.skipUnless(os.name == 'nt', 'Windows readonly attribute')
+    def test_readonly_hardlink_keeps_external_file_unchanged(self):
+        from scripts.run_pytest import remove_scratch
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            scratch = root / 'scratch'
+            scratch.mkdir()
+            external = root / 'external'
+            external.write_bytes(b'outside fixture')
+            (scratch / 'link').hardlink_to(external)
+            external.chmod(stat.S_IREAD)
+            try:
+                with self.assertRaises(PermissionError):
+                    remove_scratch(scratch)
+                self.assertFalse(external.stat().st_mode & stat.S_IWRITE)
+                self.assertEqual(external.read_bytes(), b'outside fixture')
+            finally:
+                external.chmod(stat.S_IWRITE)
+
     def test_success_failure_and_interrupt_leave_only_selected_evidence(self):
         source = Path(__file__).resolve().parents[2]
         env = {**os.environ, 'PYTHONPATH': str(source), 'PYTEST_DISABLE_PLUGIN_AUTOLOAD': '1'}
@@ -17,8 +38,11 @@ class RunPytestTests(unittest.TestCase):
             with self.subTest(statement=statement), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)
                 (root / 'test_example.py').write_text(
+                    'import stat\n\n'
                     'def test_example(tmp_path):\n'
-                    '    (tmp_path / "fixture.db").write_bytes(b"fixture")\n'
+                    '    fixture = tmp_path / "fixture.db"\n'
+                    '    fixture.write_bytes(b"fixture")\n'
+                    '    fixture.chmod(stat.S_IREAD)\n'
                     f'    {statement}\n', encoding='utf-8',
                 )
                 result = subprocess.run(

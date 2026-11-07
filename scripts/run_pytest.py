@@ -42,6 +42,24 @@ def terminate(_signum, _frame):
     raise KeyboardInterrupt
 
 
+def remove_scratch(scratch: Path) -> None:
+    def retry_readonly_file(function, path, error):
+        failure = error[1]
+        if os.name != 'nt' or function is not os.unlink or not isinstance(failure, PermissionError):
+            raise failure
+        target = Path(path)
+        info = target.lstat()
+        if (not target.parent.resolve().is_relative_to(scratch)
+                or not stat.S_ISREG(info.st_mode) or info.st_nlink != 1
+                or info.st_file_attributes & stat.FILE_ATTRIBUTE_REPARSE_POINT
+                or not info.st_file_attributes & stat.FILE_ATTRIBUTE_READONLY):
+            raise failure
+        target.chmod(stat.S_IWRITE)
+        target.unlink()
+
+    shutil.rmtree(scratch, onerror=retry_readonly_file)
+
+
 def run(arguments: list[str], workspace: Path) -> int:
     if any(arg.split('=', 1)[0] in ('--basetemp', '--junitxml', '--junit-xml') for arg in arguments):
         raise ValueError('The Workflow runner owns pytest scratch and diagnostic output')
@@ -79,12 +97,14 @@ def run(arguments: list[str], workspace: Path) -> int:
     # Unexpected termination leaves the active receipt and its owned tree intact.
     try:
         if scratch.exists() or scratch.is_symlink():
-            shutil.rmtree(scratch)
+            remove_scratch(scratch)
         if report.exists() and (code == 0 or report.stat().st_size > 4 * 1024**2):
             report.unlink()
         record['cleanup'] = 'complete'
-    except OSError:
+    except OSError as error:
         record['cleanup'] = 'recovery_required'
+        record['cleanup_error'] = {'type': type(error).__name__, 'errno': error.errno,
+                                   'winerror': getattr(error, 'winerror', None)}
     record.update(status='finished', exit_code=code, finished_at=time.time(),
                   diagnostic='junit.xml' if report.is_file() else None)
     write_receipt(receipt, record)

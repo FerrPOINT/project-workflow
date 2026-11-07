@@ -20,6 +20,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 SEED_PATH = REPO_ROOT / "project_workflow" / "references" / "legacy_unmanaged_seed.json"
 COMPOSE_PATH = REPO_ROOT / "docker-compose.yml"
 AGENTS_PATH = REPO_ROOT / "AGENTS.md"
+QUALITY_GUIDE_PATH = REPO_ROOT / "docs" / "quality-gate.md"
 DOCKERFILE_PATH = REPO_ROOT / "Dockerfile"
 CONSTRAINTS_PATH = REPO_ROOT / "constraints.txt"
 LICENSE_PATH = REPO_ROOT / "LICENSE"
@@ -95,7 +96,9 @@ def test_compose_waits_for_api_readiness():
 
 def test_repository_runbook_waits_for_compose_readiness():
     agents = AGENTS_PATH.read_text(encoding="utf-8")
-    assert "docker compose up --build -d --wait" in agents
+    guide = QUALITY_GUIDE_PATH.read_text(encoding="utf-8")
+    assert "docs/quality-gate.md" in agents
+    assert "docker compose up --build -d --wait" in guide
     assert "scripts/quality.ps1" in agents
 
 
