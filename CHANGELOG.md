@@ -17,8 +17,9 @@
   The approval-custody package passed871 unit/22 PG functions, Clippy/fmt and
   exact-image smoke with cleanup; Applya096c7b8 completed. PM/Hermes/CLI are
   unchanged. Delivery is not new PM business acceptance.
-  PM control recovery remains pending: one POST returned403, while original-key
-  GET confirms pending/not-adopted. No resend or new business dispatch is made.
+  PM control recovered: one POST403 was followed by pending then adopted on
+  original-key GETs, without resend. Physical verify confirms the same ready
+  PM30/container/image/CLI/skills; no new business dispatch or inference.
   The exact DATABASE_PROOF, saved history and catalog publications are unchanged.
   Required skill names now come from the selected Workflow publication; Fleet
   preparation/readiness uses that set. Worker-only file-reading guidance does

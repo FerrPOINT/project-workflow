@@ -53,10 +53,11 @@ Normal Apply завершён для Fleet4240a850/image4b16e9a9 и Workflowe0b8
 Fleet approval-custody исправление прошло871 unit/22 PG functions, Clippy/fmt и
 штатный exact-image smoke; временные ресурсы очищены. Applya096c7b8 завершён,
 образ PM/Hermes/CLI не изменён. Это доставка, не новая business-приёмка PM.
-Управление PM после Apply ещё не восстановлено: один recovery POST вернул403,
-но original-key GET показывает pending/current_namespace_adopted=false, не
-not_requested. Поэтому исход нельзя считать отказом до принятия; POST не
-повторяется. Причина403 пока не установлена, новые бизнес-команды не отправлялись.
+Управление PM после Apply восстановлено: один recovery POST вернул403, затем
+original-key GET показывал pending, а третий GET подтвердил adopted и
+current_namespace_adopted=true. Повторного POST не было. Physical verify подтвердил
+прежние CID0846/image699/generationf19/config30, CLI и skills; ready_for_sdlc=true.
+Причина403 не установлена; он не был отказом до принятия. Новых бизнес-команд нет.
 Точный DATABASE_PROOF, сохранённая история и публикации каталога не изменились.
 Установлен контракт required_skills из выбранной публикации Workflow и его
 проверка при подготовке/readiness Fleet. Общая инструкция исполнителю читать
