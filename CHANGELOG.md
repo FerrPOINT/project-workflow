@@ -4,7 +4,7 @@
 
 ### Current Status (2026-11-07)
 
-- Normal Apply completed for Fleet6a98/imageb55 and Workflowe0b8/imagef985.
+- Normal Apply completed for Fleet25feca25/image632666ac and Workflowe0b8/imagef985.
   The exact DATABASE_PROOF, saved history and catalog publications are unchanged.
   Required skill names now come from the selected Workflow publication; Fleet
   preparation/readiness uses that set. Worker-only file-reading guidance does
@@ -38,7 +38,7 @@
   confirmation31ec84 was saved separately at00:55:16Z. Native run33e2 completed
   at01:01:48.742Z with error=null, not business completion:1946 records human
   approval timeout before command execution;1947 accurately reports that block.
-  Task35 remains Draft/InProgress, waiting_workflow_completion, with no report202.
+  Task35 remained Draft/InProgress in that turn, without report202.
   Planned stop read already_terminal[completed,completed]; no stop POST or
   cancellation occurred. Subsequent GET approvals still returns a82389 pending,
   resolved_at=null, with failed NotDispatched decision75f98 unchanged after the
@@ -48,9 +48,11 @@
   failed one. The lifecycle gap is distinct from the unresolved original503.
   Fleet736807bd implements the shared verified-terminal settlement with its
   original proof/audit guards. The core package passed869 unit/14 real PG,
-  Clippy/fmt and independent review with cleanup. It is not installed. Actual
-  current-generation Known ACK still refuses23514 on the retained pending request;
-  registered084 requires separate upgrade/ELF qualification before backend Apply.
+  Clippy/fmt and independent review with cleanup. Subsequent084 qualification and
+  normal schema-first/backend Apply installed25feca25, preserving decisions and
+  history. The same PM30/CLI/image699 is ready after original-key controller recovery.
+  Historical current-generation Known ACK refused23514 on the retained pending request;
+  registered084 now has PostgreSQL and compiled-runtime qualification.
   Historical083 and the failed decision are not rewritten; Advisor is unchanged.
 - Native trace has19 terminal calls:4 empty-object calls refused before command
   execution and1 read_file shell127, followed by successful recovery. Raw wire is
@@ -59,7 +61,15 @@
   existing same-operation continue to task35; its cause remains unknown. A
   transient accepted-context hold also resolved without a product change.
   SDLC34, full PM completion and complete UI acceptance remain open; PM live is not
-  accepted. Advisor budget155/163 used,8 remaining. Historical evidence is retained.
+  accepted. Advisor budget156/163 used,7 remaining. Historical evidence is retained.
+- Continued SDLC35 produced202 PARTIAL. Independent review accepts all7 item
+  assessments: the complete saved document is exact, but the report omits the
+  account of its presentation. Input has only phase3 facts, no service receipts,
+  no truncation and one model attempt. The PM prepared its own full correction;
+  Fleet approval409 blocked it before reservation despite an accepted journal.
+  A scoped Fleet source candidate separates assignment read from current custody
+  and serializes approval with existing owner control. Historical heartbeat
+  causality is unproven; no Advisor change or live business completion occurred.
 - Chromium/Firefox/WebKit read the accepted SDLC33 baseline:7 business messages,
   full document1, saved confirmation and Backlog/Ready match the real API.
   This does not accept SDLC35 or raw grouped tool-event details. All three remain

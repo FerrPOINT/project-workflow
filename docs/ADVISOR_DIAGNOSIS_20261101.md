@@ -2,7 +2,7 @@
 
 ## 2026-11-07: Установленный Комплект, Приёмка PM Открыта
 
-Normal Apply завершён для Fleet6a98/imageb55 и Workflowe0b8/imagef985.
+Normal Apply завершён для Fleet25feca25/image632666ac и Workflowe0b8/imagef985.
 Точный DATABASE_PROOF, сохранённая история и публикации каталога не изменились.
 Установлен контракт required_skills из выбранной публикации Workflow и его
 проверка при подготовке/readiness Fleet. Общая инструкция исполнителю читать
@@ -52,7 +52,7 @@ run33e2 **completed в01:01:48.742Z, error=null**, а не остаётся runn
 Tool result1946 сообщает timeout ожидания human approval: report command не
 выполнялась. Финальный ответ1947 точно сообщает, что подтверждение прочитано,
 но заключительный отчёт не отправлен. Task35 остаётся Draft/InProgress,
-waiting_workflow_completion; Report202 и business complete отсутствуют.
+waiting_workflow_completion; в том turn Report202 и business complete отсутствовали.
 Планируемый stop вернул already_terminal[completed,completed]: **stop POST не
 выполнялся, cancellation не было**. Один рассмотренный approval attempt ранее
 вернул503, decision75f98 имеет failed; это не отменяется terminal-статусом run.
@@ -73,11 +73,34 @@ exact binding и отрицательные guards. Историческую083 
 семантики принято отдельным source-пакетом Fleet736807bd: общий predicate теперь
 допускает completed/failed/cancelled, сохраняя exact native proof, audit и decision.
 На tree03faa12c прошли869 unit,14 real PG, Clippy/fmt, независимое review и cleanup.
-Он ещё не установлен. Read-only проверка действующих данных подтвердила exact
-binding/no-send/native proof, но current-generation KnownACK вернул23514.
-Поэтому до backend Apply нужен адресный registered084 для уже сохранённых
-completed/cancelled ожиданий. SQL/Rust084 сохраняют guards083; старая083 не меняется.
-Upgrade/ELF квалификация идёт отдельно. Advisor и формат его запроса не менялись.
+Затем084 прошла109 migration unit,23 PG test functions, Clippy/fmt и actual ELF
+runtime qualification. Штатная schema-first установка и backend Apply завершены;
+decision/run/original audit до/после совпадают,083 не менялась. Тот же PM30
+восстановлен одной командой с original-key readbacks; физические CLI/config/
+skills и image699 сохранены. Старый6a backend не стартует с ledger084:
+rollback на него или изменение ledger недопустимы.
+
+### Продолжение SDLC35: Report202 И Отказ Fleet
+
+Report202 получил PARTIAL. Независимая проверка всех7 assessments подтверждает
+реальный пробел отчёта: точный полный документ есть, описания завершённого
+представления владельцу нет. C1/E1=false; остальные5=true обоснованны, оба
+required_change достаточны. Это не доказательство отсутствия показа в реальности.
+Первый report фазы3 содержит previous_reports=[], previous_assessment=null:
+чужие фазы не попали в контекст. Все10 полей документа совпадают с saved rev1;
+user.text5486 characters без hashes/receipts/worker instructions, truncated=false,
+omissions0. Один HTTP200,14.24s,2332 input/765 output tokens, high/4000/1200s.
+Это фактическая сохранённая диагностика запроса, не отдельный upstream wire capture.
+
+PM сам подготовил исправление, сохранив полный документ. Technical approval
+вернул409 до reservation: "task run has no original dispatch journal"; raw accepted
+journal существует, decision GET404. Source показывает смешение assignment
+read с live-custody admission и отсутствие agent mutex у targeted approval.
+Минимальный Fleet-кандидат разделяет эти ответственности существующими методами,
+не ослабляя runtime guards. Точный live predicate409 не сохранился; interleaving
+с heartbeat остаётся гипотезой до управляемой регрессии. После terminal turn
+no-decision approval штатно cancelled; новая оценка исправленного отчёта не была
+вызвана. Business state остаётся Draft/InProgress. Advisor не менялся.
 
 В первом native run177s записано19 terminal calls:1907/1913/1921/1927 имеют
 arguments `{}` и отказ до выполнения command;1915 передал read_file в shell и
@@ -92,7 +115,7 @@ Create403 восстановлен существующим continue той же
 разрешился автоматически и не доказывает постоянную блокировку модели.
 Открыты SDLC34 (только note2000→1000, rev2, полный показ, отказ старого подтверждения,
 новое согласие и финал), завершение нового full PM case и полноценная UI-приёмка.
-**PM live не принят.** Бюджет Advisor155/163, осталось8.
+**PM live не принят.** Бюджет Advisor156/163, осталось7.
 
 Chromium/Firefox/WebKit прочитали существующий принятый SDLC33: все7 business
 messages после загрузки2 страниц, полный документ1, сохранённое подтверждение
@@ -119,6 +142,12 @@ Q/pm-default-required-skills-20261107/full/context-diagnostics.json,
 Q/pm-default-required-skills-20261107/full/preparation-diagnostics.json,
 Q/pm-business-browser-catalog-readonly-20261107.log,
 Q/pm-business-browser-authenticated-shell-20261107.log.
+Новые evidence: Q/terminal-approval-084-schema-25feca25-20261107.json,
+Q/terminal-approval-fleet-apply-25feca25-20261107.json,
+Q/pm30-runtime-proof-after-terminal084-20261107.json,
+Q/pm-default-required-skills-20261107/full/advisor-202-actual-diagnostics-20261107.json,
+Q/pm-default-required-skills-20261107/full/native-terminal-after-report202-20261107.json,
+Q/pm-default-required-skills-20261107/full/api-error-20261107T025017244832Z.json.
 
 ## Исторический Checkpoint PM29: Исправленный Skill Не Равен Публикации
 
