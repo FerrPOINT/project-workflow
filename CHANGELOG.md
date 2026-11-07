@@ -28,8 +28,9 @@
   (hash490), while fresh SDLC35 uses the new guidance (hashc12). Raw system_prompt
   NULL alone hid this distinction; the snapshots require hash resolution and are
   not captured provider HTTP. No supported in-place native prompt refresh API
-  preserving context/history was found; the user's explicit choice remains open,
-  without aliases, DB surgery or hidden session rotation.
+  preserving context/history was found. The owner selected preserving SDLC34
+  unchanged and accepting fresh full SDLC35 plus a new sparse task, without
+  aliases, DB surgery or hidden session rotation.
 - Fresh full SDLC35 saved revision1 matching all10 document fields, without
   artificial questions. Advisor200/201 PASS covers9 assessments, not9 flawless
   reasons:200 C1/E1 inaccurately says owner decisions are absent, although choices
