@@ -7,8 +7,12 @@
 - Removed the arbitrary32000-character report ceiling from the parser, platform,
   standalone and UI request schemas, stdin reading and current format instructions.
   The current runtime OpenAPI is regenerated; archived schemas are unchanged.
-  Strict input validation remains. Input regressions:256 PASS; full candidate
-  gates, installation and live acceptance remain pending. Base standards and
+  Strict input validation remains. Input regressions:256 PASS. Frozen source
+  fb6ce930/tree1d6ee432 passed4690 native tests plus75 subtests and160 PostgreSQL
+  tests; coverage94.0992%, Ruff/mypy/namespace export passed. The15 native skips
+  (11 Playwright unavailable,3 private-source opt-ins,1 NTFS executable bit)
+  are not passes. Image smoke, installation and live acceptance remain pending.
+  Base standards and
   local engineering guidance now require justified limits and behavioral
   completeness regressions rather than silent truncation or replacement caps.
 
