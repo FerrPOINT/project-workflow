@@ -13,7 +13,12 @@
   hash/obsolete lease wording. See the existing diagnosis for evidence and the
   minimal instruction/test correction; no Advisor prompt/model change or new
   inference was made for this audit.
-- Normal Apply completed for Fleet25feca25/image632666ac and Workflowe0b8/imagef985.
+- Normal Apply completed for Fleet4240a850/image4b16e9a9 and Workflowe0b8/imagef985.
+  The approval-custody package passed871 unit/22 PG functions, Clippy/fmt and
+  exact-image smoke with cleanup; Applya096c7b8 completed. PM/Hermes/CLI are
+  unchanged. Delivery is not new PM business acceptance.
+  PM control recovery remains pending: one POST returned403, while original-key
+  GET confirms pending/not-adopted. No resend or new business dispatch is made.
   The exact DATABASE_PROOF, saved history and catalog publications are unchanged.
   Required skill names now come from the selected Workflow publication; Fleet
   preparation/readiness uses that set. Worker-only file-reading guidance does
