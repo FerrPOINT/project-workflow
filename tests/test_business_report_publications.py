@@ -193,9 +193,10 @@ def test_analyst_document_provenance_excludes_requirements_hash_but_keeps_byte_i
     assert "approved requirements revision/hash" not in artifact
     for required in (
         "source register", "initial specification", "approved requirements source and revision",
-        "exact repository commit/path", "published document source links, revisions or access dates",
-        "Keep the technical requirements SHA256 and Tracker authority binding in command metadata and readbacks, "
-        "not in the business analysis.md document.",
+        "reviewed source versions and relevant repository paths",
+        "published document source links, revisions or access dates",
+        "Keep exact source commit coordinates, the technical requirements SHA256 and Tracker authority binding "
+        "in command metadata and readbacks, not in the business analysis.md document or Workflow report.",
         "Verify SHA256 of the raw downloaded bytes", "artifact.binding {assignment_id,execution_id,role}",
         "verify raw SHA256 and size against that receipt", "checksum mismatch or unavailable readback",
         "leave the phase unfinished", "keep technical receipts and hashes in command metadata and readbacks",

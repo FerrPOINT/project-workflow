@@ -225,12 +225,15 @@ ROLE_IMAGE_BUILD = {
 ROLE_SOURCE_EVIDENCE = {
     "analyst": (
         "In the single sealed analysis.md artifact retain the source register, initial specification "
-        "and approved requirements revision/hash, Tracker source binding, exact repository commit/path "
+        "and approved PM document/revision, reviewed source versions, relevant repository paths "
         "and published document revisions or access dates, distinguishing observed facts from missing inputs. "
+        "Keep exact source commit coordinates, requirements hashes and Tracker authority binding in "
+        "existing command metadata and readbacks, not in the business analysis.md or Workflow report. "
     ),
     "architect": (
-        "In the saved structured architecture/implementation plan retain verified source coordinates, "
-        "accepted analysis references and approved branch/base SHA for this task only. Record planned "
+        "Retain verified source coordinates, accepted analysis references and approved branch/base SHA "
+        "for this task only in the existing technical source metadata and save/readbacks. Write the plan's "
+        "overview and section business fields without raw service hashes or UUIDs. Record planned "
         "implementation checks as future work, not as a completed implementation or build proof. "
     ),
     "developer": (
@@ -343,9 +346,14 @@ def artifact_instruction(role: str) -> str:
             "original-key operation readback, not another key or changed body. A conflict requires fresh "
             "readback before revising; 403, unavailable API, missing source, hash mismatch or stale fence "
             "is a concrete technical blocker, not permission to fall back to an attachment or another "
-            "identity. Never overwrite history or fake Workflow/business completion. The Workflow report "
-            "contains the full architecture/plan and actual verification facts; keep technical receipts "
-            "in command metadata, separate from substantive business content. Tracker proposal, final "
+            "identity. Never overwrite history or fake Workflow/business completion. For the Workflow "
+            "report, use the installed solution-architecture skill's native JSON business projection of "
+            "the verified saved content: the full overview and ordered sections containing title, "
+            "description, criteria and requirements, copied verbatim from that readback. Use this full "
+            "business document as result.artifacts[].content, with actual verification facts reported "
+            "separately; do not summarize or retype its strings or copy the API envelope. Keep source "
+            "metadata, section IDs and technical receipts in existing save/read/proposal metadata, "
+            "separate from substantive business content. Tracker proposal, final "
             "comment and stage handoff follow accepted Workflow complete=true, not this preparation. "
         )
     return (
