@@ -1,32 +1,39 @@
 # Managed Instruction Publication
 
-## Shared Development Checkpoint - 8 November 2026
+## Main Development Baseline - 8 November 2026
 
-The source is available in [Workflow PR164](https://github.com/FerrPOINT/project-workflow/pull/164),
-branch `docs/workflow-fleet-audit-20261103`. Product/text checkpoint
-`fc71000f01ddf94ce2b8121124ecfd8c2349eb8e` includes the current CLI, typed report,
-single-call native Responses evaluator and the two portable configurations below.
-Later documentation commits do not imply another engine or CLI release.
+For parallel development on another machine, use the current main branches.
+These merged checkpoints include the shared instructions and portable role
+configuration; they do not assert that a live deployment is complete.
 
-Related source checkpoints (not an assertion that every PR is merged):
-
-| Repository | Published commit | Purpose |
+| Repository | Development branch / merged checkpoint | Source scope |
 | --- | --- | --- |
-| Base | `86ca4359f28e784a4885ca2dcfdd952f74c07e61` | Canonical shared/professional skills, packaging and operator |
-| Fleet | `3334571707739d8335e4a8dccd0c74f3ca9c7c49` | Qualified preparation/first native launch and preserved runtime history |
-| Tracker | `1b10eb0f950b6c826409be7c5a1c4af5c782d1ff` | Assignment Start/Completed and application-owned next-stage Ready |
+| Workflow | `master` / [`a04e5c9d7a2d93c47c4bb7ff163d49b211cfac65`](https://github.com/FerrPOINT/project-workflow/pull/164) | CLI, typed reports, evaluator, canonical catalog and profiles |
+| Base | `main` / [`0fb8733163ca39bbccc11d0f8f9aef50a8348474`](https://github.com/FerrPOINT/services-base/pull/476) | Shared/professional skills, including common instruction commit `d09c84707`, packaging and operator |
+| Tracker | `main` / [`7c4c96b31dfc973d26d399ed2c931591fb85d97f`](https://github.com/FerrPOINT/task-tracker/pull/212) | Agent Start/Completed and application-owned next-stage Ready |
+| Fleet | [PR172](https://github.com/FerrPOINT/fleet-control/pull/172), not yet merged | Separate source review/qualification; do not assume it is in `main` |
 
-On another checkout, fetch that branch and select the exact reviewed checkpoint:
+For Workflow, update a clean development checkout using the existing branch:
 
 ```sh
-git fetch origin docs/workflow-fleet-audit-20261103
-git switch --detach fc71000f01ddf94ce2b8121124ecfd8c2349eb8e
+git fetch origin master
+git switch master
+git merge --ff-only origin/master
 ```
 
 Do this in the intended development checkout, not over unrelated local changes.
-Use the existing [setup](../README.md) and
-[quality gate](quality-gate.md). Local runtime directories, credentials, raw
-diagnostics and this installation's database are not distribution inputs.
+Use the equivalent `main` update for Base and Tracker, then the existing
+[setup](../README.md) and [quality gate](quality-gate.md). Application settings
+belong to the installation: use [.env.example](../.env.example) and the existing
+[execution-context setup](resource-execution-context.md), with that installation's
+service URLs, authorized subjects and protected credential references. They are
+not agent report fields. Do not distribute local runtime directories, IDs,
+credentials, raw evidence or another installation's database.
+
+All seven professions have canonical phase data and namespace/workflow profiles
+in the [catalog](../project_workflow/references/single_task_catalog_v1.json) and
+[manifest](../project_workflow/references/single_task_manifest_v1.json).
+The following files are portable PM/Analyst text publications over that contract:
 
 | Role | Portable configuration | Canonical modes SHA256 |
 | --- | --- | --- |
@@ -42,31 +49,28 @@ workflow IDs/catalog numbers. An incompatible structure or stale base requires
 review, not raw SQL, automatic conversion or overwriting concurrent edits.
 Only new assignments select the publication; existing tasks stay pinned.
 
-Shared skills and professional instructions remain in
-[Base](https://github.com/FerrPOINT/services-base/pull/476); the three ownership
-layers are described in [architecture](architecture.md#ответственность).
-Use the existing selected-publication skill loader and package generation, not
-a manual copy or a second agent-specific Workflow executor. Workflow's SDK/UI
-pins are independent of Base operator/skill changes; do not repin them merely
-to obtain newer instructions. Each installation supplies its own authorized
-credentials and project access; never copy another installation's secrets.
+Shared skills and professional instructions remain in the
+[Base role package](https://github.com/FerrPOINT/services-base/tree/0fb8733163ca39bbccc11d0f8f9aef50a8348474/agent-skills).
+Select its exact Base commit and verify its own `manifest.json` and content
+hashes for every role; the three ownership layers are described in
+[architecture](architecture.md#ответственность). Base's skill manifest is not
+Workflow's phase manifest. A Base-only common instruction change does not require
+a Workflow rebuild or phase-catalog regeneration. Deliver it through the existing
+selected-publication skill loader and Fleet skills/config validation/activation
+between runs, not a manual copy or a second executor. SDK/UI pins stay independent;
+do not repin them merely to obtain newer instructions.
 
-Verified scope: PM publication19 completed SDLC-40 in three first-attempt PASS
-evaluations (213-215), with all16 criterion assessments independently checked,
-an unchanged complete document, separate owner consent and application handoff
-to Analysis/Ready. Publication numbers19/7 identify this installation only.
-SDLC-41 awaits business clarification. Analyst is running and assigned but its
-backend enrollment receives401; Forge source reads also receive403. Neither is
-evidence of a model failure or completed Analyst acceptance. An initial-request
-replay500 is separately open despite readback showing no duplicate effects.
+Live acceptance remains separate: SDLC-40 completed PM with separate owner consent
+and Analysis/Ready handoff. SDLC-41 has saved revision6 but no owner consent;
+217/PASS completes PM-DRAFT-01, while current PM-DRAFT-02 is not yet accepted.
+The separate Analyst registrar credential is issued, not applied; the Forge403
+selector issue is resolved without broader rights. Analyst/live delivery acceptance
+and runtime follow-up remain open, not prerequisites for sharing this source baseline.
 
-Dependencies are [Fleet172](https://github.com/FerrPOINT/fleet-control/pull/172),
-[Base476](https://github.com/FerrPOINT/services-base/pull/476) and
-[Tracker212](https://github.com/FerrPOINT/task-tracker/pull/212).
-Source publication enables parallel role development; it is not a claim that
-these PRs are merged, every deployment mode passed, or the live release is done.
-Do not redesign the evaluator to work around unresolved delivery/access errors.
-The dated sections below retain historical observations, not current setup defaults.
+Historical product/text checkpoint `fc71000f01ddf94ce2b8121124ecfd8c2349eb8e`
+and earlier Base `86ca4359f28e784a4885ca2dcfdd952f74c07e61` remain historical
+references, not detached-checkout instructions for a new machine. The dated
+sections below preserve earlier observations, not current setup defaults.
 
 ## Architect Structure Revisions — 6 November 2026
 
