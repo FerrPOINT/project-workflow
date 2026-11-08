@@ -22,13 +22,15 @@ from tests import test_configured_cli as protocol
 from tests import test_single_task_installation as installation
 
 PREVIOUS_FIRST_STEP = "e502e0e1bed9f4a16e08423a4ac1f0162e5ef6b006d9a9a7540137ac0ec5c08f"
+FIRST_STEP_RELEASE = "852e0647ad8645c9c6280b21c1595b9efa6ff87754d07df8dcc92bcb04f76381"
+AUTONOMOUS_RELEASE = "920379c0c86455148e6fae35e2007037595c2d1cc82116c392c575c4625ffd28"
 
 
 def test_first_step_profile_changes_only_opening_worker_description():
     from copy import deepcopy
 
     previous, _ = catalog.load_profile(PREVIOUS_FIRST_STEP)
-    current, _ = catalog.load_profile()
+    current, _ = catalog.load_profile(FIRST_STEP_RELEASE)
     expected = deepcopy(previous)
     changed = 0
     for old_workflow, new_workflow in zip(expected["workflows"], current["workflows"], strict=True):
@@ -41,6 +43,26 @@ def test_first_step_profile_changes_only_opening_worker_description():
     expected["instruction_overlay"] = current["instruction_overlay"]
     assert changed == 8
     assert expected == current
+
+
+def test_published_autonomous_profile_preserves_phase_contracts_and_other_roles():
+    previous, _ = catalog.load_profile(FIRST_STEP_RELEASE)
+    current, _ = catalog.load_profile(AUTONOMOUS_RELEASE)
+    assert len(previous["workflows"]) == len(current["workflows"])
+    for old_workflow, new_workflow in zip(previous["workflows"], current["workflows"], strict=True):
+        role = old_workflow["role_key"]
+        assert new_workflow["role_key"] == role
+        if role not in {"analyst", "architect"}:
+            assert old_workflow == new_workflow
+            continue
+        for old_mode, new_mode in zip(old_workflow["modes"], new_workflow["modes"], strict=True):
+            assert {key: value for key, value in old_mode.items() if key != "phases"} == {
+                key: value for key, value in new_mode.items() if key != "phases"
+            }
+            for old_phase, new_phase in zip(old_mode["phases"], new_mode["phases"], strict=True):
+                assert {key: value for key, value in old_phase.items() if key != "instructions"} == {
+                    key: value for key, value in new_phase.items() if key != "instructions"
+                }
 
 
 def test_previous_first_step_terminal_receipt_replays_without_rebinding(monkeypatch, supervisor_llm):
