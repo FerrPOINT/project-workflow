@@ -2,6 +2,15 @@
 
 ## Unreleased — Advisor V19 Installed, PM Acceptance Pending
 
+### External Runtime Boundary (2026-11-08)
+
+- The owner explicitly keeps Hermes unchanged. Terminal guidance belongs to
+  the shared instructions for every profession, with application-owned settings;
+  a native Hermes patch is excluded from delivery. Instruction adherence is not
+  advertised as technical prevention of overrides.
+- The next SDLC-41 run times out before any tool/Advisor call. It is distinct
+  from the earlier short terminal wait; no automatic resend or model call added.
+
 ### Sparse Report Provenance (2026-11-08)
 
 - Saved request216 has no previous phase reports and is not truncated. It omits
