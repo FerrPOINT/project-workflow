@@ -18,9 +18,11 @@
   loses the chat deep link and a page error is recorded. Post-handoff machine
   history still returns409; operator diagnostics are not a CLI acceptance result.
 - Workflow, shared Base skills and Tracker development changes are merged.
-  Fleet's configured presubmit maintenance and its Base consumer remain under
-  qualification; the Analyst registrar configuration and new common skills
-  are not claimed as activated. Advisor, criteria, model and Hermes are unchanged.
+  Qualified Fleet presubmit source is merged at `f279ce37`; its Base consumer
+  is merged at `ac95ebe7`. These sources are not installed: the existing
+  first-birth89 runtime remains unchanged. The Analyst registrar configuration
+  and new common skills are not claimed as activated. Advisor, criteria, model
+  and Hermes are unchanged.
 
 The entries below preserve the earlier observations at their checkpoints; they
 do not supersede this current status.
