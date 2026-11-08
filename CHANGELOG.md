@@ -1,6 +1,29 @@
 # Changelog
 
-## Unreleased — Advisor V19 Installed, PM Acceptance Pending
+## Unreleased — Advisor V19 Installed, Analyst Acceptance Pending
+
+### Current Live Checkpoint (2026-11-08)
+
+- Both PM scenarios now reach Analysis/Ready through PM-owned Start, saved
+  requirements, separate owner confirmation, Workflow completion and Tracker
+  Completed, followed by the application-owned stage handoff. SDLC-40 has three
+  first-attempt PASS results; SDLC-41 finishes at history220 after corrected
+  PARTIALs, duplicate document revisions and a separate transport failure.
+  Neither the earlier defects nor saved decisions are erased by final completion.
+- Independent review verifies all seven final SDLC-41 assessments, the exact
+  saved revision9 and its matching owner confirmation. This accepts the observed
+  sparse PM finish, not a clean-first-try run or Analyst acceptance.
+- Chromium, Firefox and WebKit verify transcript, requirements, confirmation,
+  completion and Analysis/Ready. The overall browser gate remains open: login
+  loses the chat deep link and a page error is recorded. Post-handoff machine
+  history still returns409; operator diagnostics are not a CLI acceptance result.
+- Workflow, shared Base skills and Tracker development changes are merged.
+  Fleet's configured presubmit maintenance and its Base consumer remain under
+  qualification; the Analyst registrar configuration and new common skills
+  are not claimed as activated. Advisor, criteria, model and Hermes are unchanged.
+
+The entries below preserve the earlier observations at their checkpoints; they
+do not supersede this current status.
 
 ### External Runtime Boundary (2026-11-08)
 
