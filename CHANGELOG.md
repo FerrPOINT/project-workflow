@@ -2,6 +2,16 @@
 
 ## Unreleased — Advisor V19 Installed, PM Acceptance Pending
 
+### Sparse Report Provenance (2026-11-08)
+
+- Saved request216 has no previous phase reports and is not truncated. It omits
+  the earlier document behind the owner's unchanged-rest decision. This establishes
+  a report-provenance gap, not a demonstrated Advisor error on the full conversation.
+  Whether the document must repeat an explicit deletion exclusion remains ambiguous.
+- PASS217 accepts PM-DRAFT-01; PM-DRAFT-02 and sparse completion remain open.
+  The successful successor handoff readback is now confirmed without repeating
+  disconnect, native work or model calls. No evaluator behavior changed.
+
 ### Application-Owned Execution Settings (2026-11-08)
 
 - Workflow's closed report API rejects execution-setting overrides before
