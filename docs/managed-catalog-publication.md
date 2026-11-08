@@ -9,7 +9,7 @@ configuration; they do not assert that a live deployment is complete.
 | Repository | Development branch / merged checkpoint | Source scope |
 | --- | --- | --- |
 | Workflow | `master` / [`032272504d291cd7cad6f621e713bc827909de1a`](https://github.com/FerrPOINT/project-workflow/pull/173) | CLI, typed reports, evaluator, canonical catalog/profiles and current PM checkpoint |
-| Base skills | `main` / [`0fb8733163ca39bbccc11d0f8f9aef50a8348474`](https://github.com/FerrPOINT/services-base/pull/476) | Independent canonical shared/professional package, including common instruction commit `d09c84707` |
+| Base skills | `main` / [`b1f7ca5164a857d36504437e0304e82abb14e273`](https://github.com/FerrPOINT/services-base/pull/518) | Canonical shared/professional package, including common instruction `d09c84707` and corrected Analyst role keeping technical hashes outside analysis.md |
 | Base operator | `main` / [`ac95ebe74e88ddf6ee30f169495e7ac955a8ccaf`](https://github.com/FerrPOINT/services-base/pull/517) | Qualified host release consumer of Fleet087 presubmit proof; not skill activation or deployment |
 | Tracker | `main` / [`7c4c96b31dfc973d26d399ed2c931591fb85d97f`](https://github.com/FerrPOINT/task-tracker/pull/212) | Agent Start/Completed and application-owned next-stage Ready |
 | Fleet | `main` / [`f279ce371e284e3c0f48ee28b0a3b880b683e5b9`](https://github.com/FerrPOINT/fleet-control/pull/172) | Qualified first-birth/replay and configured presubmit maintenance source; not a deployment |
@@ -39,7 +39,12 @@ The following files are portable PM/Analyst text publications over that contract
 | Role | Portable configuration | Canonical modes SHA256 |
 | --- | --- | --- |
 | PM | [project_manager_business_report.json](../project_workflow/references/publications/project_manager_business_report.json) | `fbf7112c277f1e8d725b2f807bac45dcdec0f2ce1f1d4ad3196f2d42fab13be2` |
-| Analyst | [analyst_business_report.json](../project_workflow/references/publications/analyst_business_report.json) | `2a8085181537621589ad3fb774d1883bf7c6d2dcdb18eadf3bdd1d06ccdf1f64` |
+| Analyst | [analyst_business_report.json](../project_workflow/references/publications/analyst_business_report.json) | `99c57a5a80d2d71af5b3b7d100ec36e5dd3c231464ee0b2ab7616a702cc79f4b` |
+
+The observed active Analyst publication7 remains unchanged at
+`2a8085181537621589ad3fb774d1883bf7c6d2dcdb18eadf3bdd1d06ccdf1f64`.
+The portable Analyst candidate above is not yet published or activated; its Forge
+reads depend on the canonical Base skill, not a copied phase-level CLI/API recipe.
 
 These files contain `modes` and `content_sha256`, not deployment identities.
 Discover the target workflow by its actual profession/role and use the existing
@@ -51,7 +56,7 @@ review, not raw SQL, automatic conversion or overwriting concurrent edits.
 Only new assignments select the publication; existing tasks stay pinned.
 
 Shared skills and professional instructions remain in the
-[Base role package](https://github.com/FerrPOINT/services-base/tree/0fb8733163ca39bbccc11d0f8f9aef50a8348474/agent-skills).
+[Base role package](https://github.com/FerrPOINT/services-base/tree/b1f7ca5164a857d36504437e0304e82abb14e273/agent-skills).
 Select its exact Base commit and verify its own `manifest.json` and content
 hashes for every role; the three ownership layers are described in
 [architecture](architecture.md#ответственность). Base's skill manifest is not

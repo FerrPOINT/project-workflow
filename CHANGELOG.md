@@ -4,6 +4,11 @@
 
 ### Current Live Checkpoint (2026-11-08)
 
+- Portable Analyst candidate delegates repository identity, storage resolution
+  and immutable-commit reads to the canonical forge-operator skill instead of
+  duplicating its CLI/API recipe. Only one worker description and its canonical digest
+  change; all12 phases, criteria, evidence and technical binding remain unchanged.
+  Publication regressions20 PASS; this candidate is not published or activated.
 - Both PM scenarios now reach Analysis/Ready through PM-owned Start, saved
   requirements, separate owner confirmation, Workflow completion and Tracker
   Completed, followed by the application-owned stage handoff. SDLC-40 has three
