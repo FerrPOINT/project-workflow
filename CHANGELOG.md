@@ -2,6 +2,21 @@
 
 ## Unreleased — Advisor V19 Installed, PM Acceptance Pending
 
+### Report Contract Consistency (2026-11-08)
+
+- SDLC-37/208 exposed contradictory report obligations, not a demonstrated
+  Advisor defect. PM business checks no longer require technical hashes or
+  declarations of future handoff; actual full presentation and valid owner
+  consent remain required. Analyst business evidence separates the full analysis
+  and completed publication checks from the technical artifact receipt.
+- Worker readbacks, exact-byte verification and server authority checks remain.
+  Tracker proposal metadata is explicitly distinct from the Workflow report.
+  Advisor v19, model, parser and report format are unchanged. Two configurations
+  use the existing catalog publication API; the installed sealed baseline,
+  engine and migrations are unchanged. A source-baseline replacement was rejected
+  before installation because it would require an unnecessary cutover.
+  Configuration checks, text publication and live acceptance remain distinct gates.
+
 ### Current Status (2026-11-07)
 
 - Source FIRST_STEP no longer requires copying the technical CLI response into the
