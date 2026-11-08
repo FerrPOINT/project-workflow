@@ -84,6 +84,23 @@ def test_analyst_initial_criteria_are_business_only_but_procedural_provenance_re
         assert required in worker
 
 
+def test_analyst_source_read_uses_supported_scoped_forge_identity_and_storage_selector():
+    worker = phase_text(candidate("analyst")[0])
+    for required in (
+        "GET /api/v1/catalog/repositories/<repository-id>/sync",
+        "own configured credential without printing it",
+        "verify repository_id and namespace against the binding, without starting sync",
+        "cicd-cli project list", "repository_url /git/<storage_name>.git",
+        "as described by forge-operator; public_name is not the selector",
+        "repository tree/blob --repo <storage_name> --git-ref <exact-commit>",
+        "omit --path for the root", "403/404", "ambiguous project or mismatched identity",
+        "never guess a selector or credentials",
+    ):
+        assert required in worker
+    assert "cicd-cli repository get" not in worker
+    assert "use its public_name" not in worker
+
+
 def test_analyst_final_business_evidence_preserves_mandatory_gap_refusal():
     final = candidate("analyst")[-1]
     assert final["code"] == "AN-ANALYSIS-12"
