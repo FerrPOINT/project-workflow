@@ -2,6 +2,20 @@
 
 ## Unreleased — Advisor V19 Installed, PM Acceptance Pending
 
+### Shared PM Development Checkpoint (2026-11-08)
+
+- Publish the portable PM/Analyst configurations and existing import procedure
+  as the shared development basis; no local credentials, raw diagnostics or
+  runtime snapshots are distribution inputs. Engine, CLI protocol, Advisor,
+  model and SDK/UI pins are unchanged by this documentation checkpoint.
+- PM publication19 completes SDLC-40 with three first-attempt PASS results,
+  independently checked16/16 assessments, exact saved requirements and separate
+  owner consent. The application reaches Analysis/Ready after PM Completed.
+- SDLC-41, Analyst acceptance, initial-delivery replay500 and successor handoff
+  readback remain open. Analyst enrollment401 occurs before model execution;
+  scoped Forge reads403 are not yet diagnosed. Source publication is not a
+  complete release or proof of the remaining live/deployment/browser gates.
+
 ### Report Contract Consistency (2026-11-08)
 
 - SDLC-39/212 preserves all ten saved business fields without technical metadata,
