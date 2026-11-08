@@ -54,6 +54,18 @@ def fake_transport(monkeypatch, *, status=200, exception=None, payload=None):
     return calls
 
 
+@pytest.mark.parametrize("flag,value", [
+    ("--timeout", "30"), ("--model", "other"), ("--provider", "other"),
+    ("--max-tokens", "4000"), ("--reasoning-effort", "low"), ("--retries", "3"),
+    ("--base-url", "https://other.test"), ("--response-format", "json_object"),
+])
+def test_execution_settings_are_not_agent_cli_options(agent_env, monkeypatch, flag, value):
+    calls = fake_transport(monkeypatch)
+    result = CliRunner().invoke(cli, ["--json", "step", "--task", "SDLC-31", flag, value])
+    assert result.exit_code == 2
+    assert calls == []
+
+
 def archive_envelope():
     return {"ok": True, "exit_code": 0, "result": {
         "interaction_protocol": "configured-cli-v1", "task": "SDLC-31", "namespace_id": 12,

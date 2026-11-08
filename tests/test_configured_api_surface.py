@@ -6,7 +6,8 @@ from types import SimpleNamespace
 import pytest
 
 from scripts.export_runtime_openapi import OUTPUT, RUNTIME_PATHS, runtime_openapi
-from tests.test_configured_cli import WRITER, enroll
+from tests._report_helpers import report_json
+from tests.test_configured_cli import MACHINE, WRITER, enroll
 from tests.test_configured_cli import configured as configured
 
 
@@ -18,6 +19,32 @@ def test_published_runtime_contract_matches_the_actual_models():
     for name in ("ConfiguredAssignment", "ConfiguredStep", "ConfiguredTerminalReadback", "ConfiguredArtifactReadback"):
         assert models[name]["additionalProperties"] is False
     assert not {"PMBind", "PMCheckpoint", "RuntimeStepRequest", "BootstrapRetry"} & set(models)
+
+
+@pytest.mark.parametrize("setting,value", [
+    ("timeout", 30), ("timeout", None), ("connect_timeout", 1), ("read_timeout", 30),
+    ("model", "agent-selected-model"), ("provider", "agent-selected-provider"),
+    ("base_url", "https://other.test"), ("api_key", "synthetic-only"),
+    ("max_tokens", 4000), ("max_output_tokens", 4000), ("reasoning_effort", "low"),
+    ("retries", 3), ("response_format", {"type": "json_object"}),
+])
+def test_agent_report_cannot_override_application_execution_settings(configured, monkeypatch, setting, value):
+    from project_workflow.application import configured_cli
+
+    client, assignment = configured
+    initial = enroll(configured)
+
+    def execution_was_not_allowed(*args, **kwargs):
+        raise AssertionError("Unknown execution settings must be refused before application dispatch")
+
+    monkeypatch.setattr(configured_cli, "step", execution_was_not_allowed)
+    response = client.post("/internal/runtime/step", headers=MACHINE, json={
+        "interaction_protocol": "configured-cli-v1", "task": assignment["task"],
+        "namespace_id": assignment["namespace_id"], "operation_key": "report-with-forbidden-setting",
+        "expected_version": initial["version"], "report": report_json("Actual work"), setting: value,
+    })
+    assert response.status_code == 422, response.text
+    assert enroll(configured) == initial
 
 
 def test_capabilities_describe_current_catalog_without_a_native_profile_switch(configured, monkeypatch):

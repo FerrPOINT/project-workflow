@@ -2,6 +2,20 @@
 
 ## Unreleased — Advisor V19 Installed, PM Acceptance Pending
 
+### Application-Owned Execution Settings (2026-11-08)
+
+- Workflow's closed report API rejects execution-setting overrides before
+  application dispatch:13 HTTP regressions pass with enrollment unchanged.
+  Model/provider, reasoning, budgets, retries and timeouts remain application
+  configuration, not agent report fields. No evaluator or model change.
+- SDLC-41 exposes a separate native terminal override: agent timeout30 cuts off
+  CLI waiting although result217/PASS is persisted and subsequently read back.
+  Advice to choose a larger timeout was rejected before activation and removed
+  from the agent skill. Developer docs require a closed tool interface plus
+  handler enforcement; the installed Hermes does not yet enforce that contract.
+  Sparse PM completion, actual native enforcement and Analyst live acceptance
+  remain open. Documentation and defaults are not claimed as technical protection.
+
 ### Shared PM Development Checkpoint (2026-11-08)
 
 - Publish the portable PM/Analyst configurations and existing import procedure
