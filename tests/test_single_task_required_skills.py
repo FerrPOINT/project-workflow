@@ -92,6 +92,8 @@ def test_selected_publication_not_draft_or_old_mode_supplies_required_skills(bin
     path = f"{PREFIX}/namespace-bindings/{binding.namespace_id}"
     original = client.get(path, headers=HEADERS).json()
     assert "tracker-operator" in original["required_skills"]
+    assert "forge-operator" in original["required_skills"]
+    assert "wiki-operator" not in original["required_skills"]
     with SAUnitOfWork(database) as uow:
         active = editor.read_active(uow, int(binding.workflow_id))
         modes = deepcopy(active["modes"])

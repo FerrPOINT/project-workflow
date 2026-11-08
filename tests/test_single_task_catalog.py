@@ -68,6 +68,8 @@ def test_identity_donor_and_legacy_modes_are_preserved_and_not_aliased(professio
         expected_skills = set(original["skill_allowlist"])
         if original["role_key"] == "analyst":
             expected_skills |= {"wiki-operator", "forge-operator"}
+        if original["role_key"] == "architect":
+            expected_skills |= {"forge-operator"}
         assert set(current["skill_allowlist"]) == expected_skills
         original_modes = {m["key"]: m for m in original["modes"]}
         for mode in current["modes"]:
@@ -201,6 +203,13 @@ def test_analyst_records_gaps_in_place_without_critical_pm_review(professions):
     assert "return the task to PM" in text
     assert "leave Workflow unfinished" in text
     assert "task-tracker sdlc critical-blocker" not in text
-    architect = professions["architect"]["modes"][0]
-    assert any("task-tracker sdlc critical-blocker" in i["description"]
-               for p in architect["phases"] for i in p["instructions"])
+    for role in ("analyst", "architect"):
+        phases = professions[role]["modes"][0]["phases"]
+        text = " ".join(i["description"] for p in phases for i in p["instructions"])
+        for required in ("Resolve irreconcilable business contradictions", "independently",
+                         "same Tracker task", "Do not interview the owner", "invoke PM business review",
+                         "options, the selected interpretation, rationale and consequences",
+                         "Label assumptions separately", "original PM requirements", "owner consent",
+                         "do not fabricate facts", "guards remain mandatory"):
+            assert required in text
+        assert "task-tracker sdlc critical-blocker" not in text

@@ -4,6 +4,13 @@
 
 ### Current Live Checkpoint (2026-11-08)
 
+- Source-only Analyst/Architect worker guidance now records independent business
+  interpretations and assumptions without owner questioning or PM review. Architect
+  uses canonical Forge reads instead of mandatory pipeline/workspace creation and
+  hands off the exact structured plan revision, not an attachment substitute.
+  Existing forge-operator is declared for Architect preparation; phases, criteria,
+  evidence and Advisor are unchanged. Baseline852 is retained byte-exact and0031
+  is unchanged. These sources are not a new publication, installation or live pass.
 - Portable Analyst candidate delegates repository identity, storage resolution
   and immutable-commit reads to the canonical forge-operator skill instead of
   duplicating its CLI/API recipe. Only one worker description and its canonical digest

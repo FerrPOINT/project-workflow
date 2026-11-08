@@ -1,7 +1,7 @@
 {
   "instruction_overlay": {
     "path": "project_workflow/infrastructure/single_task_delivery_instructions.py",
-    "sha256": "bea65454eb7205267fbbd05a905d3f6d9aaeddec9784d179216e318419651330"
+    "sha256": "8aaa73f0a4fb8c791f5e9089c9dcebe5f0c63052362e9f847d664e3ede31957a"
   },
   "instruction_profile": "single-task-v1",
   "instruction_source": {
@@ -13,7 +13,7 @@
     },
     "path": "project_workflow/infrastructure/single_task_catalog.py",
     "repository": "https://github.com/FerrPOINT/project-workflow.git",
-    "sha256": "9b62922adc88e9d74e0a967e7df745a0c74a71646e6871c180081a19dc2cfc39"
+    "sha256": "9eeb42c6a4499960f51ba405bd87def1b9e251508b0ee0eb8fa1a1c1ab5b2352"
   },
   "inventory": {
     "modes": 8,
@@ -35,7 +35,7 @@
       "namespace_cli_command": "workflow-single-task-analyst",
       "namespace_name": "single-task-analyst",
       "profile": "single-task-v1-analyst",
-      "role_instructions_sha256": "54550aa1674f8f3e92e9e4b6cc1e08f0eb5bb780b559dfa53e0070d84a1733c6",
+      "role_instructions_sha256": "a0115d4977483eed1602514af8c9573af8ea0b95620a3cb6c4918f116318ef03",
       "workflow_key": "single-task-v1:analyst"
     },
     "architect": {
@@ -48,7 +48,7 @@
       "namespace_cli_command": "workflow-single-task-architect",
       "namespace_name": "single-task-architect",
       "profile": "single-task-v1-architect",
-      "role_instructions_sha256": "5196612ab74f47a2f76baee224ceb748cd5f88ce3cc02d07410c9af36f2a20db",
+      "role_instructions_sha256": "07ef93ec8b4420d0d012a761a33a04ad5139015a0f267562d1f6b6f3a019aff6",
       "workflow_key": "single-task-v1:architect"
     },
     "developer": {
@@ -129,7 +129,7 @@
   "workflow_catalog": {
     "artifact": "project_workflow/references/single_task_catalog_v1.json",
     "hash_encoding": "utf-8-lf-no-bom-with-final-newline",
-    "sha256": "554c51e937aa85b5b6a13b3f36965b00180ead8d799f3c0b6d0f109ce962944d",
+    "sha256": "7de17343320acb9ed840d45e09694893a2b1bd958c39e1ada713bf20b1752ed6",
     "version": 1
   }
 }

@@ -13,7 +13,7 @@ MODES = [
     ("analyst", "analysis"), ("architect", "decomposition"), ("developer", "initial"),
     ("developer", "rework"), ("reviewer", "delivery"), ("tester", "delivery"), ("devops", "delivery"),
 ]
-WORKSPACE_MODES = [pair for pair in MODES if pair[0] != "analyst"]
+WORKSPACE_MODES = [pair for pair in MODES if pair[0] not in {"analyst", "architect"}]
 TRIGGER = (
     "cicd-cli pipeline run --project <approved-forge-project-uuid> --git-ref <exact-source-sha> "
     "--idempotency-key <assignment-uuid> --task-intent -"
@@ -50,6 +50,29 @@ def test_analyst_research_uses_bound_read_sources_without_build_or_workspace(gen
     first = instruction_text(mode_for(catalog, "analyst", "analysis")["phases"][0])
     assert "task-tracker attachment upload" not in first
     assert "one JSON object with source, result and unresolved" in first
+
+
+def test_architect_uses_canonical_forge_reads_without_pipeline_or_workspace(generated):
+    catalog, _ = generated
+    workflow = next(w for w in catalog["workflows"] if w["role_key"] == "architect")
+    phases = workflow["modes"][0]["phases"]
+    context = phases[0]["instructions"][1]["description"]
+    for required in ("approved requirements revision/hash", "actual previous_result_id",
+                     "task-tracker sdlc source", "installed forge-operator skill",
+                     "repository identity and storage selector readback", "repository UUID/namespace",
+                     "exact source commit", "never guess a repository or substitute main",
+                     "Do not run CI", "Do not invent a future implementation candidate SHA"):
+        assert required in context
+    assert instructions.SOURCE_CONTEXT not in context
+    assert instructions.FORGE_TASK_WORKSPACE not in context
+    for forbidden in (TRIGGER, "TaskWorkspaceIntent", "repository get --id", "GET /api/v1/catalog",
+                      "task-tracker attachment upload", "decomposition save"):
+        assert forbidden not in context
+    assert "forge-operator" in workflow["skill_names"]
+    assert "wiki-operator" not in workflow["skill_names"]
+    for phase in phases:
+        for instruction in phase["instructions"]:
+            assert instruction["skills"] == ["project-workflow-executor", "tracker-operator", "forge-operator"]
 
 
 @pytest.mark.parametrize("role,mode", WORKSPACE_MODES)

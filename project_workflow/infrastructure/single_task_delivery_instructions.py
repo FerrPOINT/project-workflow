@@ -88,6 +88,17 @@ CRITICAL_BUSINESS_REVIEW = (
     'dependency, not permission for a generic status change. '
 )
 
+AUTONOMOUS_BUSINESS_DECISIONS = (
+    "Resolve irreconcilable business contradictions and missing business decisions independently in this "
+    "same Tracker task. Do not interview the owner, request approval, invoke PM business review or wait "
+    "for a new business decision. Use the installed project-workflow-executor decision-log rule to record "
+    "options, the selected interpretation, rationale and consequences in the task and role artifact. "
+    "Label assumptions separately from observed facts; preserve the original PM requirements, owner "
+    "consent and history unchanged. A missing business decision is not an unavailable source or permission: "
+    "do not fabricate facts, source access, receipts or completed checks. Technical authority and evidence "
+    "guards remain mandatory; an independent decision does not establish PASS. "
+)
+
 PM_CRITICAL_REVIEW = (
     "Ordinary brainstorming and owner feedback continue under the current business assignment across "
     "messages. Read fresh task-tracker sdlc context --task <task-uuid>. If critical_review is absent, "
@@ -218,8 +229,9 @@ ROLE_SOURCE_EVIDENCE = {
         "and published document revisions or access dates, distinguishing observed facts from missing inputs. "
     ),
     "architect": (
-        "In the sealed design artifact retain the same verified source coordinates and analysis references, "
-        "approved branch/base SHA and permitted checkout/verification plan for this task only. "
+        "In the saved structured architecture/implementation plan retain verified source coordinates, "
+        "accepted analysis references and approved branch/base SHA for this task only. Record planned "
+        "implementation checks as future work, not as a completed implementation or build proof. "
     ),
     "developer": (
         "In Developer initial AND rework sealed changes/checks retain the actual candidate commit SHA, "
@@ -309,6 +321,33 @@ def sealed_artifacts_instruction(role: str) -> str:
 
 
 def artifact_instruction(role: str) -> str:
+    if role == "architect":
+        return (
+            ROLE_SOURCE_EVIDENCE[role]
+            + "Read the installed solution-architecture skill for the existing structured plan command. "
+            "Read task-tracker decomposition read --task <task-uuid>, then save the complete plan using "
+            "task-tracker decomposition save --task <task-uuid> --from-file -. Use its actual "
+            "expected_revision, one stable idempotency_key, current context.assignment fence and verified "
+            "requirements revision/hash and analysis_result_id. Preserve existing section IDs; do not "
+            "invent source coordinates, permissions or predecessor results. The lease holder is the "
+            "scheduler, not the agent. Do not renew it as scheduler or choose the stage yourself. "
+            "BEFORE the FINAL Workflow "
+            "phase report, read task-tracker decomposition operation --task <task-uuid> --key <original-key> "
+            "and task-tracker decomposition revision --task <task-uuid> --revision <saved-revision>. "
+            "Verify the saved full content, task, exact revision, source requirements and returned "
+            "content_sha256. Use design.reference=/api/v1/issues/<task-uuid>/decomposition/revisions/"
+            "<saved-revision> and design.sha256=that server content_sha256 for the subsequent "
+            "result.role=architect proposal. This hash is of canonical plan content, not raw attachment "
+            "bytes or a Workflow terminal receipt. Once a structured plan exists, an attachment or local "
+            "text artifact cannot replace its exact revision receipt. Unknown save acceptance requires "
+            "original-key operation readback, not another key or changed body. A conflict requires fresh "
+            "readback before revising; 403, unavailable API, missing source, hash mismatch or stale fence "
+            "is a concrete technical blocker, not permission to fall back to an attachment or another "
+            "identity. Never overwrite history or fake Workflow/business completion. The Workflow report "
+            "contains the full architecture/plan and actual verification facts; keep technical receipts "
+            "in command metadata, separate from substantive business content. Tracker proposal, final "
+            "comment and stage handoff follow accepted Workflow complete=true, not this preparation. "
+        )
     return (
         ROLE_SOURCE_EVIDENCE[role]
         + sealed_artifacts_instruction(role)
@@ -350,6 +389,23 @@ def context_instruction(role: str) -> str:
             "stdin. The initial specification and its sealed artifact belong to the final phase, not to "
             "this first research report. Missing mandatory business facts remain explicit and prevent "
             "completion; optional unavailable material and Architect implementation choices are limitations. "
+        )
+    if role == "architect":
+        return common + (
+            "Read the approved requirements revision/hash, current assignment, accepted Analyst result "
+            "from the actual previous_result_id using task-tracker sdlc result read --task <task-uuid> "
+            "--result <previous-result-id>. Read task-tracker sdlc source --task <task-uuid> and current "
+            "context; match task=root, Tracker instance/project and the source requirements. Read the "
+            "installed forge-operator skill and follow its authorized repository identity and storage "
+            "selector readback procedure. Verify repository UUID/namespace against the binding and read "
+            "the relevant repository rules and implementation at its exact source commit. "
+            "Preserve approved branch/base coordinates and never guess a repository or substitute main. "
+            "Architecture requires authorized source reads, not a Forge delivery configuration, pipeline, "
+            "checkout or Task workspace. Do not run CI, prepare Task workspaces, implement code or write "
+            "Git for design. Do not invent a future implementation candidate SHA. Verify downloaded "
+            "predecessor artifacts against their actual producer binding and raw SHA256; a local path "
+            "or successful download alone is not proof. Missing required source access or mismatched "
+            "identity is a technical blocker, not permission to broaden rights or borrow credentials. "
         )
     return common + SOURCE_CONTEXT + FORGE_TASK_WORKSPACE + ROLE_IMAGE_BUILD.get(role, "") + artifact_instruction(role)
 
@@ -556,6 +612,14 @@ def terminal_instruction(role: str) -> str:
             "--expected-version <current-version> --report - --requirements-revision <confirmed-revision> "
             "--requirements-sha256 <confirmed-content-hash>. Supply the actual report on stdin and use "
             "only the saved owner's exact confirmation. "
+        )
+    if role == "architect":
+        return common + (
+            "Prepare result.role=architect with design referencing the exact verified decomposition "
+            "revision and server content_sha256, not a future Developer candidate or an attachment "
+            "substitute. Report the actual architecture, ordered implementation plan, coverage and "
+            "verification of its saved content. Technical result metadata remains separate from the "
+            "substantive report. Tracker proposal and handoff are subsequent actions after acceptance. "
         )
     return common + (
         f"Prepare {RESULTS[role]} from verified saved role artifacts and the exact assigned candidate. "

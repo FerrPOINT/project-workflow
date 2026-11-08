@@ -14,6 +14,7 @@ TECHNICAL_MODES = [
     ("analyst", "analysis"), ("architect", "decomposition"), ("developer", "initial"),
     ("developer", "rework"), ("reviewer", "delivery"), ("tester", "delivery"), ("devops", "delivery"),
 ]
+ATTACHMENT_MODES = [pair for pair in TECHNICAL_MODES if pair[0] != "architect"]
 UPLOAD = (
     "task-tracker attachment upload --issue <task-uuid> "
     "--file <role-artifact.json> --content-type application/json"
@@ -63,7 +64,7 @@ def test_first_step_validates_readbacks_without_technical_report_copy(generated,
     assert "copy the actual scalar fields" not in first
 
 
-@pytest.mark.parametrize("role,mode", TECHNICAL_MODES)
+@pytest.mark.parametrize("role,mode", ATTACHMENT_MODES)
 def test_configured_artifacts_keep_current_authority_and_original_provenance(generated, role, mode):
     catalog, _ = generated
     selected = mode_for(catalog, role, mode)
@@ -84,7 +85,7 @@ def test_configured_artifacts_keep_current_authority_and_original_provenance(gen
     assert "before any Tracker read" not in instructions.FIRST_STEP  # Context discovers the actual key.
 
 
-@pytest.mark.parametrize("role,mode", TECHNICAL_MODES)
+@pytest.mark.parametrize("role,mode", ATTACHMENT_MODES)
 def test_evidence_precedes_report_and_business_effects_follow_acceptance(generated, role, mode):
     catalog, _ = generated
     final = phase_text(mode_for(catalog, role, mode)["phases"][-1])
@@ -111,7 +112,7 @@ def test_evidence_precedes_report_and_business_effects_follow_acceptance(generat
         assert "business rework verdict" in instructions.terminal_instruction(role)
 
 
-@pytest.mark.parametrize("role,mode", TECHNICAL_MODES)
+@pytest.mark.parametrize("role,mode", ATTACHMENT_MODES)
 def test_uncertain_effects_keep_original_keys_bytes_and_assignment(generated, role, mode):
     catalog, _ = generated
     final = phase_text(mode_for(catalog, role, mode)["phases"][-1])
@@ -135,6 +136,44 @@ def test_uncertain_effects_keep_original_keys_bytes_and_assignment(generated, ro
     for forbidden in ("attachment operation", "attachment delete", "FLEET_DELIVERY_PROPOSAL_KEY",
                       "--runtime-request", "--execution-token-file", ".fleet-cli"):
         assert forbidden not in final + after
+
+
+def test_architect_seals_exact_structured_plan_before_report_and_proposes_only_after_acceptance(generated):
+    catalog, _ = generated
+    phases = mode_for(catalog, "architect", "decomposition")["phases"]
+    final = phase_text(phases[-1])
+    for required in ("installed solution-architecture skill", "decomposition read --task",
+                     "decomposition save --task", "expected_revision", "current context.assignment fence",
+                     "requirements revision/hash and analysis_result_id", "Preserve existing section IDs",
+                     "BEFORE the FINAL Workflow phase report", "decomposition operation --task",
+                     "decomposition revision --task", "Verify the saved full content",
+                     "design.reference=/api/v1/issues/<task-uuid>/decomposition/revisions/<saved-revision>",
+                     "design.sha256=that server content_sha256", "canonical plan content",
+                     "Unknown save acceptance requires original-key operation readback",
+                     "403, unavailable API, missing source, hash mismatch or stale fence",
+                     "not permission to fall back to an attachment", "Never overwrite history",
+                     "keep technical receipts in command metadata", "PRECOMMIT ASSESSMENT ONLY",
+                     "own future terminal receipt", "not a future Developer candidate"):
+        assert required in final
+    assert final.index("decomposition save --task") < final.index("decomposition operation --task")
+    assert final.index("decomposition operation --task") < final.index("decomposition revision --task")
+    assert "attachment upload" not in final
+    assert "sdlc result propose" not in final and "discussion publish" not in final
+    assert "decomposition save" not in phase_text(phases[0])
+    after = instructions.completion_instruction("architect")
+    assert after.index("discussion publish") < after.index(PROPOSE) < after.index("finish the run")
+    for required in ("original-key readback", "fence from fresh lifecycle", "Fleet verifies real terminal",
+                     "Development / Ready", "a proposal is not a transition", "Never borrow scheduler credentials"):
+        assert required in after
+
+
+def test_only_analyst_and_architect_worker_contracts_change_from_exact_retained_baseline(generated):
+    catalog, _ = generated
+    old, _ = load_profile("852e0647ad8645c9c6280b21c1595b9efa6ff87754d07df8dcc92bcb04f76381")
+    before = {workflow["role_key"]: workflow for workflow in old["workflows"]}
+    for workflow in catalog["workflows"]:
+        if workflow["role_key"] not in {"analyst", "architect"}:
+            assert workflow == before[workflow["role_key"]]
 
 
 def test_pm_selected_review_and_exact_owner_consent_precede_handoff(generated):
@@ -191,12 +230,21 @@ def test_status_alignment_preserves_all_phase_ids_criteria_skills_and_evidence(g
         if "previous_baseline_manifest_sha256" in previous[workflow["key"]]:
             workflow["previous_baseline_manifest_sha256"] = previous[workflow["key"]][
                 "previous_baseline_manifest_sha256"]
+        if workflow["role_key"] == "architect":
+            assert "forge-operator" in workflow["skill_names"]
+            assert "wiki-operator" not in workflow["skill_names"]
+            workflow["skill_names"].remove("forge-operator")
         for mode in workflow["modes"]:
             for phase in mode["phases"]:
                 for instruction in phase["instructions"]:
+                    if workflow["role_key"] == "architect":
+                        assert instruction["skills"] == [
+                            "project-workflow-executor", "tracker-operator", "forge-operator",
+                        ]
+                        instruction["skills"].remove("forge-operator")
                     instruction["description"] = "<worker-description>"
     encoded = json.dumps(workflows, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    # Apart from the explicit source lineage and worker text, the pre-change contract is exact.
+    # Only Architect's explicit existing-skill delivery, lineage and worker text differ.
     assert hashlib.sha256(encoded).hexdigest() == "f1651ae4917e52e6293538c8cc96534c2bd418c341562cae25b61caf25528487"
 
 
