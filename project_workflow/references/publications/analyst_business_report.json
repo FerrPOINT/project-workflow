@@ -65,11 +65,11 @@
             }
           ],
           "checks": [
-            "The approved requirements document/revision and task context match the assigned task.",
+            "The analysis uses the supplied approved requirements as its business scope, without silently replacing or expanding them.",
             "Problem, users, expected outcome, mandatory scope and exclusions are explicit."
           ],
           "evidence": [
-            "Actual approved input references and a concise problem/scope interpretation."
+            "Relevant approved input contents and a concise problem/scope interpretation, with actual gaps or unavailable sources made explicit."
           ],
           "parallel_with_phase_code": null,
           "rollback_target_phase_code": null
@@ -543,7 +543,7 @@
             }
           ],
           "checks": [
-            "The full saved analysis.md matches the assigned task/revision and producing assignment; its publication and unchanged downloaded contents were actually verified.",
+            "The full saved analysis.md reflects the approved requirements and completed research; its publication and unchanged downloaded contents were actually verified.",
             "All mandatory behavior is supported and covered; unresolved essential facts prevent final acceptance.",
             "The final report reviews actual work, not future terminal/comment/proposal/transition evidence."
           ],
@@ -557,5 +557,5 @@
       ]
     }
   ],
-  "content_sha256": "9edb978d2ec6c86b48238afab2b205eac711653fa712390a6aa9f36fb25e43d1"
+  "content_sha256": "5369f15df2c9f372d38a7063098f2e60bb95fd0433a4f26afa9855b3506405b2"
 }

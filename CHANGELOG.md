@@ -16,6 +16,15 @@
   engine and migrations are unchanged. A source-baseline replacement was rejected
   before installation because it would require an unnecessary cutover.
   Configuration checks, text publication and live acceptance remain distinct gates.
+- Initial publications PM17/Analyst5 are installed. SDLC-38/209 exposed the
+  remaining PM01 requirement to copy a technical Step response; the model's
+  refusal followed that contract. A full15-phase review removes this conflict
+  and future-action attestations without removing presentation, consent or
+  server checks. PM02 now demonstrates exact projection of the ten declared
+  business fields from the actual flat requirements CLI response.17 targeted
+  tests pass, including executable-example value/UTF-8 preservation and missing
+  field refusal. Final publication and new clean live scenarios remain pending;
+  old tasks and engine/baseline/migrations are unchanged.
 
 ### Current Status (2026-11-07)
 

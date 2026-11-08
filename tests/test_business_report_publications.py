@@ -65,10 +65,15 @@ def test_analyst_initial_criteria_are_business_only_but_procedural_provenance_re
     first = candidate("analyst")[0]
     assert first["code"] == "AN-ANALYSIS-01"
     assert first["checks"] == [
-        "The approved requirements document/revision and task context match the assigned task.",
+        "The analysis uses the supplied approved requirements as its business scope, "
+        "without silently replacing or expanding them.",
         "Problem, users, expected outcome, mandatory scope and exclusions are explicit.",
     ]
-    assert first["evidence"] == ["Actual approved input references and a concise problem/scope interpretation."]
+    assert first["evidence"] == [
+        "Relevant approved input contents and a concise problem/scope interpretation, "
+        "with actual gaps or unavailable sources made explicit.",
+    ]
+    assert first["instructions"][0]["description"] == instructions.FIRST_STEP
     worker = phase_text(first)
     for required in (
         "approved requirements revision/hash", "context/input/requirements/source",
@@ -83,7 +88,7 @@ def test_analyst_final_business_evidence_preserves_mandatory_gap_refusal():
     final = candidate("analyst")[-1]
     assert final["code"] == "AN-ANALYSIS-12"
     assert final["checks"] == [
-        "The full saved analysis.md matches the assigned task/revision and producing assignment; "
+        "The full saved analysis.md reflects the approved requirements and completed research; "
         "its publication and unchanged downloaded contents were actually verified.",
         "All mandatory behavior is supported and covered; unresolved essential facts prevent final acceptance.",
         "The final report reviews actual work, not future terminal/comment/proposal/transition evidence.",
@@ -127,16 +132,86 @@ def test_analyst_technical_receipts_remain_procedural_and_feed_later_tracker_pro
     assert PROPOSE not in final
 
 
+def test_pm_initial_criteria_assess_original_business_inputs_not_server_admission():
+    first = candidate("project_manager")[0]
+    assert first["code"] == "PM-DRAFT-01"
+    assert first["checks"] == [
+        "The original request and available business inputs were actually reviewed; "
+        "the intended result and boundaries are understood.",
+        "Known facts and unresolved business questions are distinguished, "
+        "without invented requirements or owner decisions.",
+    ]
+    assert first["evidence"] == [
+        "The original request, relevant provided input contents and completed initial review, "
+        "including any actual gaps.",
+    ]
+    assert first["instructions"][0]["description"] == instructions.FIRST_STEP
+
+
+def test_pm_preparation_criteria_keep_real_gap_resolution_without_future_consent_requirement():
+    preparation = candidate("project_manager")[1]
+    assert preparation["code"] == "PM-DRAFT-02"
+    assert preparation["checks"][2] == (
+        "Actual blocking gaps/contradictions were resolved without invented answers or preselection; "
+        "if none exist, no question/answer evidence is required."
+    )
+    worker = phase_text(preparation)
+    assert "A complete brief is not owner confirmation" in worker
+    assert "present the saved requirements for exact confirmation in phase 3" in worker
+
+
+def test_pm_preparation_example_copies_flat_requirements_business_fields_verbatim():
+    preparation = candidate("project_manager")[1]
+    examples = [
+        block.partition("```")[0]
+        for instruction in preparation["instructions"]
+        for block in instruction["description"].split("```python\n")[1:]
+    ]
+    assert len(examples) == 1, "PM02 must own one executable flat-row projection example"
+    code = compile(examples[0], "<PM02 publication example>", "exec")
+    fields = (
+        "goal", "scope", "exclusions", "scenarios", "acceptance_criteria",
+        "constraints", "dependencies", "assumptions", "checklist", "prerequisites",
+    )
+    text = ('\u0422\u0440\u0435\u0431\u043e\u0432\u0430\u043d\u0438\u044f "quoted" \\path\n'
+            '\U0001f642; content_hash is a business term')
+    saved_revision = {field: text if field == "goal" else [text, "  keep whitespace  "] for field in fields}
+    saved_revision.update(revision=7, content_hash="a" * 64,
+                          author_subject="synthetic-owner", created_at="2026-11-08T11:22:22Z")
+    before = deepcopy(saved_revision)
+    scope = {"saved_revision": saved_revision}
+    exec(code, scope)
+    document = scope["saved_document"]
+    assert set(document) == set(fields)
+    assert document == {field: before[field] for field in fields}
+    for field in fields:
+        assert json.dumps(document[field], ensure_ascii=False, allow_nan=False).encode("utf-8") == (
+            json.dumps(before[field], ensure_ascii=False, allow_nan=False).encode("utf-8")
+        )
+    assert saved_revision == before
+    incomplete = deepcopy(before)
+    del incomplete["constraints"]
+    with pytest.raises(KeyError):
+        exec(code, {"saved_revision": incomplete})
+
+
 def test_pm_candidate_requires_real_presentation_and_reuses_only_valid_unchanged_consent():
     phases = candidate("project_manager")
     final = phases[-1]
     assert final["checks"] == [
         "The full latest saved requirements document and its human-readable revision were presented to owner.",
-        "An actual owner confirmation applies to that same task, latest saved document/revision and owner.",
-        "Actual feedback is resolved; no stale or foreign consent or invented questions.",
+        "The owner explicitly approved the latest saved requirements as presented; "
+        "a complete brief or an agent assumption is not consent.",
+        "Actual feedback is resolved; approval of an earlier or different document does not approve "
+        "changed requirements, and unresolved questions are not hidden.",
         "No unresolved business blockers. Waiting for owner input leaves this phase unfinished.",
         "The report accounts for actual requirements review work, including presentation and owner decisions; "
-        "the latest saved document remains owner-confirmed in Draft, without claiming future work as completed.",
+        "the latest saved document is approved without claiming future work as completed.",
+    ]
+    assert final["evidence"] == [
+        "Full latest saved business document and its human-readable revision, with the actual owner presentation.",
+        "Actual owner's confirmation of that unchanged document/revision, owner decisions and resolved feedback; "
+        "remaining blockers are explicit.",
     ]
     worker = phase_text(final)
     for required in (

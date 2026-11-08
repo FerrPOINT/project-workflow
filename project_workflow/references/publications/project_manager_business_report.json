@@ -57,11 +57,11 @@
             }
           ],
           "checks": [
-            "The returned Workflow step is admitted in the assigned namespace.",
-            "The one Tracker task, current stage/status and input references match."
+            "The original request and available business inputs were actually reviewed; the intended result and boundaries are understood.",
+            "Known facts and unresolved business questions are distinguished, without invented requirements or owner decisions."
           ],
           "evidence": [
-            "Actual first Workflow step response and task/input references."
+            "The original request, relevant provided input contents and completed initial review, including any actual gaps."
           ],
           "parallel_with_phase_code": null,
           "rollback_target_phase_code": null
@@ -98,7 +98,7 @@
               ]
             },
             {
-              "description": "When clarification is needed, brainstorm in small free-form iterations before a document exists; never create a placeholder revision or question solely for checkpointing. When the agreed draft is ready, publish the real requirements using task-tracker sdlc revision publish --task <task-uuid> --from-file -. Formal clarification is conditional on an actual unresolved gap and requires an existing requirements revision: only then publish a focused question using task-tracker sdlc question publish --task <task-uuid> --from-file -. Pass JSON on stdin. Use actual strict MachineFence, revision/version and idempotency fields from the supplied context; never invent IDs. Read questions/requirements back and match the actual server revision/content_hash. Reconcile uncertain publication through those supported reads before retry with the exact original key/body. Include the full saved business document and its human-readable revision, plus verified phase work, including actual presentation when performed, not just the document or consent. Keep hashes, UUIDs and technical receipts in command metadata and readbacks, not in the substantive report.",
+              "description": "When clarification is needed, brainstorm in small free-form iterations before a document exists; never create a placeholder revision or question solely for checkpointing. When the agreed draft is ready, publish the real requirements using task-tracker sdlc revision publish --task <task-uuid> --from-file -. Formal clarification is conditional on an actual unresolved gap and requires an existing requirements revision: only then publish a focused question using task-tracker sdlc question publish --task <task-uuid> --from-file -. Pass JSON on stdin. Use actual strict MachineFence, revision/version and idempotency fields from the supplied context; never invent IDs. Read questions/requirements back and match the actual server revision/content_hash. Reconcile uncertain publication through those supported reads before retry with the exact original key/body. Include the full saved business document and its human-readable revision, plus verified phase work, including actual presentation when performed, not just the document or consent. Keep hashes, UUIDs and technical receipts in command metadata and readbacks, not in the substantive report.\nThe parsed stdout of task-tracker sdlc requirements is a flat saved revision, not a business-document envelope. Given that parsed saved_revision, copy the complete business document without rewriting values:\n```python\nsaved_document = {field: saved_revision[field] for field in (\n    'goal', 'scope', 'exclusions', 'scenarios', 'acceptance_criteria',\n    'constraints', 'dependencies', 'assumptions', 'checklist', 'prerequisites',\n)}\n```\nUse saved_document as the report artifact content and the revision number in its human-readable label. Keep content_hash, author_subject, created_at and command receipts in technical readbacks, not in the business document. Do not copy the whole revision object.",
               "execution_type": "sync",
               "skills": [
                 "project-workflow-executor",
@@ -125,7 +125,7 @@
           "checks": [
             "Draft has a full server-saved requirements document identified by its revision, clear scope and measurable acceptance criteria.",
             "Clarifications were requested only for incomplete or contradictory input; a complete, consistent brief proceeds directly to requirements with no clarification questions or mandatory alternatives.",
-            "Actual blocking gaps/contradictions were resolved without invented answers or preselection; if none exist, no question/answer evidence is required. Owner confirmation remains a separate exact action.",
+            "Actual blocking gaps/contradictions were resolved without invented answers or preselection; if none exist, no question/answer evidence is required.",
             "Unresolved blockers remain explicit; no additional Tracker tasks were created."
           ],
           "evidence": [
@@ -185,10 +185,10 @@
           ],
           "checks": [
             "The full latest saved requirements document and its human-readable revision were presented to owner.",
-            "An actual owner confirmation applies to that same task, latest saved document/revision and owner.",
-            "Actual feedback is resolved; no stale or foreign consent or invented questions.",
+            "The owner explicitly approved the latest saved requirements as presented; a complete brief or an agent assumption is not consent.",
+            "Actual feedback is resolved; approval of an earlier or different document does not approve changed requirements, and unresolved questions are not hidden.",
             "No unresolved business blockers. Waiting for owner input leaves this phase unfinished.",
-            "The report accounts for actual requirements review work, including presentation and owner decisions; the latest saved document remains owner-confirmed in Draft, without claiming future work as completed."
+            "The report accounts for actual requirements review work, including presentation and owner decisions; the latest saved document is approved without claiming future work as completed."
           ],
           "evidence": [
             "Full latest saved business document and its human-readable revision, with the actual owner presentation.",
@@ -200,5 +200,5 @@
       ]
     }
   ],
-  "content_sha256": "e749d0573b6a20f1cf0a877342d7f05bd60cf869fd197200a27c0b8d8f58f8e1"
+  "content_sha256": "1488bda6cdbba6049e7f04547379da367785444646f22dfa84ed77c0a5b98ed0"
 }
