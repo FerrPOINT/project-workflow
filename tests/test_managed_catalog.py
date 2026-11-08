@@ -361,32 +361,40 @@ def test_init_db_keeps_installed_catalog_presentation_edits(
     tmp_path, monkeypatch
 ):
     from project_workflow.config import get_settings
+    from project_workflow.domain.single_task_profile import is_single_task_key
     from project_workflow.infrastructure.db.session import reset_engine
+    from project_workflow.infrastructure.db.single_task_catalog import observe_installation
     from scripts.init_db import main
 
     database_url = f"sqlite:///{tmp_path / 'managed-init-drift.db'}"
     monkeypatch.setenv("DATABASE_URL", database_url)
+    monkeypatch.setenv("PROJECT_WORKFLOW_MODE", "platform")
+    monkeypatch.setenv("AUTH_ISSUER", "https://auth.fixture.invalid")
+    monkeypatch.setenv("AUTH_INTERNAL_BASE_URL", "https://auth.fixture.invalid")
+    monkeypatch.setenv("AUTH_SESSION_SECRET", "managed-catalog-fixture-session-secret-32-characters")
     get_settings.cache_clear()
     reset_engine()
     try:
         assert main() == 0
         with SAUnitOfWork(database_url) as uow:
-            namespace = uow.projects.get_by_cli_command("workflow-project_manager")
+            installation = observe_installation(uow)
+            namespace = uow.projects.get_by_cli_command("workflow-single-task-project-manager")
             assert namespace is not None and namespace.id is not None
             uow.projects.update(namespace.id, {"theme_color": "#22C55E"})
 
         assert main() == 0
         with SAUnitOfWork(database_url) as uow:
-            namespace = uow.projects.get_by_cli_command("workflow-project_manager")
+            namespace = uow.projects.get_by_cli_command("workflow-single-task-project-manager")
             assert namespace is not None
             assert namespace.theme_color == "#22C55E"
             assert len(
                 [
                     workflow
                     for workflow in uow.workflows.list()
-                    if workflow.key in MANAGED_WORKFLOW_KEYS
+                    if is_single_task_key(workflow.key)
                 ]
             ) == 7
+            assert observe_installation(uow) == installation
     finally:
         get_settings.cache_clear()
         reset_engine()

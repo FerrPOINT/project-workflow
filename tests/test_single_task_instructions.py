@@ -67,7 +67,7 @@ def test_phase_evaluation_requires_current_work_while_completion_commands_are_po
     after = completion_instruction(role)
     assert "discussion publish" in after and "Editing or deleting" in after
     if role == "project_manager":
-        assert "pm completion submit" in after and "Backlog / Ready" in after
+        assert "pm completion submit" in after and "Draft / Completed" in after
         assert "the system owns Analysis intent and dispatch" in after
     else:
         assert "sdlc result propose" in after and "delivery-result:<assignment_id>" in after

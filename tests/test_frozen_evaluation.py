@@ -72,13 +72,29 @@ def test_actual_supervisor_freezes_full_existing_fingerprint_inputs(accepted):
 @pytest.mark.parametrize("prompt_version", [
     "supervisor-evaluator-v9", "supervisor-evaluator-v8-no-backtracking", "supervisor-evaluator-v11",
     "supervisor-evaluator-v10", "supervisor-evaluator-v12", "supervisor-evaluator-pm-v4",
+    "supervisor-evaluator-v15",
 ])
 def test_prompt_upgrade_keeps_frozen_terminal_readback_and_replay(
     configured, supervisor_llm, monkeypatch, prompt_version,
 ):
-    with monkeypatch.context() as previous:
-        previous.setattr(PromptBuilder, "PROMPT_VERSION", prompt_version)
-        command, selector, result, record = accepted.__wrapped__(configured, supervisor_llm)
+    command, selector, result, record = accepted.__wrapped__(configured, supervisor_llm)
+    with SAUnitOfWork() as uow:
+        # Synthetic retained raw-format proof, not execution of an old policy or a normalized receipt.
+        row = uow.session.get(models.TaskStepHistoryEntry, record["id"])
+        archive = json.loads(row.evaluation_snapshot)
+        archive["prompt_version"] = prompt_version
+        state = archive["contract_fingerprint_state"]
+        state["prompt_version"] = prompt_version
+        state.pop("phase_context_fingerprint")
+        fingerprint = _fingerprint_contract_state(state)
+        archive.update(contract_fingerprint=fingerprint, evaluated_contract_fingerprint=fingerprint)
+        row.evaluation_snapshot = json.dumps(archive)
+        uow.commit()
+        record = uow.step_history.get_by_id(record["id"]).to_dict()
+    def forbidden_evaluation(*args, **kwargs):
+        pytest.fail("Historical readback/replay must not call the evaluator")
+
+    monkeypatch.setattr("project_workflow.infrastructure.llm.OpenAICompatibleClient.respond", forbidden_evaluation)
     before = copy.deepcopy(record["evaluation_snapshot"])
     assert before["prompt_version"] == prompt_version != PromptBuilder.PROMPT_VERSION
     assert validate(record, before) == record["covered_item_ids"]
@@ -91,12 +107,13 @@ def test_prompt_upgrade_keeps_frozen_terminal_readback_and_replay(
     assert after == before
 
 
-def test_unknown_prompt_version_is_not_trusted_even_with_consistent_hashes(accepted):
+def test_rehashed_unknown_policy_cannot_replace_the_saved_prompt_version(accepted):
     record = copy.deepcopy(accepted[3])
     evaluation = record["evaluation_snapshot"]
-    evaluation["prompt_version"] = evaluation["contract_fingerprint_state"]["prompt_version"] = "unknown-evaluator"
+    evaluation["contract_fingerprint_state"]["prompt_version"] = "unknown-evaluator"
     fingerprint = _fingerprint_contract_state(evaluation["contract_fingerprint_state"])
     evaluation.update(contract_fingerprint=fingerprint, evaluated_contract_fingerprint=fingerprint)
+    assert evaluation["prompt_version"] == PromptBuilder.PROMPT_VERSION
     with pytest.raises(ConflictError, match="proof mismatch"):
         validate(record, evaluation)
 

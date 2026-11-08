@@ -36,157 +36,51 @@
 Действующий путь для всех профессий: [единый CLI/API](docs/configured-cli-v1.md).
 Установка и живой прогон учитываются отдельно от source-проверок.
 
+Для разработки других агентов на отдельном компьютере используйте
+[опубликованный исходный checkpoint и конфигурации](docs/managed-catalog-publication.md#shared-development-checkpoint---8-november-2026).
+Полный PM-сценарий SDLC-40 принят до Analysis/Ready; второй PM-сценарий и
+Analyst ещё не приняты. Это доступная основа разработки, не полный релиз.
+
 **project-workflow** — внутренняя private-платформа для пофазного ведения задач. Агент отчитывается через CLI, обязательный LLM Supervisor проверяет отчёт и выдаёт вердикт: **PASS**, **PARTIAL**, **BLOCKED** или **DELEGATE**.
 
 Проверяющая LLM для всех профессий вызывается одним контрактом: `POST /v1/responses`
 на настроенном `OPENAI_BASE_URL` (уже содержит `/v1`). Workflow передаёт системные
 инструкции, текущие критерии и отчёт, задаёт `text.format=json_schema` с `strict=true`,
-`store=false` и `max_output_tokens` из `OPENAI_MAX_TOKENS`. Агент не выбирает формат.
+`store=false`. По умолчанию `max_output_tokens` не передаётся: Workflow не задаёт
+произвольный потолок генерации. `OPENAI_MAX_TOKENS` необязателен и используется
+только для явно заданного оператором ограничения; пустое значение означает его
+отсутствие. Собственные ограничения модели и провайдера сохраняются. Агент не выбирает формат.
 Клиент не вызывает Chat Completions и не переключает API/модель при ошибке.
 Отказ, незавершённый ответ, превышение лимита или некорректный результат блокируют
 принятие; локальная проверка схемы, критериев и вердикта сохраняется.
 Настройка `OPENAI_EVALUATOR_RESPONSE_FORMAT` удалена: выбираемого JSON-режима больше нет.
-Перед установкой требуется проверить поддержку strict schema и лимита именно
-на настроенном провайдере; HTTP 200 сам по себе не подтверждает их соблюдение.
+Перед установкой требуется проверить strict schema на настроенном провайдере;
+если оператор намеренно задаёт cap, отдельно проверяется его применение.
+HTTP 200 сам по себе не подтверждает соблюдение контракта.
 Сохранённая история прежних оценок читается без переписывания.
+Полный отчёт читается из stdin без предметного лимита длины и передаётся Advisor
+без сокращения документов; ресурсный или провайдерный отказ не заменяется PASS.
 
 Web UI управляет профессиями, их воркфлоу и фазами, показывает историю выполнения.
 Обычный CLI содержит только `step` и `history`: агент получает инструкцию, выполняет
-работу и отправляет фактический отчёт для оценки advisor. CLI работает через API
-с действующим назначением Tracker и служебной identity Auth. Задача Workflow
-создаётся при принятии проверенного назначения; чтение `step` её не создаёт.
+работу и отправляет фактический отчёт для оценки advisor. CLI работает через API.
+В platform он использует назначение Tracker и identity Auth; задача создаётся
+при принятии назначения. В standalone локальный запуск явно создаётся через
+`step --start`. Обычное чтение `step` задачу не создаёт в обоих режимах.
 
 Ручная проверка качества: [регламент](LIVE_TEST_PLAN.md) и
 [файловая песочница через CLI](manual/file-sandbox/README.md). Прямой запуск
 движка не является доказательством прохождения этого пути.
 
-### Историческая native-интеграция
+### Исторические Данные
 
-Следующее описание сохранено для прежних данных и результатов. Оно не является
-инструкцией запуска `configured-cli-v1`; актуальные адреса, credentials, назначения
-и команды описаны в [действующем контракте](docs/configured-cli-v1.md).
-
-Агент использует Central Auth service-account PAT и текущее назначение Tracker.
-Fleet передаёт назначение через `POST /internal/runtime/assign`; его служебный PAT
-требует `project-workflow:write` и зарегистрированного subject профессии в
-`PROJECT_WORKFLOW_BASE_READER_SUBJECTS_JSON`. История и terminal readback требуют
-`project-workflow:read`; отозванный или человеческий PAT не разрешает эти операции.
-Старые непрозрачные карты role tokens больше не участвуют в исполнении.
-
-Fleet Control читает каталог через `GET /internal/runtime/catalog` отдельным
-зарегистрированным read-only PAT с ролью `catalog`. Исторический
-`PROJECT_WORKFLOW_FLEET_CATALOG_TOKEN` допускает только чтение каталога,
-не назначение, шаг, историю или terminal readback. Эти маршруты остаются во
-внутренней сети или на host loopback.
-
-Отдельная opt-in single-task семья описана в [установке](docs/single-task-installation.md).
-Её текущая редакция прошла [PostgreSQL side-by-side проверку](docs/current-family-postgres-20261016.md);
-это не установка на стенд и не подтверждение полного SDLC.
-
-Business adapter проверяет runtime-контракт через аутентифицированный
-`GET /internal/runtime/capabilities`. Assignment token получает только
-`assign`/`bind`/`rebind`, runtime token — только `step`/`history`; catalog token не имеет
-доступа к endpoint. Успешный ответ возвращает роль, тип credential, readiness
-схемы и immutable source provenance. Отсутствующий или некорректный build
-manifest даёт `503`, при этом публичный `/health` по-прежнему проверяет только
-DB/schema и подходит для standalone-разработки.
-Стоимость повторных запросов и обнаружение изменений описаны в
-[проверке готовности](docs/health-readiness.md).
-
-Managed DEV bootstrap загружает versioned-каталог v2 из исторически именованного
-[`hermes_sdlc_catalog_v1.json`](project_workflow/references/hermes_sdlc_catalog_v1.json):
-семь workflow и одиннадцать backend-selected modes. Developer имеет `initial`
-и `rework`; каждый допускает независимый scope `delivery` или `aggregate`.
-Scope выбирает Business, а workflow проверяет допустимый набор. Reviewer,
-Tester и DevOps используют `delivery` для delivery и `integration` для aggregate.
-Каноническая роль Project
-Manager записывается как `project_manager`; произвольные underscore aliases не
-нормализуются. У managed workflow нет `default` mode: отсутствие или
-несовпадение assigned mode закрывает запуск до Supervisor/model call. Старый
-single-workflow каталог сохранён как явно unmanaged compatibility artifact и
-не используется `scripts/init_db.py` как fallback. При обновлении существующей
-versioned БД `init_db` распознаёт только точное прежнее содержимое этого
-каталога, сохраняет его workflow/mode/phase/task/history identifiers и добавляет
-managed registry в той же транзакции. Старый конфликтующий agent `reviewer`
-получает детерминированный alias `legacy-reviewer`, не меняя phase references.
-Любой drift, неоднозначный alias или посторонний test/foreign object блокирует
-bootstrap до записи. Fleet catalog endpoint при этом возвращает только семь
-managed workflow/namespaces; legacy Task остаются доступны прежнему unmanaged
-CLI/UI compatibility flow. Каталог v1 сохранён отдельно в
-[`hermes_sdlc_catalog_v1_legacy.json`](project_workflow/references/hermes_sdlc_catalog_v1_legacy.json).
-Adoption v2 не изменяет frozen assignments, phases или историю v1. Bound v1
-assignment не исполняется несовместимым runtime: dispatch получает
-`VERSION_INCOMPATIBLE`. Исторический cleanup разрешает только owner-confirmed
-GET/ACK в `RECONCILE_ONLY`, без новых product effects.
-
-Continuation использует внутренний `rebind`: новый immutable assignment
-сохраняет Task/Thread/cycle/Business attempt и незавершённую фазу, увеличивает
-runSequence и проверяет old/new binding, checkpoint provenance, входные
-revisions и operation key. CAS и повтор одинаковой операции не создают
-двойной run. До owner confirmation новый binding не допускает `step`.
-Git checkpoint сохраняет работу, но не является stage PASS или candidate.
-Business-only роли сохраняют phase/context без Tech workspace.
-
-Compatible image закрепляет catalog/skills/capabilities и exact source
-provenance. Canonical exporter исполняется из того же Git archive, который
-устанавливает Docker; native skills manifest читается по закреплённому Git
-revision. Отсутствующий или расходящийся release descriptor блокирует runtime
-capabilities/dispatch. Успешный `/health` сам по себе не доказывает эту
-совместимость, автономный SDLC или human acceptance.
-
-Поставляемый image собирается из одного immutable Git snapshot командой:
-
-```bash
-python scripts/build_runtime_image.py build \
-  --revision <exact-sha> \
-  --skills-root <agent-skills-checkout> \
-  --image project-workflow:<exact-sha>
-```
-
-Optional build-container limits are inherited by the producer from normal Base
-Build: set both `PROJECT_WORKFLOW_BUILD_MEMORY_MIB` (256..32768) and
-`PROJECT_WORKFLOW_BUILD_CPUS` (1..8) as canonical positive decimal integers.
-For example, `2048` and `1` add Docker `--resource` memory/memory-swap `2048m`
-and CPU period/quota `100000`/`100000`. Missing pairs or invalid values fail
-before launching processes; absent both preserves the legacy build command.
-The Docker CLI must support `--resource`. These are build-container limits,
-not an aggregate cap across parallel stages or runtime limits. Independent
-host CPU/RAM admission and the 30 GiB free-disk check remain required.
-
-Скрипт один раз читает `git archive <exact-sha>`, из этих же bytes вычисляет
-SHA-256 source archive и канонический SHA-256 runtime bundle, добавляет manifest
-в копию archive и передаёт полученный immutable tar как Docker build context.
-Для команды archive закреплены `core.autocrlf=false` и `core.eol=lf`:
-пользовательские Git-настройки Windows/Linux не меняют bytes и digests одного
-commit. Явные правила EOL в committed `.gitattributes`, raw CRLF и бинарные
-файлы сохраняются; глобальная конфигурация Git не изменяется.
-Transport использует детерминированный gzip (`mtime=0`), чтобы Docker не
-принимал PAX-first tar на stdin за Dockerfile. Сжатие не меняет исходный
-archive digest, runtime bundle digest или содержимое immutable manifest.
-Dirty или ignored файлы рабочего каталога в candidate не попадают. Digest
-bundle включает path, regular-file type, executable mode и content hash;
-symlink и другие non-regular runtime inputs отклоняются. Dockerfile повторно
-проверяет bundle и совпадение build args с `/app/runtime-build-manifest.json`.
-Те же значения
-записываются в OCI labels `org.opencontainers.image.revision`,
-`io.relevanter.source.archive-sha256` и
-`io.relevanter.runtime.bundle-sha256`. Обычный `docker compose up --build`
-остаётся доступен для локальной разработки, но намеренно не считается
-поставляемым candidate и его capability endpoint остаётся not ready.
-
-Browser UI поддерживает общий Central Auth Authorization Code + PKCE. При
-заданном `AUTH_ISSUER` все UI и human API routes требуют активную центральную
-сессию; локального password fallback нет. Публичный issuer и внутренний адрес
-обмена/JWKS задаются отдельно через `AUTH_ISSUER` и
-`AUTH_INTERNAL_BASE_URL`.
-
-**Режим без авторизации (по умолчанию):** если `AUTH_ISSUER` не задан, SSO
-middleware не активируется — UI и API работают без входа. Для standalone
-запуска достаточно одного репозитория: `docker compose up -d --wait` поднимает
-db + migrate + api на `127.0.0.1:8812` без Central Auth и без соседних
-репозиториев.
-
-Runtime-источник данных — **PostgreSQL**. SQLite используется только для изолированных тестов и локальных smoke-сценариев.
+Прежние native-протоколы, build-профили и способы adoption не являются
+поддерживаемым путём исполнения. Их описание сохранено только в
+[историческом документе](docs/architecture-native-history.md) и Git-истории.
+Старые задачи и отчёты не удаляются и не переоцениваются, но архив не выдаёт
+новую execution authority. Действующий контракт: [CLI/API](docs/configured-cli-v1.md)
+и [архитектура](docs/architecture.md). Runtime-хранилище — PostgreSQL;
+SQLite используется только для изолированных тестов.
 
 <a name="overview"></a>
 
@@ -208,25 +102,29 @@ Runtime-источник данных — **PostgreSQL**. SQLite использ�
 
 | Режим | Когда использовать | Настройки | Поведение |
 |---|---|---|---|
-| Standalone без авторизации | Локальная разработка, loopback/VPN, один репозиторий | Не задавать `AUTH_*` | `docker compose up --build -d --wait` запускает db, migrate и api; UI/API открыты без входа. |
-| Central Auth SSO | Общий private-контур и несколько пользователей | `AUTH_ISSUER`, `AUTH_INTERNAL_BASE_URL`, `AUTH_PUBLIC_ORIGIN`, `AUTH_SESSION_SECRET` | UI и human API требуют Central Auth через Authorization Code + PKCE; при недоступности Auth запросы fail closed с `503`. |
+| Standalone без авторизации | Собственная локальная установка, только loopback | `PROJECT_WORKFLOW_MODE=standalone` | Собственные PostgreSQL, workflow и Advisor; Auth/Fleet/Tracker не нужны. |
+| Platform | Платформенная установка, без обязательной админ-консоли | `PROJECT_WORKFLOW_MODE=platform`, `AUTH_ISSUER`, `AUTH_INTERNAL_BASE_URL`, `AUTH_PUBLIC_ORIGIN`, `AUTH_SESSION_SECRET` | Auth, назначения и подтверждения обязательны; ошибка не включает standalone. |
 | Personal-token CLI | CLI запускается вне БД сервиса | `SDLC_API_TOKEN`, `PROJECT_WORKFLOW_URL`, отдельно установленный `pdlc-cli-core` | Central Auth интроспектирует token и scopes `project-workflow:read/write`; token не хранится приложением. |
 
 ### Standalone без авторизации
 
-Это default-режим: пустой `AUTH_ISSUER` не устанавливает SSO middleware. Для
-старта не нужны Central Auth, `services-base` или дополнительные Docker build
-contexts:
+Режим включается явно; отсутствие `AUTH_ISSUER` его не выбирает. Репозиторный
+Compose и `.env.example` выбирают standalone. Создайте собственные workflow,
+фазы и namespace в UI, затем настройте URL и namespace CLI один раз:
 
 ```bash
 cp .env.example .env
-docker compose up --build -d --wait
+docker compose -p sdlc-qa-workflow-local -f docker-compose.yml up --build -d --wait
 curl --fail http://127.0.0.1:8812/health
 ```
 
-UI: `http://127.0.0.1:8812`. Стандартный Compose публикует API и PostgreSQL
-только на loopback; не делайте этот режим общедоступным без отдельного security
-review.
+UI: `http://127.0.0.1:8812`. API и PostgreSQL опубликованы только на loopback.
+CLI использует HTTP, не открывает БД и не требует внешнего токена. Выберите
+`PROJECT_WORKFLOW_MODE=standalone`, `PROJECT_WORKFLOW_URL` и
+`PROJECT_WORKFLOW_NAMESPACE_ID`, затем `project-workflow --json step --task LOC-1
+--start --workflow-id <id> --mode-key <key> --operation-key <stable-key>`.
+Следующий step читает инструкции; report требует текущую version и отдельный key.
+После локальной QA выполните down для того же Compose project и файла.
 
 ### Central Auth SSO
 
@@ -337,53 +235,58 @@ SSO остаются HttpOnly, а namespace-cookie доступна selector JS.
 
 ## 🖥️ CLI
 
-По умолчанию локальный CLI ожидает `DATABASE_URL`:
+`project-workflow step/history` используют только HTTP-контракт
+`configured-cli-v1` и установленный пакет `pdlc-cli-core` из Base.
+`DATABASE_URL` нужен серверу и миграциям, но не CLI; локального DB fallback нет.
+Оператор один раз настраивает CLI под режим сервера, namespace и исполнителя,
+а не устанавливает пакеты или передаёт credentials заново для каждого отчёта.
+
+Standalone полностью работает без Auth, Fleet и Tracker, только через loopback:
 
 ```bash
-export DATABASE_URL=postgresql+psycopg://project_workflow:project_workflow@localhost:5432/project_workflow
+export PROJECT_WORKFLOW_MODE=standalone
+export PROJECT_WORKFLOW_URL=http://127.0.0.1:8812
+export PROJECT_WORKFLOW_NAMESPACE_ID='<namespace ID из UI/API>'
 ```
 
-Платформенный token mode не подключается к БД напрямую. При заданном
-`SDLC_API_TOKEN` команды `step` и `history` используют защищённый HTTP API и
-общий transport package `pdlc-cli-core` (ставится отдельно из
-`services-base/base-modules/python/cli-core`; в standalone-сборку не входит):
+Platform использует отдельный PAT с правами Workflow и UUID исполнителя;
+`SDLC_API_TOKEN` и другие общие токены не подменяют выделенный credential:
 
 ```bash
-export PROJECT_WORKFLOW_URL=http://localhost:8812
-export SDLC_API_TOKEN='<personal token from Admin Panel>'
-workflow-dev step --task RUN-42 --report "Проверил сценарий"
+export PROJECT_WORKFLOW_MODE=platform
+export PROJECT_WORKFLOW_URL=https://workflow.example
+export PROJECT_WORKFLOW_NAMESPACE_ID='<namespace ID из UI/API>'
+export PROJECT_WORKFLOW_API_TOKEN='<dedicated PAT>'
+export FLEET_AGENT_ID='<agent UUID>'
 ```
 
-Central Auth проверяет срок, отзыв и scopes
-`project-workflow:read/write`. Значение токена не передаётся в URL и не
-сохраняется приложением.
-
-Генерация пользовательских wrapper-команд:
+Platform читает уже принятое назначение Tracker, а не создаёт задачу неявно.
+Только standalone допускает явный старт с существующими workflow ID и mode key:
 
 ```bash
-python scripts/install_namespace_clis.py --bin-dir ./.bin
+project-workflow --json step --task LOC-1 --start --workflow-id <workflow-id> --mode-key <mode-key> --operation-key start-LOC-1
 ```
 
-Запуск выбранного workflow через настроенную команду:
+Пример для Bash: сначала прочитать текущий cursor, затем передать полный typed
+JSON через stdin. `expected-version` берётся из фактического ответа `step`
+(ниже показано значение `1`), а не вычисляется исполнителем:
 
 ```bash
-workflow-run step --task RUN-123 --report "Сделал X, проверил Y"
+project-workflow --json step --task LOC-1
+project-workflow --json step --task LOC-1 --report - --operation-key report-LOC-1-1 --expected-version 1 <<'JSON'
+{"source":{"request":"Подготовить документ","decisions":[]},"result":{"artifacts":[{"name":"Документ","content":"Полный текст документа"}],"assumptions":[]},"unresolved":[]}
+JSON
+project-workflow --json history --task LOC-1 --operation-key report-LOC-1-1
+project-workflow --json history --task LOC-1 --n 20
 ```
 
-Чтение истории фаз и supervisor-а того же entrypoint:
-
-```bash
-workflow-run history --task RUN-123 --n 10
-```
-
-Параллельные entrypoints используют собственные настроенные команды:
-
-```bash
-workflow-qa step --task RUN-42 --report "Проверил сценарии"
-workflow-dev history --task RUN-42
-```
-
-Wrapper выставляет `PROJECT_WORKFLOW_NAMESPACE_ID=<id>` и вызывает внутренний `step/history` CLI, поэтому один и тот же внешний task key может существовать независимо в разных namespaces. Исполнитель получает настроенную wrapper-команду в `phase_contract.cli_actor.entrypoint`, а не хардкоженное глобальное имя CLI.
+При неизвестном исходе записи сохранить исходные key/version/report и сверить
+результат через `history --operation-key`, не отправлять изменённый отчёт под
+тем же ключом. Исправленный отчёт требует нового ключа и актуальной версии.
+Обычная platform history может вернуть `archived: true`: это только сохранённая
+страница истории, не исполняемый cursor, не версия и не полномочие на запись.
+Доступ остаётся ограничен namespace и серверной авторизацией читателя.
+Контракт и параметры: [configured-cli-v1](docs/configured-cli-v1.md).
 
 <a name="ui"></a>
 

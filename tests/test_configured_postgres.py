@@ -278,7 +278,7 @@ def responses_provider(monkeypatch):
             assert fmt["type"] == "json_schema" and fmt["strict"] is True
             labels = fmt["schema"]["properties"]["assessments"]["properties"]
             verdict = {"verdict":"PASS", "assessments":{
-                label:{"covered":True, "reason":"Explicit test fixture"} for label in labels
+                label:{"covered":True, "reason":"Explicit test fixture", "required_change":None} for label in labels
             }, "blockers":[], "confidence":1.0}
             body = response_body(json.dumps(verdict))
             body["usage"] = {"output_tokens":control["output_tokens"]}
@@ -322,7 +322,7 @@ def test_provider_http_failure_and_ignored_limit_preserve_phase_in_postgres(conf
         operation_key="provider-limit-failed", expected_version=failed["version"]).json()["result"]
     assert exceeded["verdict"] == "BLOCKED" and exceeded["retryable"] is True
     assert exceeded["phase_code"] == initial["phase_code"]
-    assert "лимит токенов" in exceeded["blockers"][0]
+    assert "Провайдер превысил настроенный лимит ответа" in exceeded["blockers"][0]
     assert len(probes) == 2
     with SAUnitOfWork() as uow:
         entries = list(uow.session.scalars(select(m.TaskStepHistoryEntry).order_by(m.TaskStepHistoryEntry.id)))

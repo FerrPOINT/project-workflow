@@ -41,7 +41,7 @@ def test_saved_diagnostic_is_read_only_and_does_not_repair_partial(supervisor_ll
     assert json.dumps(entry.evaluation_snapshot, sort_keys=True) == before
 
 
-def test_invalid_attempts_and_repair_prompts_are_preserved(supervisor_llm):
+def test_invalid_attempt_is_preserved_without_a_hidden_repair_prompt(supervisor_llm):
     engine = SupervisorEngine("RUN-941")
     supervisor_llm("PASS")
     valid = OpenAICompatibleClient.respond
@@ -53,17 +53,20 @@ def test_invalid_attempts_and_repair_prompts_are_preserved(supervisor_llm):
         return {"verdict": "PASS"} if calls == 1 else valid(*args, **kwargs)
 
     with patch.object(OpenAICompatibleClient, "respond", side_effect=respond):
-        engine.evaluate(report_json("Complete phase report"))
+        result = engine.evaluate(report_json("Complete phase report"))
     entry = engine.db.step_history.list(task_key=engine.task_key)[0]
     attempts = entry.evaluation_snapshot["diagnostics"]["attempts"]
-    assert len(attempts) == 2
+    assert result["verdict"] == "BLOCKED" and result["retryable"] is True
+    assert entry.evaluation_snapshot["diagnostics"]["outcome"] == "technical_failure"
+    assert entry.replay_fingerprint is None
+    assert calls == len(attempts) == 1
     assert attempts[0]["response"] == {"verdict": "PASS"}
     assert attempts[0]["error"]["category"] == "response_contract"
     assert attempts[0]["error"]["fields"]
     assert attempts[0]["prompt"]["reference"] == "user"
-    assert attempts[1]["prompt"]["reference"] == "user"
-    assert "PREVIOUS RESPONSE WAS INVALID" in attempts[1]["system"]["text"]
-    assert attempts[1]["error"] is None
+    assert attempts[0]["system"]["reference"] == "system"
+    assert entry.evaluation_snapshot["diagnostics"]["system"]["text"] == PromptBuilder.SYSTEM_PROMPT
+    assert "PREVIOUS RESPONSE WAS INVALID" not in json.dumps(entry.evaluation_snapshot["diagnostics"])
 
 
 def test_transport_failure_is_not_a_business_rejection():
@@ -212,7 +215,7 @@ def test_invalid_annotations_are_flagged_without_changing_business_decision(expl
 
 
 def test_diagnostics_use_universal_prompt_with_explicit_item_reasons():
-    assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v15"
+    assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v19"
     assert "item_explanations" not in PromptBuilder.SYSTEM_PROMPT
     assert set(ResponseParser.parse({
         "verdict": "PARTIAL", "covered": [], "missing": ["1"], "blockers": [],

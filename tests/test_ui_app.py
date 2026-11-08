@@ -16,6 +16,13 @@ from project_workflow.infrastructure.db.session import DatabaseUnavailable, rese
 from project_workflow.interfaces.ui.app import _health, create_app
 
 
+@pytest.fixture(autouse=True)
+def standalone_mode(monkeypatch):
+    monkeypatch.setenv("PROJECT_WORKFLOW_MODE", "standalone")
+    monkeypatch.setenv("PROJECT_WORKFLOW_STANDALONE_CONTAINER_NETWORK", "false")
+    config.get_settings.cache_clear()
+
+
 def test_health_ok():
     with patch("project_workflow.infrastructure.db.session.get_engine") as mock_engine, patch(
         "project_workflow.infrastructure.db.session.schema_is_ready", return_value=True
@@ -38,7 +45,7 @@ def test_create_app_routes():
 
 def test_unknown_page_returns_html_error_template():
     app = create_app()
-    client = TestClient(app, raise_server_exceptions=False)
+    client = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000), raise_server_exceptions=False)
 
     response = client.get("/unknown-page")
 
@@ -51,7 +58,7 @@ def test_unknown_page_returns_html_error_template():
 
 def test_unknown_api_route_still_returns_json_error():
     app = create_app()
-    client = TestClient(app, raise_server_exceptions=False)
+    client = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000), raise_server_exceptions=False)
 
     response = client.get("/api/unknown-page")
 
@@ -62,7 +69,7 @@ def test_unknown_api_route_still_returns_json_error():
 
 def test_request_logging_middleware():
     app = create_app()
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
     app_module = importlib.import_module("project_workflow.interfaces.ui.app")
     with patch.object(app_module, "logger") as mock_logger:
         # Health endpoint hits DB, mock engine to avoid real DB.
@@ -107,7 +114,7 @@ def test_unmigrated_database_requests_return_sanitized_readiness_errors(tmp_path
     reset_engine()
     app_state._app_state.__init__(database_url=f"sqlite:///{tmp_path / 'empty.db'}")  # type: ignore[misc]
     app = create_app()
-    client = TestClient(app, raise_server_exceptions=False)
+    client = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000), raise_server_exceptions=False)
     try:
         api_response = client.get("/api/namespaces")
         page_response = client.get("/namespaces")
@@ -135,7 +142,7 @@ def test_unmigrated_database_requests_return_sanitized_readiness_errors(tmp_path
 
 def test_uow_creation_database_errors_return_sanitized_readiness_errors():
     app = create_app()
-    client = TestClient(app, raise_server_exceptions=False)
+    client = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000), raise_server_exceptions=False)
     error = OperationalError("SELECT secret", {}, RuntimeError("dsn-secret"))
 
     with patch("project_workflow.application.state._AppState.create_uow", side_effect=error):
@@ -161,7 +168,7 @@ def test_uow_creation_database_unavailable_returns_sanitized_readiness_errors(mo
     monkeypatch.setenv("PLATFORM_BRANDING_URL", "https://configured.example.test/branding")
     config.get_settings.cache_clear()
     app = create_app()
-    client = TestClient(app, raise_server_exceptions=False)
+    client = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000), raise_server_exceptions=False)
 
     with patch("project_workflow.application.state._AppState.create_uow", side_effect=DatabaseUnavailable()):
         api_response = client.get("/api/namespaces")
@@ -178,16 +185,18 @@ def test_uow_creation_database_unavailable_returns_sanitized_readiness_errors(mo
 
 
 def test_uow_creation_config_validation_returns_sanitized_readiness_errors(monkeypatch):
+    database_url = config.get_settings().DATABASE_URL
     monkeypatch.delenv("DATABASE_URL", raising=False)
     config.get_settings.cache_clear()
     try:
         with pytest.raises(ValidationError) as exc_info:
             config.Settings(_env_file=None)  # type: ignore[call-arg]
     finally:
+        monkeypatch.setenv("DATABASE_URL", database_url)
         config.get_settings.cache_clear()
 
     app = create_app()
-    client = TestClient(app, raise_server_exceptions=False)
+    client = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000), raise_server_exceptions=False)
 
     with patch("project_workflow.application.state._AppState.create_uow", side_effect=exc_info.value):
         api_response = client.get("/api/namespaces")

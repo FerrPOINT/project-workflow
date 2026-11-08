@@ -152,7 +152,7 @@ def test_install_namespace_clis_missing_database_url_fails_without_traceback(tmp
     env.update({"PYTHONUTF8": "0", "PYTHONIOENCODING": "cp1252"})
 
     result = subprocess.run(
-        [sys.executable, "scripts/install_namespace_clis.py", "--bin-dir", str(tmp_path)],
+        [sys.executable, "-B", "-m", "scripts.install_namespace_clis", "--bin-dir", str(tmp_path)],
         cwd=REPO_ROOT,
         env=env,
         capture_output=True,

@@ -8,6 +8,7 @@ from typing import Any, Literal
 
 from fastapi import Header, Query
 from fastapi.responses import JSONResponse
+from pydantic import ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 
 from project_workflow import config
@@ -26,6 +27,7 @@ from project_workflow.domain.runtime_assignment import (
     MANAGED_ROLE_MODE_SCOPES,
     MANAGED_WORKFLOW_KEYS,
 )
+from project_workflow.domain.standalone import StandaloneStep
 from project_workflow.infrastructure import base_auth, namespace_auth
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.infrastructure.platform_namespace import is_personal_token
@@ -159,10 +161,13 @@ def runtime_capabilities(
     }
 
 
-def _single_task_observation(authorization: str | None) -> Any:
+def _single_task_observation(authorization: str | None, *, namespace_id: str | None = None) -> Any:
     """Existing catalog credential; persisted observation only, no new registry."""
-    from project_workflow.domain.single_task_profile import SingleTaskInstallationResponse
-    from project_workflow.infrastructure.db.single_task_catalog import observe_installation
+    from pydantic import TypeAdapter
+
+    from project_workflow.domain.exceptions import ConflictError
+    from project_workflow.domain.single_task_profile import SingleTaskBindingResponse, SingleTaskInstallationResponse
+    from project_workflow.infrastructure.db.single_task_catalog import observe_installation, selected_required_skills
 
     try:
         credential = _authorized_service_credential(authorization)
@@ -172,10 +177,21 @@ def _single_task_observation(authorization: str | None) -> Any:
             return _error("Catalog credential required", 403)
         with SAUnitOfWork() as uow:
             result = observe_installation(uow)
+            if namespace_id is not None:
+                try:
+                    namespace_id = TypeAdapter(DatabaseId).validate_python(namespace_id)
+                except ValidationError:
+                    return _error("Canonical namespace ID required", 422)
+                binding = next((b for b in result.bindings if b.namespace_id == namespace_id), None)
+                if binding is None:
+                    return _error("Single-task namespace not found", 404)
+                return SingleTaskBindingResponse(
+                    binding=binding, required_skills=selected_required_skills(uow, binding),
+                )
         return SingleTaskInstallationResponse(installation=result)
     except namespace_auth.NamespaceAuthError as exc:
         return _error("Catalog service authorization refused", exc.status)
-    except ValueError:
+    except (ValueError, ConflictError):
         return _error("Single-task installation missing or divergent", 409)
     except (RuntimeError, OSError, SQLAlchemyError):
         return _error("Single-task installation observation unavailable", 503)
@@ -189,23 +205,10 @@ def single_task_installation(authorization: str | None = Header(default=None)) -
 
 
 def single_task_namespace_binding(namespace_id: str, authorization: str | None = Header(default=None)) -> Any:
-    from project_workflow.domain.base_binding import DatabaseId
-    from project_workflow.domain.single_task_profile import SingleTaskBindingResponse
-
-    result = _single_task_observation(authorization)
+    result = _single_task_observation(authorization, namespace_id=namespace_id)
     if isinstance(result, JSONResponse):
         return result
-    from pydantic import TypeAdapter, ValidationError
-
-    try:
-        namespace_id = TypeAdapter(DatabaseId).validate_python(namespace_id)
-    except ValidationError:
-        return _error("Canonical namespace ID required", 422)
-    binding = next((b for b in result.installation.bindings if b.namespace_id == namespace_id), None)
-    if binding is None:
-        return _error("Single-task namespace not found", 404)
-    response = SingleTaskBindingResponse(binding=binding)
-    return JSONResponse(response.model_dump(mode="json", by_alias=True), headers={"Cache-Control": "no-store"})
+    return JSONResponse(result.model_dump(mode="json", by_alias=True), headers={"Cache-Control": "no-store"})
 
 
 def runtime_catalog(
@@ -302,11 +305,30 @@ def runtime_assign(
 
 
 def runtime_step(
-    payload: ConfiguredStep,
+    payload: ConfiguredStep | StandaloneStep,
     authorization: str | None = Header(default=None),
 ) -> dict[str, Any] | JSONResponse:
-    from . import configured_cli_api
+    from project_workflow.config import get_settings
 
+    from . import configured_cli_api
+    if get_settings().PROJECT_WORKFLOW_MODE == "standalone":
+        from project_workflow.application import standalone
+        from project_workflow.infrastructure.db.uow import SAUnitOfWork
+
+        try:
+            command = StandaloneStep.model_validate(payload.model_dump(exclude_unset=True))
+            with SAUnitOfWork() as uow:
+                return standalone.step(uow, command)
+        except ValidationError as exc:
+            details = [{"field": str(e["loc"][0]) if e["loc"]
+                        and e["loc"][0] in StandaloneStep.model_fields else "$", "code": e["type"]}
+                       for e in exc.errors(include_input=False)]
+            return JSONResponse({"ok": False, "error_code": "invalid-standalone-input",
+                                 "details": details}, status_code=422)
+        except configured_cli_api._REQUEST_ERRORS as exc:
+            return configured_cli_api.error(exc)
+    if not isinstance(payload, ConfiguredStep):
+        return JSONResponse({"ok": False, "error": "Standalone input is not enabled"}, status_code=422)
     return configured_cli_api.step(payload, authorization)
 
 
@@ -323,8 +345,24 @@ def runtime_history(
     before_history_id: DatabaseId | None = Query(default=None),
 ) -> dict[str, Any] | JSONResponse:
     """Read configured operations or retained history through the same authority."""
+    from project_workflow.config import get_settings
+
     from . import configured_cli_api
 
+    if get_settings().PROJECT_WORKFLOW_MODE == "standalone":
+        from project_workflow.application import standalone
+        from project_workflow.infrastructure.db.uow import SAUnitOfWork
+
+        if execution_ref is not None or assignment_operation_key is not None or projection is not None:
+            return JSONResponse({"ok": False, "error": "Platform history selectors are not local selectors"},
+                                status_code=422)
+        try:
+            with SAUnitOfWork() as uow:
+                return standalone.history(uow, task, namespace_id, n=n or 200,
+                    operation_key=operation_key,
+                    before_history_id=int(before_history_id) if before_history_id is not None else None)
+        except configured_cli_api._REQUEST_ERRORS as exc:
+            return configured_cli_api.error(exc)
     count = n if n is not None else (1 if projection == "evaluator-diagnostics-v1" else 200)
     result = configured_cli_api.history(
         task, namespace_id, authorization, n=count,

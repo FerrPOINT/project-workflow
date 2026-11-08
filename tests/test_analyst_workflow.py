@@ -144,6 +144,35 @@ def test_enrolled_analyst_continues_original_three_phases_after_structural_upgra
                 importlib.import_module(
                     "project_workflow.infrastructure.db.migrations.versions.0030_analyst_baseline_ledger"
                 ).upgrade()
+        # An accepted operation is read back without executing a retained catalog,
+        # contacting Tracker or evaluating another report.
+        from unittest.mock import Mock
+
+        with monkeypatch.context() as readback:
+            from project_workflow.infrastructure.llm import OpenAICompatibleClient
+
+            peer = Mock(side_effect=AssertionError("Accepted enrollment readback must not call Tracker"))
+            model = Mock(side_effect=AssertionError("Accepted enrollment readback must not call Advisor"))
+            readback.setattr(protocol.configured_cli_tracker, "assignment", peer)
+            readback.setattr(OpenAICompatibleClient, "respond", model)
+            assert enroll(context) == original
+            client, assignment = context
+            unauthorized = client.post("/internal/runtime/assign", headers=protocol.MACHINE, json=assignment)
+            assert unauthorized.status_code == 403
+            changed = client.post("/internal/runtime/assign", headers=protocol.WRITER,
+                                  json={**assignment, "assignment_version": 2})
+            assert changed.status_code == 409
+            new_key = client.post("/internal/runtime/assign", headers=protocol.WRITER,
+                                  json={**assignment, "operation_key": "unaccepted-before-cutover"})
+            assert new_key.status_code == 409
+            peer.assert_not_called()
+            model.assert_not_called()
+        with get_engine().begin() as connection:
+            with Operations.context(MigrationContext.configure(connection)):
+                importlib.import_module(
+                    "project_workflow.infrastructure.db.migrations.versions.0031_explicit_stage_start"
+                ).upgrade()
+        assert enroll(context) == original
         assert step(context).json() == before
         assert step(context, **command).json() == accepted
         for version in (2, 3):
@@ -158,6 +187,7 @@ def test_enrolled_analyst_continues_original_three_phases_after_structural_upgra
                "assignment_ref": str(uuid4()), "tracker_execution_id": str(uuid4())}
         current = enroll((client, new))
         assert current["mode_id"] != original["mode_id"]
+        assert "Before business work, explicitly start" in step((client, new)).json()["result"]["instructions"]
         with SAUnitOfWork() as uow:
             assert len(uow.phases.list(original["workflow_id"], mode_id=original["mode_id"])) == 3
             assert len(uow.phases.list(current["workflow_id"], mode_id=current["mode_id"])) == 12

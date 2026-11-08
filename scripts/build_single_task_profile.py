@@ -12,7 +12,7 @@ from project_workflow.infrastructure.single_task_catalog import load_single_task
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE_COMMIT = "SELF"
 SOURCE_PATH = "project_workflow/infrastructure/single_task_catalog.py"
-SOURCE_SHA256 = "aaabbcdef6a80f9d73ce98d0b0101477d3c6fb9fcbd9df1bc7e1196c4d915101"
+SOURCE_SHA256 = "9b62922adc88e9d74e0a967e7df745a0c74a71646e6871c180081a19dc2cfc39"
 DONOR_PATH = "project_workflow/references/base_sdlc_catalog_cli_v4.json"
 DONOR_SHA256 = "d6d18f98b55f14210a3f0e12404074705495d535aa8ba29ae449624b845668c9"
 CATALOG_PATH = "project_workflow/references/single_task_catalog_v1.json"

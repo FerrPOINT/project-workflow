@@ -60,6 +60,7 @@ def test_auth_401_remains_denied_and_oversized_proof_is_not_an_identity(monkeypa
 
 @pytest.mark.parametrize("expired_after_effect", [False, True])
 def test_private_ack_rechecks_original_authority_after_effect(monkeypatch, expired_after_effect):
+    wire(monkeypatch, introspection())
     wall = {"now": time.time()}
     monkeypatch.setattr(owner_auth, "time", SimpleNamespace(time=lambda: wall["now"], monotonic=time.monotonic))
     original_expiry = wall["now"] + 1

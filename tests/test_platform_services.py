@@ -35,27 +35,27 @@ def test_normalize_rejects_invalid_or_credential_bearing_navigation_targets(url)
     assert _normalize({"key": "wiki", "label": "Wiki", "ui_url": url}) is None
 
 
-def test_fallback_without_catalog_url():
+def test_no_services_without_catalog_url():
     services = load_other_services(None)
-    assert all(s["key"] != "project-workflow" for s in services)
-    assert len(services) >= 5
+    assert services == []
 
 
-def test_fallback_reuses_remote_request_host():
-    services = load_other_services(None, request_url="http://192.168.1.135:8811/tasks")
+def test_runtime_reuses_remote_request_host(monkeypatch):
+    from project_workflow.interfaces.ui import platform_services as ps
 
+    monkeypatch.setattr(ps, "urlopen", lambda *_args, **_kwargs: _response(_runtime_services()))
+    services = load_other_services("http://admin/api", request_url="http://192.168.1.135:8811/tasks")
     assert {service["url"] for service in services} == {
-        "http://192.168.1.135:7712",
-        "http://192.168.1.135:7722",
         "http://192.168.1.135:7732",
-        "http://192.168.1.135:7742",
-        "http://192.168.1.135:7772",
     }
 
 
-def test_fallback_preserves_localhost_without_request_url():
-    services = load_other_services(None)
-    assert all("localhost" in str(service["url"]) for service in services)
+def test_runtime_preserves_localhost_without_request_url(monkeypatch):
+    from project_workflow.interfaces.ui import platform_services as ps
+
+    monkeypatch.setattr(ps, "urlopen", lambda *_args, **_kwargs: _response(_runtime_services()))
+    services = load_other_services("http://admin/api")
+    assert [service["url"] for service in services] == ["http://localhost:7732"]
 
 
 @pytest.mark.parametrize("request_url", [
@@ -63,22 +63,30 @@ def test_fallback_preserves_localhost_without_request_url():
     "http://127.0.0.1:8812/",
     "http://[::1]:8812/",
 ])
-def test_local_browsing_preserves_canonical_service_origins(request_url):
-    services = load_other_services(None, request_url=request_url)
+def test_local_browsing_preserves_canonical_service_origins(monkeypatch, request_url):
+    from project_workflow.interfaces.ui import platform_services as ps
 
+    monkeypatch.setattr(ps, "urlopen", lambda *_args, **_kwargs: _response(_runtime_services()))
+    services = load_other_services("http://admin/api", request_url=request_url)
     assert {service["url"] for service in services} == {
-        service["url"] for service in load_other_services(None)
+        "http://localhost:7732",
     }
 
 
-def test_service_switcher_is_accessible_and_localizes_health():
+def test_service_switcher_is_accessible_and_localizes_health(monkeypatch):
+    from project_workflow.interfaces.ui import platform_services as ps
     from project_workflow.interfaces.ui.templates import templates
 
+    services = _runtime_services()
+    services[0]["health"] = "unknown"
+    monkeypatch.setattr(ps, "urlopen", lambda *_args, **_kwargs: _response(services))
+    catalog = load_service_catalog("http://admin/api")
+    assert catalog.source == "runtime"
     template = (Path(__file__).parents[1] / "project_workflow/interfaces/ui/templates/base.html").read_text(
         encoding="utf-8"
     )
     html = templates.get_template("base.html").render(
-        page="tasks", other_services=load_service_catalog(None).services, services_source="fallback-unreachable",
+        page="tasks", other_services=catalog.services, services_source=catalog.source,
     )
     parsed = _ServiceLinks()
     parsed.feed(html)
@@ -123,7 +131,7 @@ def test_shell_controls_have_mobile_touch_targets_and_sidebar_focus_management()
     assert "event.key !== 'Tab'" in runtime
 
 
-def test_fallback_on_unreachable_catalog(monkeypatch):
+def test_no_services_on_unreachable_catalog(monkeypatch):
     def boom(*args, **kwargs):
         raise RuntimeError("down")
 
@@ -132,8 +140,8 @@ def test_fallback_on_unreachable_catalog(monkeypatch):
     monkeypatch.setattr(ps, "_cached_services", [], raising=False)
     monkeypatch.setattr(ps, "urlopen", boom)
     services = load_other_services("http://127.0.0.1:1/api")
-    assert services  # fail-safe fallback
-    assert load_service_catalog("http://127.0.0.1:1/api").source == "fallback-unreachable"
+    assert services == []
+    assert load_service_catalog("http://127.0.0.1:1/api").source == "unavailable"
 
 
 def test_runtime_catalog_order_and_source(monkeypatch):
@@ -161,7 +169,7 @@ def test_runtime_catalog_order_and_source(monkeypatch):
     ]
 
 
-def test_malformed_runtime_catalog_uses_invalid_fallback(monkeypatch):
+def test_malformed_runtime_catalog_has_no_services(monkeypatch):
     import project_workflow.interfaces.ui.platform_services as ps
 
     class Response(io.BytesIO):
@@ -175,11 +183,13 @@ def test_malformed_runtime_catalog_uses_invalid_fallback(monkeypatch):
     for body in (b"not-json", b'{"services": {}}', b'{"services": [{"key": 1}]}'):
         monkeypatch.setattr(ps, "urlopen", lambda *_args, **_kwargs: Response(body))
         catalog = load_service_catalog("http://admin/api")
-        assert catalog.source == "fallback-invalid"
-        assert len(catalog.services) == 6
+        assert catalog.source == "invalid"
+        assert catalog.services == []
 
     monkeypatch.setattr(ps, "urlopen", lambda *_args, **_kwargs: Response(b'{"services": []}'))
-    assert load_service_catalog("http://admin/api").source == "fallback-empty"
+    catalog = load_service_catalog("http://admin/api")
+    assert catalog.source == "empty"
+    assert catalog.services == []
 
 
 @pytest.fixture(autouse=True)
@@ -191,15 +201,17 @@ def isolated_catalog_cache(monkeypatch):
     monkeypatch.setattr(ps, "_cached_url", None)
 
 
-def test_catalog_fallback_contains_six_ordered_ui_with_unknown_current_health():
+def test_disabled_catalog_does_not_request_or_invent_services(monkeypatch):
+    from project_workflow.interfaces.ui import platform_services as ps
+
+    def unexpected_request(*_args, **_kwargs):
+        pytest.fail("disabled catalog must not make a request")
+
+    monkeypatch.setattr(ps, "urlopen", unexpected_request)
     catalog = load_service_catalog(None)
-    assert catalog.source == "fallback-unreachable"
-    assert [service["key"] for service in catalog.services] == [
-        "admin-panel", "ci-cd", "task-tracker", "wiki", "fleet-control", "project-workflow",
-    ]
-    assert {service["health"] for service in catalog.services} == {"unknown"}
-    assert catalog.services[-1]["url"] == "http://localhost:7751"
-    assert len(load_other_services(None)) == 5
+    assert catalog.source == "disabled"
+    assert catalog.services == []
+    assert load_other_services(None) == []
 
 
 def _response(services):
@@ -215,11 +227,11 @@ def _runtime_services():
 
 
 @pytest.mark.parametrize("failure,expected_source", [
-    (None, "fallback-unreachable"),
-    ([], "fallback-empty"),
-    ([{"key": "bad"}], "fallback-invalid"),
+    (None, "unavailable"),
+    ([], "empty"),
+    ([{"key": "bad"}], "invalid"),
 ])
-def test_expired_runtime_failure_uses_unknown_fallback_and_recovers(monkeypatch, failure, expected_source):
+def test_expired_runtime_failure_returns_no_stale_services_and_recovers(monkeypatch, failure, expected_source):
     from project_workflow.interfaces.ui import platform_services as ps
 
     now = [100.0]
@@ -237,10 +249,9 @@ def test_expired_runtime_failure_uses_unknown_fallback_and_recovers(monkeypatch,
         return _response(failure)
 
     monkeypatch.setattr(ps, "urlopen", failed)
-    fallback = load_service_catalog("http://admin/api")
-    assert fallback.source == expected_source
-    assert len(fallback.services) == 6
-    assert {service["health"] for service in fallback.services} == {"unknown"}
+    failed_catalog = load_service_catalog("http://admin/api")
+    assert failed_catalog.source == expected_source
+    assert failed_catalog.services == []
     monkeypatch.setattr(ps, "urlopen", lambda *_args, **_kwargs: _response(_runtime_services()))
     restored = load_service_catalog("http://admin/api")
     assert restored == first
@@ -275,8 +286,8 @@ def test_mixed_invalid_catalog_does_not_silently_drop_bad_rows(monkeypatch, inva
 
     monkeypatch.setattr(ps, "urlopen", lambda *_args, **_kwargs: _response([*_runtime_services(), invalid]))
     catalog = load_service_catalog("http://admin/api")
-    assert catalog.source == "fallback-invalid"
-    assert len(catalog.services) == 6
+    assert catalog.source == "invalid"
+    assert catalog.services == []
 
 
 def test_rendered_switcher_uses_current_runtime_health_without_duplicate(monkeypatch):
@@ -316,8 +327,8 @@ class _ServiceLinks(HTMLParser):
             self.links[key] = attributes
 
 
-@pytest.mark.parametrize("source", ["fallback-unreachable", "fallback-invalid", "fallback-empty", None])
-def test_fallback_menu_never_navigates_to_unverified_workspace_addresses(source):
+@pytest.mark.parametrize("source", ["unavailable", "invalid", "empty", "disabled", None])
+def test_empty_menu_never_invents_links_and_shows_errors_only_on_failure(source):
     from project_workflow.interfaces.ui.templates import templates
 
     context = {
@@ -329,15 +340,25 @@ def test_fallback_menu_never_navigates_to_unverified_workspace_addresses(source)
     html = templates.get_template("base.html").render(**context)
     links = _ServiceLinks()
     links.feed(html)
-    assert len(links.links) == 6
-    for key, attributes in links.links.items():
-        if key == "project-workflow":
-            assert attributes["href"] == "/"
-            assert "aria-disabled" not in attributes
-        else:
-            assert "href" not in attributes
-            assert attributes["aria-disabled"] == "true"
-            assert attributes["tabindex"] == "-1"
+    assert links.links == {}
+    assert "Project Workflow" in html
+    assert "резервный список" not in html
+    assert "сохранённый каталог" not in html
+    menu = _ServiceLinks()
+    if 'id="serviceMenu"' in html:
+        menu.feed(html.split('id="serviceMenu"', 1)[1].split("</details>", 1)[0])
+    errors = [attrs for tag, attrs in menu.elements
+              if attrs.get("data-page-state") == "error" and attrs.get("role") == "alert"]
+    if source in {"unavailable", "invalid"}:
+        assert html.count("Каталог сервисов недоступен") == 1
+        assert len(errors) == 1
+        assert any(tag == "details" and "data-base-menu" in attrs for tag, attrs in links.elements)
+    else:
+        assert "Каталог сервисов недоступен" not in html
+        assert errors == []
+        assert not any(tag == "details" and attrs.get("id") == "serviceMenu" for tag, attrs in links.elements)
+        assert any(tag == "span" and "base-ssr-service-label" in attrs.get("class", "").split()
+                   for tag, attrs in links.elements)
 
 
 def test_runtime_menu_recovers_exact_own_workspace_addresses(monkeypatch):
@@ -369,7 +390,7 @@ def test_runtime_menu_recovers_exact_own_workspace_addresses(monkeypatch):
         raise OSError("own Admin unavailable")
 
     monkeypatch.setattr(ps, "urlopen", unavailable)
-    assert "href" not in render_links()["wiki"]
+    assert render_links() == {}
     monkeypatch.setattr(ps, "urlopen", lambda *_args, **_kwargs: _response(services))
     recovered = render_links()["wiki"]
     assert recovered["href"] == "http://localhost:8732"

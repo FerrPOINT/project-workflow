@@ -18,7 +18,11 @@ def _output(ctx: click.Context, response: dict[str, Any]) -> None:
     if ctx.obj.get("json_mode", False):
         out_json(result, exit_code=code)
         return
-    output = format_result(result) if "verdict" in result else str(result.get("instructions", result))
+    if (result.get("error_code") == "invalid-phase-report" and result.get("http_status") is None
+            and result.get("acceptance_unknown") is False):
+        output = "Отчёт не отправлен: локальная ошибка формата\n" + result["error"]
+    else:
+        output = format_result(result) if "verdict" in result else str(result.get("instructions", result))
     console.print(output, markup=False, highlight=False)
     raise click.exceptions.Exit(code)
 
@@ -26,6 +30,9 @@ def _output(ctx: click.Context, response: dict[str, Any]) -> None:
 @cli.command()
 @click.option("--task", required=True, help="Ключ назначенной задачи Workflow")
 @click.option("--report", default=None, help="JSON-отчёт: source, result, unresolved; - читает stdin")
+@click.option("--start", is_flag=True, help="Явно начать самостоятельное исполнение")
+@click.option("--workflow-id", type=click.IntRange(min=1), default=None, help="Workflow для --start")
+@click.option("--mode-key", default=None, help="Режим Workflow для --start")
 @click.option("--operation-key", default=None, help="Стабильный ключ операции отправки отчёта")
 @click.option("--expected-version", type=click.IntRange(min=1), default=None,
               help="Версия из последнего ответа Workflow")
@@ -35,7 +42,7 @@ def _output(ctx: click.Context, response: dict[str, Any]) -> None:
 @click.pass_context
 def step_cmd(ctx: click.Context, task: str, report: str | None, operation_key: str | None,
              expected_version: int | None, requirements_revision: int | None,
-             requirements_sha256: str | None) -> None:
+             requirements_sha256: str | None, start: bool, workflow_id: int | None, mode_key: str | None) -> None:
     """Получить текущую фазу или отправить отчёт для оценки.
 
     Чтение: project-workflow --json step --task SDLC-42
@@ -44,8 +51,12 @@ def step_cmd(ctx: click.Context, task: str, report: str | None, operation_key: s
     --operation-key phase-1-v1 --expected-version 1
     """
     try:
+        start_options: dict[str, Any] = {}
+        if start or workflow_id is not None or mode_key is not None:
+            start_options = {"start": start, "workflow_id": workflow_id, "mode_key": mode_key}
         response = configured.step(task, report, operation_key, expected_version,
-            requirements_revision=requirements_revision, requirements_sha256=requirements_sha256)
+            requirements_revision=requirements_revision, requirements_sha256=requirements_sha256,
+            **start_options)
     except PhaseReportFormatError as exc:
         response = configured.failure("invalid-phase-report")
         response["result"]["error"] = str(exc)

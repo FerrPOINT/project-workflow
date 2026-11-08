@@ -7,6 +7,7 @@ import sys
 from copy import deepcopy
 from pathlib import Path
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
@@ -26,6 +27,16 @@ from project_workflow.interfaces.ui.routes import api, runtime_api
 from project_workflow.interfaces.ui.schemas import RuntimeAssignmentRequest, SingleTaskAssignmentRequest
 from project_workflow.interfaces.ui.templates import PROJECT_ICON_PATHS
 from scripts import build_single_task_profile, init_db
+from tests._human_access_helpers import human_identity, human_token
+
+
+@pytest.fixture(autouse=True)
+def platform_installation(monkeypatch):
+    monkeypatch.setenv("PROJECT_WORKFLOW_MODE", "platform")
+    monkeypatch.setenv("AUTH_ISSUER", "https://auth.installation.test")
+    monkeypatch.setenv("AUTH_INTERNAL_BASE_URL", "https://auth.installation.test")
+    monkeypatch.setenv("AUTH_SESSION_SECRET", "installation-unit-session-secret-only")
+    config.get_settings.cache_clear()
 
 
 @pytest.fixture
@@ -59,6 +70,7 @@ def test_real_bootstrap_repeats_with_exact_persisted_ids(database, monkeypatch, 
 
 def test_config_selector_runs_real_bootstrap_subprocess_twice(tmp_path):
     environment = dict(os.environ, PROJECT_WORKFLOW_CATALOG_VARIANT="single-task-v1",
+                       PROJECT_WORKFLOW_MODE="platform",
                        DATABASE_URL=f"sqlite:///{(tmp_path / 'subprocess.db').as_posix()}")
     results = []
     for _ in range(2):
@@ -130,9 +142,9 @@ def test_repeat_bootstrap_rejects_drift_without_repair(database, drift):
 
 
 def test_installation_rolls_back_partial_failure(database, monkeypatch):
-    from project_workflow.infrastructure.db import single_task_catalog as installer
+    from project_workflow.application import catalog_publication as publisher
 
-    original = installer._persist_mode
+    original = publisher._persist_mode
     calls = 0
 
     def failing(*args, **kwargs):
@@ -142,7 +154,7 @@ def test_installation_rolls_back_partial_failure(database, monkeypatch):
             raise ValueError("injected persistence failure")
         return original(*args, **kwargs)
 
-    monkeypatch.setattr(installer, "_persist_mode", failing)
+    monkeypatch.setattr(publisher, "_persist_mode", failing)
     with pytest.raises(ValueError, match="injected"):
         with SAUnitOfWork(database) as uow:
             ensure_single_task_catalog(uow)
@@ -233,10 +245,26 @@ def test_runtime_catalog_reflects_editor_theme_without_changing_runtime_identity
         before = {name: rows(uow, table) for name, table in m.Base.metadata.tables.items()}
     namespace_id = int(installation.bindings[-1].namespace_id)
     headers = {"Authorization": "Bearer " + "c" * 32}
+    issuer = config.get_settings().AUTH_ISSUER
+    editor = {"Authorization": "Bearer " + human_token("installation-theme-admin", issuer=issuer)}
+    original_client = httpx.AsyncClient
+
+    def identity(request):
+        assert str(request.url) == issuer + "/auth/me"
+        if request.headers.get("Authorization") != editor["Authorization"]:
+            return httpx.Response(401)
+        return httpx.Response(200, json=human_identity("installation-theme-admin", role="admin"))
+
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: original_client(
+        transport=httpx.MockTransport(identity), **kwargs,
+    ))
     with TestClient(create_app()) as client:
         original = client.get("/internal/runtime/catalog", headers=headers).json()
+        denied = client.put(f"/api/namespaces/{namespace_id}", json={"theme_icon": "palette"})
+        assert denied.status_code == 401
         for icon, color in (("palette", "#D2608E"), ("heart", "22c55e")):
-            edited = client.put(f"/api/namespaces/{namespace_id}", json={"theme_icon": icon, "theme_color": color})
+            edited = client.put(f"/api/namespaces/{namespace_id}", headers=editor,
+                                json={"theme_icon": icon, "theme_color": color})
             assert edited.status_code == 200, edited.text
             response = client.get("/internal/runtime/catalog", headers=headers)
             assert response.status_code == 200, response.text
@@ -364,7 +392,7 @@ def test_actual_catalog_hashes_and_cli_publication_semantics():
             after = completion_instruction(role)
             assert "discussion publish" in after
             if role == "project_manager":
-                assert "pm completion submit" in after and "Backlog / Ready" in after
+                assert "pm completion submit" in after and "Draft / Completed" in after
             else:
                 assert "sdlc result propose" in after and "Fleet verifies real terminal" in after
 

@@ -2,10 +2,21 @@
 import json
 import re
 
+import pytest
 from fastapi.testclient import TestClient
 
+from project_workflow import config
 from project_workflow.interfaces.ui import app
 from tests._ui_source_helpers import page_source
+
+
+@pytest.fixture(autouse=True)
+def standalone_mode(isolate_ui_runtime_state, monkeypatch):
+    monkeypatch.setenv("PROJECT_WORKFLOW_MODE", "standalone")
+    monkeypatch.setenv("PROJECT_WORKFLOW_STANDALONE_CONTAINER_NETWORK", "false")
+    config.get_settings.cache_clear()
+    yield
+    config.get_settings.cache_clear()
 
 
 def workflow_ids(html):
@@ -14,7 +25,7 @@ def workflow_ids(html):
 
 
 def test_profession_collection_excludes_neighbors_on_load_reload_and_save():
-    with TestClient(app) as client:
+    with TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000)) as client:
         first = client.get("/api/namespaces").json()["namespaces"][0]["id"]
         second_response = client.post("/api/namespaces", json={
             "name": "A different profession", "cli_command": "workflow-neighbor",
@@ -59,7 +70,7 @@ def test_profession_collection_excludes_neighbors_on_load_reload_and_save():
 
 
 def test_profession_vocabulary_and_editor_has_no_workflow_selector():
-    with TestClient(app) as client:
+    with TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000)) as client:
         for path in ["/", "/namespaces", "/namespaces/new", "/workflows", "/tasks", "/phases"]:
             response = client.get(path)
             assert response.status_code == 200, response.text

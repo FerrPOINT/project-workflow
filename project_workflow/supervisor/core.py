@@ -14,12 +14,14 @@ import threading
 from typing import Any
 
 from project_workflow.domain.configured_cli import ConfiguredCliFence
+from project_workflow.domain.standalone import StandaloneFence
 
 from ..application.project import ProjectService
 from ..application.task import TaskService
 from ..application.workflow import WorkflowService
 from ..domain.exceptions import ConflictError
-from ..domain.runtime_assignment import MANAGED_WORKFLOW_KEYS, RuntimeStepFence
+from ..domain.phase_report import PhaseReport, PhaseReportFormatError
+from ..domain.runtime_assignment import MANAGED_WORKFLOW_KEYS
 from ..domain.single_task_profile import is_single_task_key
 from ..infrastructure.db import schema
 from ..infrastructure.db.uow import SAUnitOfWork
@@ -66,7 +68,7 @@ class SupervisorEngine:
         uow: SAUnitOfWork | None = None,
         create_if_missing: bool = True,
         project_id: int | None = None,
-        runtime_fence: RuntimeStepFence | ConfiguredCliFence | None = None,
+        runtime_fence: ConfiguredCliFence | StandaloneFence | None = None,
     ):
         self.task_key = task_key
         self.create_if_missing = create_if_missing
@@ -218,70 +220,88 @@ class SupervisorEngine:
     def _get_current_phase_obj(self) -> Phase | None:
         return self.phase_map.get(self.current_phase_code)
 
-    def _get_previously_covered(self, phase_code: str) -> set[str]:
-        """Read the latest substantive decision per unchanged criterion."""
-        previously: set[str] = set()
+    def _get_phase_evaluation_history(self, phase_code: str) -> dict[str, Any]:
+        """Collect exact phase-group reports and latest unchanged-criterion assessments."""
+        history: dict[str, Any] = {"reports": [], "assessments": {}}
         if not self.task:
-            return previously
+            return history
         task_id = int(self.task.get("id", 0))
         if not task_id:
-            return previously
+            return history
         phase = self.phase_map.get(str(phase_code))
         if phase is None or phase.id is None:
-            return previously
-        runs = [
-            r.to_dict()
-            for r in self._uow.step_history.list(
+            return history
+        builder = self.contract_builder
+        group = builder.get_parallel_group(phase) if phase.execution_type == "parallel" else [phase]
+        group_codes = [member.code for member in group]
+        runs: list[dict[str, Any]] = []
+        for member in group:
+            if member.id is None:
+                raise ValueError("Current phase group contains an unsaved phase")
+            runs.extend(run.to_dict() for run in self._uow.step_history.list(
                 task_id=task_id,
-                phase_id=int(phase.id),
+                phase_id=int(member.id),
                 mode_id=self.execution_mode_id,
                 cycle_number=self.execution_cycle_number,
                 limit=None,
-            )
-        ]
-        builder = self.contract_builder
-        group = builder.get_parallel_group(phase) if phase.execution_type == "parallel" else [phase]
+            ))
+        runs.sort(key=lambda run: run["id"])
         items = dict(builder.build_parallel_evaluation_items(group))
-        by_text: dict[str, list[str]] = {}
-        for item_id, text in items.items():
-            by_text.setdefault(text, []).append(item_id)
-        decided: set[str] = set()
-        # The repository returns newest first. Missing revokes older coverage;
-        # retryable failures did not evaluate the report and must not revoke it.
         for run in runs:
-            response = run.get("supervisor_response", {})
-            snapshot = run.get("evaluation_snapshot", {})
+            snapshot = run.get("evaluation_snapshot")
+            saved_group = snapshot.get("evaluated_phase_group") if isinstance(snapshot, dict) else None
+            if (not isinstance(saved_group, list) or not saved_group
+                    or any(not isinstance(code, str) or not code.strip() or code != code.strip()
+                           for code in saved_group)
+                    or len(set(saved_group)) != len(saved_group)):
+                raise PhaseReportFormatError("Current phase history has a missing or invalid phase group")
+            if saved_group != group_codes:
+                continue
+            try:
+                parsed = PhaseReport.parse(run["worker_report"])
+            except (TypeError, ValueError) as exc:
+                raise PhaseReportFormatError(
+                    "Current phase history contains an incompatible structured report"
+                ) from exc
+            history["reports"].append(parsed.model_dump(mode="json"))
+            response = run.get("supervisor_response")
+            assert isinstance(snapshot, dict)
             diagnostics = snapshot.get("diagnostics")
-            if (response.get("retryable") is True
+            if (isinstance(response, dict) and response.get("retryable") is True
                     or isinstance(diagnostics, dict) and diagnostics.get("outcome") == "technical_failure"):
                 continue
             contract = snapshot.get("contract_snapshot")
             saved_items = contract.get("evaluation_items") if isinstance(contract, dict) else None
-            if saved_items is not None and not isinstance(saved_items, list):
-                continue
             saved_text = {
-                item["id"]: item["text"] for item in saved_items or []
+                item["id"]: item["text"] for item in (saved_items if isinstance(saved_items, list) else [])
                 if isinstance(item, dict) and isinstance(item.get("id"), str) and isinstance(item.get("text"), str)
             }
-            for covered, values in ((False, run.get("missing_item_ids", [])),
-                                    (True, run.get("covered_item_ids", []))):
-                for value in values:
-                    if value in items:
-                        item_id = value
-                        matches = saved_text.get(item_id) == items[item_id]
-                    else:
-                        # Older records used checklist text instead of IDs.
-                        candidates = by_text.get(value, []) if saved_items is None else []
-                        if len(candidates) != 1:
-                            continue
-                        item_id = candidates[0]
-                        matches = True
-                    if item_id in decided:
-                        continue
-                    decided.add(item_id)
-                    if covered and matches:
-                        previously.add(item_id)
-        return previously
+            saved_assessments = snapshot.get("advisor_assessments")
+            for item_id, text in items.items():
+                # A later substantive run may revoke coverage or invalidate an old assessment.
+                history["assessments"].pop(item_id, None)
+                assessment = saved_assessments.get(item_id) if isinstance(saved_assessments, dict) else None
+                if (saved_text.get(item_id) != text or not isinstance(assessment, dict)
+                        or set(assessment) != {"covered", "reason", "required_change"}
+                        or type(assessment.get("covered")) is not bool
+                        or not isinstance(assessment.get("reason"), str) or not assessment["reason"].strip()):
+                    continue
+                required_change = assessment["required_change"]
+                if (assessment["covered"] and required_change is not None
+                        or not assessment["covered"] and (
+                            not isinstance(required_change, str) or not required_change.strip()
+                        )):
+                    continue
+                history["assessments"][item_id] = {
+                    "covered": assessment["covered"],
+                    "reason": assessment["reason"],
+                    "required_change": required_change,
+                }
+        return history
+
+    def _get_previously_covered(self, phase_code: str) -> set[str]:
+        return {item_id for item_id, assessment in self._get_phase_evaluation_history(phase_code)["assessments"].items()
+                if assessment["covered"]}
 
     def _get_next_phase(self, phase_code):
         return self.contract_builder.get_next_phase(phase_code)
@@ -552,9 +572,9 @@ class SupervisorEngine:
 
     def _assert_runtime_fence(self) -> None:
         """Fail closed when the current task no longer matches the owner-issued run."""
-        if self.runtime_fence is not None and not isinstance(self.runtime_fence, ConfiguredCliFence):
+        if self.runtime_fence is not None and not isinstance(self.runtime_fence, (ConfiguredCliFence, StandaloneFence)):
             raise ConflictError("Retired execution protocol; current configured assignment required")
-        if isinstance(self.runtime_fence, ConfiguredCliFence):
+        if isinstance(self.runtime_fence, (ConfiguredCliFence, StandaloneFence)):
             self.runtime_fence.assert_task(self.task)
             return
         if self.task is not None:
@@ -578,6 +598,10 @@ class SupervisorEngine:
         self.runtime_fence.assert_task(locked_task)
         self.task = locked_task
         self._assert_runtime_fence()
+        if isinstance(self.runtime_fence, StandaloneFence):
+            from project_workflow.application.standalone import check_fence
+
+            check_fence(self._uow, self.runtime_fence)
 
     def evaluate(self, report: str) -> dict:
         phase = self._get_current_phase_obj()

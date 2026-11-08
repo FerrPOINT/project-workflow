@@ -1,7 +1,7 @@
 {
   "instruction_overlay": {
     "path": "project_workflow/infrastructure/single_task_delivery_instructions.py",
-    "sha256": "fa5a0d41e83b7b47376db2ee4d8058825265dc2d53aade1536b6630cfb6b6566"
+    "sha256": "bea65454eb7205267fbbd05a905d3f6d9aaeddec9784d179216e318419651330"
   },
   "instruction_profile": "single-task-v1",
   "instruction_source": {
@@ -13,7 +13,7 @@
     },
     "path": "project_workflow/infrastructure/single_task_catalog.py",
     "repository": "https://github.com/FerrPOINT/project-workflow.git",
-    "sha256": "aaabbcdef6a80f9d73ce98d0b0101477d3c6fb9fcbd9df1bc7e1196c4d915101"
+    "sha256": "9b62922adc88e9d74e0a967e7df745a0c74a71646e6871c180081a19dc2cfc39"
   },
   "inventory": {
     "modes": 8,
@@ -35,7 +35,7 @@
       "namespace_cli_command": "workflow-single-task-analyst",
       "namespace_name": "single-task-analyst",
       "profile": "single-task-v1-analyst",
-      "role_instructions_sha256": "a2694e8a33182a406d9562dfeebd4d02ea32a06ee7ec8c13e40b86e9f9b689c8",
+      "role_instructions_sha256": "54550aa1674f8f3e92e9e4b6cc1e08f0eb5bb780b559dfa53e0070d84a1733c6",
       "workflow_key": "single-task-v1:analyst"
     },
     "architect": {
@@ -48,7 +48,7 @@
       "namespace_cli_command": "workflow-single-task-architect",
       "namespace_name": "single-task-architect",
       "profile": "single-task-v1-architect",
-      "role_instructions_sha256": "9ab5ca43b99efebb49cbeb91a14ca6993532f2eb1b7b6f29d91803bac81423f3",
+      "role_instructions_sha256": "5196612ab74f47a2f76baee224ceb748cd5f88ce3cc02d07410c9af36f2a20db",
       "workflow_key": "single-task-v1:architect"
     },
     "developer": {
@@ -64,7 +64,7 @@
       "namespace_cli_command": "workflow-single-task-developer",
       "namespace_name": "single-task-developer",
       "profile": "single-task-v1-developer",
-      "role_instructions_sha256": "a70ad2844c73a7d2a980fe57602b5cd77434eb58d824bbb80492a4b97adccfa0",
+      "role_instructions_sha256": "4f3fbe7371ef17d0adf8ca783e521c7b8933b4962f9ceff9d977f76248826f12",
       "workflow_key": "single-task-v1:developer"
     },
     "devops": {
@@ -77,7 +77,7 @@
       "namespace_cli_command": "workflow-single-task-devops",
       "namespace_name": "single-task-devops",
       "profile": "single-task-v1-devops",
-      "role_instructions_sha256": "d53711beb173ceb597fde6e7ce9e557711582ed1d617464e88e0ab522d029d6d",
+      "role_instructions_sha256": "4e39195e5718f12a450705e28294bab8146a8d7a08122773c39c9ffd578cd70e",
       "workflow_key": "single-task-v1:devops"
     },
     "project_manager": {
@@ -90,7 +90,7 @@
       "namespace_cli_command": "workflow-single-task-project-manager",
       "namespace_name": "single-task-project-manager",
       "profile": "single-task-v1-project-manager",
-      "role_instructions_sha256": "f434303e0bdd67ae3f4942c7709296fa31e89ccb85e45c0faa9417bbb35b3061",
+      "role_instructions_sha256": "b1eafbbba80e1dcaf8b4a195a61ed8f6a9583f00222f993bc0571d7f49bb5422",
       "workflow_key": "single-task-v1:project_manager"
     },
     "reviewer": {
@@ -103,7 +103,7 @@
       "namespace_cli_command": "workflow-single-task-reviewer",
       "namespace_name": "single-task-reviewer",
       "profile": "single-task-v1-reviewer",
-      "role_instructions_sha256": "41ae95e1a163f22a0e65a3fad464098317c3b1b9cd82c0a13e9af03593f99b93",
+      "role_instructions_sha256": "26f81b5757d1b7cdad5c92dd0f1b05d7a301b9c2cebca95042c170cbe3f1700d",
       "workflow_key": "single-task-v1:reviewer"
     },
     "tester": {
@@ -116,7 +116,7 @@
       "namespace_cli_command": "workflow-single-task-tester",
       "namespace_name": "single-task-tester",
       "profile": "single-task-v1-tester",
-      "role_instructions_sha256": "f2bfe47ae41f8cbdf76960ff72347bb8342bec0b01b1e392f9eda33a8871d586",
+      "role_instructions_sha256": "f1729902b3654dedc8e28945aad3f27180c5d2332463d2a122540e5e2a319879",
       "workflow_key": "single-task-v1:tester"
     }
   },
@@ -129,7 +129,7 @@
   "workflow_catalog": {
     "artifact": "project_workflow/references/single_task_catalog_v1.json",
     "hash_encoding": "utf-8-lf-no-bom-with-final-newline",
-    "sha256": "9db2e982d93ead86a16c0b88785cbb9a5e1306e74cd56dc929ab7f7d1342f605",
+    "sha256": "554c51e937aa85b5b6a13b3f36965b00180ead8d799f3c0b6d0f109ce962944d",
     "version": 1
   }
 }

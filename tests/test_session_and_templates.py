@@ -268,7 +268,7 @@ class TestSessionHelpers:
 
         monkeypatch.chdir(tmp_path)
 
-        assert migration_head() == "0030_analyst_baseline_ledger"
+        assert migration_head() == "0031_explicit_stage_start"
 
     @pytest.mark.parametrize("use_connection", [False, True])
     @pytest.mark.parametrize("partial_archive", [False, True])

@@ -239,7 +239,7 @@ class SupervisorContextBuilder:
     @staticmethod
     def _report_template() -> dict[str, Any]:
         return {
-            "source": "",
-            "result": {},
+            "source": {"request": "", "decisions": []},
+            "result": {"artifacts": [], "assumptions": []},
             "unresolved": [],
         }

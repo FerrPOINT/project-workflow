@@ -1,0 +1,17 @@
+{
+  "schema": "advisor-controlled-experiment-v1",
+  "candidate": "supervisor-evaluator-v18",
+  "already_attempted_campaign_calls": 8,
+  "maximum_campaign_calls": 48,
+  "this_experiment_maximum": 2,
+  "hypothesis": "Use the contract's explicit decision fields rather than placing all frozen owner decisions inside request. Only representation changes; all source spans, artifacts, criteria, prior assessments and model settings remain unchanged.",
+  "source_mapping": "Reuse the independently reviewed exhaustive source-only spans from commit f34bbbe for 190/191. Do not mirror assumptions, alter other fields or add facts.",
+  "baseline": "Generic-source 190 candidate response is preserved in advisor-v18-integration-results-20261104.json. No comparable current-prompt 191 baseline exists; its new response is a candidate check, not causal proof.",
+  "cases": [
+    {"id": "actual-pm-190", "expected_verdict": "PARTIAL", "expected_missing": ["C3", "E2"], "basis": "The source lacks Closed; missing decision and missing question must not be replaced by result claims or prior marks."},
+    {"id": "actual-pm-191", "expected_verdict": "PASS", "expected_missing": [], "basis": "Allowed and initial statuses are explicitly supplied; do not invent an additional owner question about ordinary manual operation."}
+  ],
+  "acceptance": "Review every assessment and reason, not just verdict. Preserve all responses and stop at a mismatch; no retry.",
+  "budget_reallocation": "No increase: at most 10 used after this experiment, two remaining context checks plus 36 final evaluations remain within the original 48. Earlier comparable baseline data are retained, not overwritten.",
+  "release": "Not installed or accepted by a precheck; full qualification and project/live gates remain required."
+}

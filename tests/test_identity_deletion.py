@@ -44,8 +44,10 @@ def test_original_proof_never_renews(monkeypatch):
 
 
 def wire(monkeypatch, payload, *, status=200, location=None):
+    monkeypatch.setenv("PROJECT_WORKFLOW_MODE", "platform")
     monkeypatch.setenv("AUTH_ISSUER", ISSUER)
     monkeypatch.setenv("AUTH_INTERNAL_BASE_URL", "http://auth.internal.test")
+    monkeypatch.setenv("AUTH_SESSION_SECRET", "identity-unit-session-secret-at-least-32-characters")
     monkeypatch.setenv("PROJECT_WORKFLOW_IDENTITY_DELETION_COORDINATOR_SUBJECTS", COORDINATOR)
     config.get_settings.cache_clear()
     original = httpx.AsyncClient
@@ -197,6 +199,7 @@ def test_sqlite_never_claims_product_fencing(monkeypatch):
 
 def test_actual_router_overall_timeout_never_reaches_effect(monkeypatch):
     from project_workflow.interfaces.ui.routes import identity_deletion_api as route
+    wire(monkeypatch, introspection())
     effects = []
 
     async def delayed_authority(*args):
@@ -247,7 +250,7 @@ def test_supported_human_guard_predecessor_upgrades_without_recreating_history(t
                 {"id": str(uuid4()), "operation": str(uuid4()), "workflow": workflow, "mode": mode, "subject": subject})
             before = connection.execute(text("SELECT * FROM resource_execution_contexts")).all()
         ensure_migrated(engine)
-        assert database_revisions(engine) == {"0030_analyst_baseline_ledger"}
+        assert database_revisions(engine) == {"0031_explicit_stage_start"}
         assert schema_is_ready(engine)
         with engine.connect() as connection:
             assert connection.execute(text("SELECT * FROM resource_execution_contexts")).all() == before

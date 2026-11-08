@@ -29,12 +29,15 @@ from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
+from sqlalchemy import select
 
 from project_workflow.domain.exceptions import ConflictError
 from project_workflow.domain.runtime_assignment import payload_sha256
+from project_workflow.infrastructure.db import models as m
 from project_workflow.infrastructure.db.managed_catalog import ManagedMode
 from project_workflow.infrastructure.db.schema import _phase_item_to_supervisor
-from project_workflow.infrastructure.llm import PromptBuilder
+from project_workflow.infrastructure.db.uow import SAUnitOfWork
+from project_workflow.infrastructure.llm import OpenAICompatibleClient, PromptBuilder
 from project_workflow.supervisor.contracts import PhaseContractBuilder
 from project_workflow.supervisor.evaluate import (
     _evaluate_strict_response,
@@ -43,6 +46,8 @@ from project_workflow.supervisor.evaluate import (
 )
 from project_workflow.supervisor.evidence import validate_frozen_evaluation
 from tests._report_helpers import report_json
+from tests.test_configured_cli import MACHINE, WRITER, enroll, step
+from tests.test_configured_cli import configured as configured
 
 pytestmark = pytest.mark.unit
 ROOT = Path(__file__).resolve().parents[1]
@@ -235,12 +240,6 @@ REPLAY_CASES = (
 )
 
 
-@pytest.fixture(autouse=True)
-def isolate_ui_runtime_state():
-    """These prompt/proof tests do not open the suite's usual SQLite fixture."""
-    yield
-
-
 @pytest.fixture(scope="module")
 def pm_phases():
     publication = json.loads((ROOT / "docs/evidence/pm-default-workflow-20261031.json").read_text(encoding="utf-8"))
@@ -264,25 +263,30 @@ def test_actual_evaluator_receives_full_report_and_exact_pm_obligations(pm_phase
     client.respond.side_effect = TimeoutError("Stop before any provider call; no quality verdict supplied")
     with pytest.raises(TimeoutError):
         _evaluate_strict_response(
-            client, user=prompt, evaluation_items=items, phase=phase, response_format=PromptBuilder.response_schema([])
+            client, user=prompt, evaluation_items=items, phase=phase,
+            response_format=PromptBuilder.response_schema(items),
         )
     client.respond.assert_called_once_with(
-        system=PromptBuilder.SYSTEM_PROMPT, user=prompt, response_format=PromptBuilder.response_schema([])
+        system=PromptBuilder.SYSTEM_PROMPT, user=prompt, response_format=PromptBuilder.response_schema(items)
     )
     delivered = client.respond.call_args.kwargs["user"]
     data = json.loads(delivered)
-    assert data["report"]["result"]["document"] == case["report"]
-    assert data["criteria"] == [
-        {"id": label, "text": dict(items)[key]} for label, key in PromptBuilder.item_aliases(items).items()
-    ]
+    assert data["report"] == json.loads(report_json(case["report"]))
+    assert data["previous_reports"] == []
+    assert data["criteria"] == [{"id": label, "text": dict(items)[key], "previous_assessment": None}
+                                for label, key in PromptBuilder.item_aliases(items).items()]
     assert "WORKER PROCEDURE" not in delivered
     # Historical report bytes remain intact, but v13 does not add worker procedure.
     assert "Instructions:" not in json.dumps({key: value for key, value in data.items() if key != "report"})
     # Full packet loss must remain visible to the real evaluator (regression 153).
     if case["id"] == "153":
-        assert json.dumps(DOCUMENT, ensure_ascii=False, sort_keys=True) not in data["report"]["result"]["document"]
+        assert json.dumps(DOCUMENT, ensure_ascii=False, sort_keys=True) not in (
+            data["report"]["result"]["artifacts"][0]["content"]
+        )
     elif phase.code != "PM-DRAFT-01":
-        assert json.dumps(DOCUMENT, ensure_ascii=False, sort_keys=True) in data["report"]["result"]["document"]
+        assert json.dumps(DOCUMENT, ensure_ascii=False, sort_keys=True) in (
+            data["report"]["result"]["artifacts"][0]["content"]
+        )
 
 
 def test_correction_carries_real_obligations_even_when_previous_coverage_is_present(pm_phases):
@@ -290,26 +294,107 @@ def test_correction_carries_real_obligations_even_when_previous_coverage_is_pres
     items = PhaseContractBuilder(list(pm_phases.values())).build_evaluation_items(phase)
     case = next(case for case in REPLAY_CASES if case["id"] == "153")
     previously = [key for key, _ in items if not key.endswith("check:4")]
+    assessments = {
+        key: {"covered": True, "reason": "Earlier same-phase assessment", "required_change": None}
+        for key in previously
+    }
     prompt = PromptBuilder.build_user_prompt(
         WORKFLOW_TASK_KEY, phase, json.loads(report_json(case["report"])),
-        evaluation_items=items, previously_covered=previously,
+        evaluation_items=items, previous_assessments=assessments,
     )
     data = json.loads(prompt)
-    assert data["previously_covered"] == [label for label, key in PromptBuilder.item_aliases(items).items()
-                                         if key in previously]
+    assert data["criteria"] == [
+        {"id": label, "text": dict(items)[key], "previous_assessment": assessments.get(key)}
+        for label, key in PromptBuilder.item_aliases(items).items()
+    ]
+    assert data["previous_reports"] == []
     assert len(data["criteria"]) == len(items)
     assert set(case["required_missing"]) == {key.split(phase.code + ":", 1)[1] for key in previously}
 
 
-def test_frozen_v12_proof_validates_without_using_current_prompt_or_rewriting_history(frozen_step, monkeypatch):
+def test_archived_v12_is_preserved_without_rejudging_but_refused_as_current_proof(frozen_step, monkeypatch):
     before = copy.deepcopy(frozen_step)
     assert frozen_step["evaluation_snapshot"]["prompt_version"] == "supervisor-evaluator-v12"
     monkeypatch.setattr(PromptBuilder, "SYSTEM_PROMPT", "Changed candidate policy; never use it to rejudge saved proof")
     monkeypatch.setattr(PromptBuilder, "build_user_prompt", Mock(side_effect=AssertionError("No model replay")))
-    covered = validate_frozen_evaluation(frozen_step, frozen_step["evaluation_snapshot"])
-    assert covered == frozen_step["covered_item_ids"]
+    provider = Mock(side_effect=AssertionError("An archive cannot trigger Advisor"))
+    monkeypatch.setattr(OpenAICompatibleClient, "respond", provider)
+    with pytest.raises(ConflictError):
+        validate_frozen_evaluation(frozen_step, frozen_step["evaluation_snapshot"])
     assert frozen_step == before
     PromptBuilder.build_user_prompt.assert_not_called()
+    provider.assert_not_called()
+
+
+def test_authorized_http_history_preserves_opaque_v12_archive_without_granting_execution(
+    configured, frozen_step, monkeypatch,
+):
+    provider = Mock(side_effect=AssertionError("Archived history must not call Advisor"))
+    monkeypatch.setattr(OpenAICompatibleClient, "respond", provider)
+    builder = Mock(side_effect=AssertionError("Archived history must not rebuild a prompt"))
+    monkeypatch.setattr(PromptBuilder, "build_user_prompt", builder)
+    enrollment = enroll(configured)
+    client, assignment = configured
+    before_archive = copy.deepcopy(frozen_step)
+    saved_result = copy.deepcopy(frozen_step["evaluation_snapshot"]["raw_evaluator"])
+    with SAUnitOfWork() as uow:
+        task = uow.tasks.get_by_key(assignment["task"], project_id=assignment["namespace_id"])
+        task_id = task.id
+        history_id = uow.record_step(
+            task_id=task_id, phase_id=task.current_phase_id, mode_id=task.mode_id,
+            cycle_number=task.cycle_number, verdict="pass",
+            worker_report=frozen_step["worker_report"], covered_item_ids=frozen_step["covered_item_ids"],
+            missing_item_ids=[], blocker_messages=[], replay_fingerprint=frozen_step["replay_fingerprint"],
+            evaluation_snapshot=frozen_step["evaluation_snapshot"], supervisor_response=saved_result,
+        )
+        # Model a cutover boundary without promoting the opaque archive into the current ledger.
+        assignment_row = uow.session.scalar(select(m.TaskRuntimeAssignment).where(
+            m.TaskRuntimeAssignment.task_id == task_id,
+            m.TaskRuntimeAssignment.operation_key == assignment["operation_key"],
+        ))
+        payload = json.loads(assignment_row.payload)
+        payload["history_after_id"] = history_id
+        assignment_row.payload = json.dumps(payload, ensure_ascii=False)
+        uow.commit()
+        before_task = task.to_dict()
+        before_history = uow.step_history.get_by_id(history_id).to_dict()
+        assert before_history["evaluation_snapshot"] == frozen_step["evaluation_snapshot"]
+        assert before_history["replay_fingerprint"] == frozen_step["replay_fingerprint"]
+        before_assignment = assignment_row.payload
+        assignment_id = assignment_row.id
+        before_events = list(uow.tasks.list_phase_events(task_id))
+    query = {"interaction_protocol": "configured-cli-v1", "task": assignment["task"],
+             "namespace_id": assignment["namespace_id"], "n": 1}
+    denied = client.get("/internal/runtime/history", params=query)
+    assert denied.status_code in (401, 403)
+    for _ in range(2):
+        response = client.get("/internal/runtime/history", headers=MACHINE, params=query)
+        assert response.status_code == 200, response.text
+        result = response.json()["result"]
+        assert result["records"] == [{
+            "history_id": history_id, "worker_report": frozen_step["worker_report"], "result": saved_result,
+        }]
+        assert result["next_before"] is None
+        assert result["status"] == "active" and result["version"] == enrollment["version"]
+        assert "terminal_receipt" not in result and "workflow_receipt" not in result
+    selector = {key: enrollment[key] for key in (
+        "interaction_protocol", "task", "namespace_id", "execution_ref", "concrete_agent_ref", "assignment_ref",
+    )}
+    selector.update(operation_key="archived-v12", result_version=2)
+    refused = client.post("/internal/runtime/terminal-receipt/readback", headers=WRITER, json=selector)
+    assert refused.status_code == 404, refused.text
+    cursor = step(configured).json()["result"]
+    assert cursor["complete"] is False and cursor["version"] == enrollment["version"]
+    assert cursor["phase_code"] == enrollment["phase_code"]
+    assert "terminal_receipt" not in cursor and "workflow_receipt" not in cursor
+    with SAUnitOfWork() as uow:
+        assert uow.tasks.get_by_id(task_id).to_dict() == before_task
+        assert [row.to_dict() for row in uow.step_history.list(task_id=task_id, limit=None)] == [before_history]
+        assert list(uow.tasks.list_phase_events(task_id)) == before_events
+        assert uow.session.get(m.TaskRuntimeAssignment, assignment_id).payload == before_assignment
+    assert frozen_step == before_archive
+    provider.assert_not_called()
+    builder.assert_not_called()
 
 
 @pytest.mark.parametrize("corruption", ("full-document", "coverage", "contract", "unknown-version"))

@@ -1,5 +1,73 @@
 # Managed Instruction Publication
 
+## Shared Development Checkpoint - 8 November 2026
+
+The source is available in [Workflow PR164](https://github.com/FerrPOINT/project-workflow/pull/164),
+branch `docs/workflow-fleet-audit-20261103`. Product/text checkpoint
+`fc71000f01ddf94ce2b8121124ecfd8c2349eb8e` includes the current CLI, typed report,
+single-call native Responses evaluator and the two portable configurations below.
+Later documentation commits do not imply another engine or CLI release.
+
+Related source checkpoints (not an assertion that every PR is merged):
+
+| Repository | Published commit | Purpose |
+| --- | --- | --- |
+| Base | `86ca4359f28e784a4885ca2dcfdd952f74c07e61` | Canonical shared/professional skills, packaging and operator |
+| Fleet | `3334571707739d8335e4a8dccd0c74f3ca9c7c49` | Qualified preparation/first native launch and preserved runtime history |
+| Tracker | `1b10eb0f950b6c826409be7c5a1c4af5c782d1ff` | Assignment Start/Completed and application-owned next-stage Ready |
+
+On another checkout, fetch that branch and select the exact reviewed checkpoint:
+
+```sh
+git fetch origin docs/workflow-fleet-audit-20261103
+git switch --detach fc71000f01ddf94ce2b8121124ecfd8c2349eb8e
+```
+
+Do this in the intended development checkout, not over unrelated local changes.
+Use the existing [setup](../README.md) and
+[quality gate](quality-gate.md). Local runtime directories, credentials, raw
+diagnostics and this installation's database are not distribution inputs.
+
+| Role | Portable configuration | Canonical modes SHA256 |
+| --- | --- | --- |
+| PM | [project_manager_business_report.json](../project_workflow/references/publications/project_manager_business_report.json) | `fbf7112c277f1e8d725b2f807bac45dcdec0f2ce1f1d4ad3196f2d42fab13be2` |
+| Analyst | [analyst_business_report.json](../project_workflow/references/publications/analyst_business_report.json) | `2a8085181537621589ad3fb774d1883bf7c6d2dcdb18eadf3bdd1d06ccdf1f64` |
+
+These files contain `modes` and `content_sha256`, not deployment identities.
+Discover the target workflow by its actual profession/role and use the existing
+[JSON API](#json-api): read its active catalog, save the file's `modes` against
+that actual version/hash, read the saved draft, explicitly publish it and verify
+the operation and active catalog. Do not POST the file envelope or copy source
+workflow IDs/catalog numbers. An incompatible structure or stale base requires
+review, not raw SQL, automatic conversion or overwriting concurrent edits.
+Only new assignments select the publication; existing tasks stay pinned.
+
+Shared skills and professional instructions remain in
+[Base](https://github.com/FerrPOINT/services-base/pull/476); the three ownership
+layers are described in [architecture](architecture.md#ответственность).
+Use the existing selected-publication skill loader and package generation, not
+a manual copy or a second agent-specific Workflow executor. Workflow's SDK/UI
+pins are independent of Base operator/skill changes; do not repin them merely
+to obtain newer instructions. Each installation supplies its own authorized
+credentials and project access; never copy another installation's secrets.
+
+Verified scope: PM publication19 completed SDLC-40 in three first-attempt PASS
+evaluations (213-215), with all16 criterion assessments independently checked,
+an unchanged complete document, separate owner consent and application handoff
+to Analysis/Ready. Publication numbers19/7 identify this installation only.
+SDLC-41 awaits business clarification. Analyst is running and assigned but its
+backend enrollment receives401; Forge source reads also receive403. Neither is
+evidence of a model failure or completed Analyst acceptance. An initial-request
+replay500 is separately open despite readback showing no duplicate effects.
+
+Dependencies are [Fleet172](https://github.com/FerrPOINT/fleet-control/pull/172),
+[Base476](https://github.com/FerrPOINT/services-base/pull/476) and
+[Tracker212](https://github.com/FerrPOINT/task-tracker/pull/212).
+Source publication enables parallel role development; it is not a claim that
+these PRs are merged, every deployment mode passed, or the live release is done.
+Do not redesign the evaluator to work around unresolved delivery/access errors.
+The dated sections below retain historical observations, not current setup defaults.
+
 ## Architect Structure Revisions — 6 November 2026
 
 Architect may save and publish a new ordered sequence of synchronous phases
@@ -188,8 +256,9 @@ native families remain read-only and cannot use publication to become configured
 
 ## JSON API
 
-All six routes use the existing `require_administrator` dependency, current
-human application admission and DB commit guards. They are not machine-agent
+All six routes use the existing `require_administrator` dependency, verified
+active human identity/credential expiry and DB commit guards. A per-application
+grant is not required; role and resource permissions remain enforced. These are not machine-agent
 runtime endpoints. Responses are `Cache-Control: no-store`.
 
 1. `GET /api/workflows/{workflow_id}/catalog`

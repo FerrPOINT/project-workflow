@@ -8,6 +8,7 @@ from unittest.mock import Mock
 import pytest
 import requests
 
+from project_workflow.domain.phase_report import PhaseReport
 from project_workflow.infrastructure.llm import OpenAICompatibleClient, PromptBuilder, ResponseParser
 from tests._report_helpers import response_body
 
@@ -24,7 +25,9 @@ CANONICAL_FIELDS = {"verdict", "covered", "missing", "blockers", "message", "con
 
 
 def _report(text="Reported outcome"):
-    return {"source": "Reported source facts", "result": {"content": text}, "unresolved": []}
+    return {"source": {"request": "Reported source facts", "decisions": []},
+            "result": {"artifacts": [{"name": "Phase result", "content": text}], "assumptions": []},
+            "unresolved": []}
 
 
 @pytest.fixture(autouse=True)
@@ -43,6 +46,7 @@ def _response(verdict="PASS", missing=(), blockers=None):
                 "covered": label not in missing,
                 "reason": "Reported facts support this item." if label not in missing else
                           "The full text is absent; include its contents to satisfy this item.",
+                "required_change": None if label not in missing else "Include the complete saved text.",
             }
             for label in ALIASES
         },
@@ -115,35 +119,53 @@ def test_legacy_arbitrary_ids_use_the_check_counter_without_exposing_ids():
     }
     prompt = PromptBuilder.build_user_prompt("ignored", _phase(), _report(), evaluation_items=items)
     assert json.loads(prompt)["criteria"] == [
-        {"id": "C1", "text": "First"}, {"id": "C2", "text": "Second"},
-        {"id": "E1", "text": "Source"}, {"id": "C3", "text": "Third"},
+        {"id": "C1", "text": "First", "previous_assessment": None},
+        {"id": "C2", "text": "Second", "previous_assessment": None},
+        {"id": "E1", "text": "Source", "previous_assessment": None},
+        {"id": "C3", "text": "Third", "previous_assessment": None},
     ]
     assert all(item_id not in prompt for item_id, _ in items)
     result = ResponseParser.parse_assessments({
         "verdict": "PASS", "assessments": {
-            label: {"covered": True, "reason": "Supported"} for label in ("C1", "C2", "E1", "C3")
+            label: {"covered": True, "reason": "Supported", "required_change": None}
+            for label in ("C1", "C2", "E1", "C3")
         }, "blockers": [], "confidence": 0.9,
     }, evaluation_items=items)
     assert result.covered == [item_id for item_id, _ in items]
 
 
-@pytest.mark.parametrize("legacy_pm_flag", [False, True])
-def test_prompt_uses_only_phase_name_aliases_and_structured_report_once(legacy_pm_flag):
-    report = {"source": "Current source facts", "result": {"scope": ["one", "two"]}, "unresolved": []}
+@pytest.mark.parametrize("with_history", [False, True])
+def test_prompt_uses_only_phase_name_aliases_and_structured_report_once(with_history):
+    report = _report({"scope": ["one", "two"]})
+    report["source"]["request"] = "Current source facts"
+    previous_reports = [_report("Earlier complete artifact")] if with_history else []
+    previous_assessments = {
+        ITEMS[0][0]: {"covered": True, "reason": "Earlier result matched", "required_change": None},
+        ITEMS[1][0]: {"covered": False, "reason": "Earlier full text absent",
+                      "required_change": "Supply the complete saved text"},
+        "obsolete": {"covered": True, "reason": "Earlier removed criterion", "required_change": None},
+    } if with_history else {}
+    before = copy.deepcopy((report, previous_reports, previous_assessments))
+    assert PhaseReport.model_validate(report).model_dump(mode="json") == report
+    assert all(PhaseReport.model_validate(item).model_dump(mode="json") == item for item in previous_reports)
     prompt = PromptBuilder.build_user_prompt(
-        "private-task-id", _phase(), report, [ITEMS[1][0], ITEMS[0][0], "obsolete", ITEMS[0][0]],
-        ITEMS, pm_evaluation=legacy_pm_flag,
+        "private-task-id", _phase(), report, evaluation_items=ITEMS,
+        previous_reports=previous_reports, previous_assessments=previous_assessments,
     )
     assert json.loads(prompt) == {
         "phase": "Review the result",
         "allowed_verdicts": ["PASS", "PARTIAL", "BLOCKED"],
-        "criteria": [{"id": label, "text": text} for label, (_, text) in zip(ALIASES, ITEMS)],
-        "previously_covered": ["C1", "E1"],
+        "criteria": [{"id": label, "text": text, "previous_assessment": previous_assessments.get(item_id)}
+                     for label, (item_id, text) in zip(ALIASES, ITEMS)],
+        "previous_reports": previous_reports,
         "report": report,
     }
+    assert (report, previous_reports, previous_assessments) == before
+    assert "previously_covered" not in json.loads(prompt)
     assert all(item_id not in prompt for item_id, _ in ITEMS)
     assert prompt.count("Current source facts") == 1
     assert prompt.count('"scope":') == 1
+    assert prompt.count("Earlier complete artifact") == (1 if with_history else 0)
     for unwanted in ("private-task-id", "private-phase-code", "Private worker procedure", "obsolete", "hash"):
         assert unwanted not in prompt
 
@@ -170,19 +192,20 @@ def test_standalone_fallback_uses_existing_contract_ids_before_aliasing():
     assert "Actual result" not in empty and "Actual source" not in empty
 
 
-def test_prompt_keeps_delegate_allowance_and_v15_aliases_without_role_policy():
+def test_prompt_keeps_delegate_allowance_without_old_role_aliases():
     prompt = PromptBuilder.build_user_prompt("ignored", _phase(delegate=object()), _report(), evaluation_items=ITEMS)
     assert json.loads(prompt)["allowed_verdicts"] == ["PASS", "PARTIAL", "BLOCKED", "DELEGATE"]
-    assert PromptBuilder.PM_PROMPT_VERSION == PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v15"
-    assert PromptBuilder.PM_SYSTEM_PROMPT is PromptBuilder.SYSTEM_PROMPT
+    assert PromptBuilder.PROMPT_VERSION == "supervisor-evaluator-v19"
+    assert not hasattr(PromptBuilder, "PM_SYSTEM_PROMPT")
+    assert not hasattr(PromptBuilder, "PM_PROMPT_VERSION")
     system = PromptBuilder.SYSTEM_PROMPT
     for rule in (
         "source facts and decisions as the reference for the artifact under review, not the reverse",
         "An artifact defect does not itself mean a source decision is absent",
         "inline source account is sufficient as a source reference unless the criterion explicitly requires a locator",
         "prior covered marks are earlier assessments",
-        "what would suffice under that criterion",
-        "Do not invent new evidence for prior marks",
+        "the exact missing required fact in the supplied material",
+        "a source decision cannot be supplied by the artifact, a prior mark or a claim of completeness",
         "No extra labels or fields",
     ):
         assert rule.lower() in system.lower()
@@ -212,6 +235,7 @@ def test_private_response_projects_to_canonical_six_fields_without_mutating_inpu
     for label in missing:
         assert dict(ITEMS)[ALIASES[label]] in result.message
         assert raw["assessments"][label]["reason"] in result.message
+        assert raw["assessments"][label]["required_change"] in result.message
     for blocker in blockers:
         assert blocker in result.message
     assert not any(internal in result.message for internal in ALIASES.values())
@@ -244,18 +268,24 @@ def test_private_shape_requires_every_top_level_field(field):
                                    [ITEMS[0][0], "E1", "C2", "E2"]])
 def test_assessment_keys_must_exactly_match_local_aliases(labels):
     raw = _response()
-    raw["assessments"] = {label: {"covered": True, "reason": "Supported"} for label in labels}
+    raw["assessments"] = {label: {"covered": True, "reason": "Supported", "required_change": None}
+                          for label in labels}
     with pytest.raises(ValueError, match="labels"):
         ResponseParser.parse_assessments(raw, evaluation_items=ITEMS)
 
 
 @pytest.mark.parametrize("assessment", [
-    {"covered": "true", "reason": "Supported"}, {"covered": 1, "reason": "Supported"},
-    {"covered": None, "reason": "Supported"}, {"covered": True, "reason": ""},
-    {"covered": True, "reason": " "}, {"covered": True, "reason": " leading"},
-    {"covered": True, "reason": "trailing\n"}, {"covered": True, "reason": 7},
-    {"covered": True}, {"reason": "Supported"},
-    {"covered": True, "reason": "Supported", "proof": "extra"}, True, [], None,
+    {"covered": "true", "reason": "Supported", "required_change": None},
+    {"covered": 1, "reason": "Supported", "required_change": None},
+    {"covered": None, "reason": "Supported", "required_change": None},
+    {"covered": True, "reason": "", "required_change": None},
+    {"covered": True, "reason": " ", "required_change": None},
+    {"covered": True, "reason": " leading", "required_change": None},
+    {"covered": True, "reason": "trailing\n", "required_change": None},
+    {"covered": True, "reason": 7, "required_change": None},
+    {"covered": True, "required_change": None}, {"reason": "Supported", "required_change": None},
+    {"covered": True, "reason": "Supported"},
+    {"covered": True, "reason": "Supported", "required_change": None, "proof": "extra"}, True, [], None,
 ])
 def test_assessments_are_strict_and_reasons_are_nonempty_and_trimmed(assessment):
     raw = _response()
@@ -295,7 +325,7 @@ def test_empty_contract_and_historical_canonical_parser_remain_supported():
     second = ResponseParser.parse(first.raw, required_item_ids=[])
     assert first.assessments == second.assessments == {}
     assert first.raw == second.raw
-    first.assessments["not-shared"] = {"covered": True, "reason": "Test default factory"}
+    first.assessments["not-shared"] = {"covered": True, "reason": "Test default factory", "required_change": None}
     assert second.assessments == {}
     with pytest.raises(ValueError):
         ResponseParser.parse(raw, required_item_ids=[])
@@ -306,6 +336,7 @@ def test_empty_contract_and_historical_canonical_parser_remain_supported():
     '{"assessments":{"C1":{},"C1":{}}}',
     '{"assessments":{"C1":{"covered":true,"covered":false}}}',
     '{"assessments":{"C1":{"reason":"a","reason":"b"}}}',
+    '{"assessments":{"C1":{"required_change":null,"required_change":"Change"}}}',
     '{"C1":1,"\\u00431":2}',
 ])
 def test_duplicate_json_keys_are_rejected_at_every_object_level(text):
@@ -333,10 +364,11 @@ def test_response_schema_is_opt_in_fixed_alias_shape_and_contains_no_internal_id
     assert list(assessments["properties"]) == assessments["required"] == list(ALIASES)
     for assessment in assessments["properties"].values():
         assert assessment == {
-            "type": "object",
-            "properties": {"covered": {"type": "boolean"}, "reason": {"type": "string"}},
-            "required": ["covered", "reason"],
-            "additionalProperties": False,
+            "type": "object", "properties": {
+                "covered": {"type": "boolean"}, "reason": {"type": "string"},
+                "required_change": {"type": ["string", "null"]},
+            },
+            "required": ["covered", "reason", "required_change"], "additionalProperties": False,
         }
     assert not any(internal in json.dumps(result) for internal in ALIASES.values())
     assert PromptBuilder.response_schema([])["schema"]["properties"]["assessments"]["required"] == []

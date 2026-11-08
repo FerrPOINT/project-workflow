@@ -1,5 +1,6 @@
 """Regressions for the single native Responses evaluator contract."""
 
+import json
 from unittest.mock import Mock
 
 import pytest
@@ -43,11 +44,12 @@ def test_native_schema_does_not_depend_on_json_in_worker_report(monkeypatch):
             "input": [{"role": "user", "content": "Work has not been prepared."}],
             "text": {"format": fmt},
             "max_output_tokens": 65,
-            "reasoning": {"effort": "none"},
+            "reasoning": {"effort": "high"},
             "store": False,
             "stream": False,
         },
-        timeout=120,
+        timeout=(30, 1200),
+        allow_redirects=False,
     )
 
 
@@ -88,6 +90,32 @@ def test_provider_output_over_budget_is_not_an_accepted_evaluation(monkeypatch):
     post.assert_called_once()
 
 
+@pytest.mark.parametrize("cap", [None, 4000, 4501])
+def test_completed_output_above_old_default_requires_only_explicit_cap(monkeypatch, cap):
+    from project_workflow.config import get_settings
+
+    monkeypatch.setenv("OPENAI_MAX_TOKENS", "")
+    get_settings.cache_clear()
+    data = envelope('{"verdict":"PASS"}')
+    data["usage"] = {"output_tokens": 4501}
+    post = Mock(return_value=raw_response(json.dumps(data)))
+    monkeypatch.setattr("project_workflow.infrastructure.llm.requests.post", post)
+    client = OpenAICompatibleClient(max_tokens=cap)
+    if cap == 4000:
+        with pytest.raises(ValueError, match="exceeded the output token limit"):
+            client.respond("sys", "usr", response_format=PromptBuilder.response_schema([]))
+        assert client.last_call_diagnostics["outcome"] == "limit_exceeded"
+    else:
+        assert client.respond("sys", "usr", response_format=PromptBuilder.response_schema([])) == {"verdict": "PASS"}
+        assert client.last_call_diagnostics["outcome"] == "success"
+    assert client.last_call_diagnostics["max_tokens"] == cap
+    post.assert_called_once()
+    if cap is None:
+        assert "max_output_tokens" not in post.call_args.kwargs["json"]
+    else:
+        assert post.call_args.kwargs["json"]["max_output_tokens"] == cap
+
+
 def test_reasoning_is_not_evaluator_content(monkeypatch):
     data = envelope("{}")
     data["output"].insert(0, {"type": "reasoning", "summary": [{"type": "summary_text", "text": "private"}]})
@@ -119,3 +147,76 @@ def test_unexpected_or_incomplete_output_is_rejected(monkeypatch, part):
     monkeypatch.setattr("project_workflow.infrastructure.llm.requests.post", Mock(return_value=reply))
     with pytest.raises(ValueError):
         OpenAICompatibleClient().respond("sys", "usr", response_format=PromptBuilder.response_schema([]))
+
+
+def raw_response(text):
+    response = requests.Response()
+    response.status_code = 200
+    response.encoding = "utf-8"
+    response._content = text.encode("utf-8")
+    return response
+
+
+@pytest.mark.parametrize("key", ["status", "output"])
+def test_duplicate_outer_envelope_keys_fail_without_retry(monkeypatch, key):
+    data = envelope('{"verdict":"PASS"}')
+    text = json.dumps(data)
+    text = text[:-1] + "," + json.dumps(key) + ":" + json.dumps(data[key]) + "}"
+    post = Mock(return_value=raw_response(text))
+    monkeypatch.setattr("project_workflow.infrastructure.llm.requests.post", post)
+    client = OpenAICompatibleClient()
+    with pytest.raises(ValueError, match="duplicate object keys"):
+        client.respond("sys", "usr", response_format=PromptBuilder.response_schema([]))
+    post.assert_called_once()
+    assert client.last_call_diagnostics["outcome"] != "success"
+    assert client.last_response_content is None
+
+
+@pytest.mark.parametrize("value", [None, True, False, -1, 1.0, 1.5, "1", [], {}])
+def test_malformed_output_token_usage_fails_without_retry(monkeypatch, value):
+    data = envelope('{"verdict":"PASS"}')
+    data["usage"] = {"output_tokens": value}
+    post = Mock(return_value=raw_response(json.dumps(data)))
+    monkeypatch.setattr("project_workflow.infrastructure.llm.requests.post", post)
+    client = OpenAICompatibleClient()
+    with pytest.raises(ValueError, match="Invalid evaluator output token usage"):
+        client.respond("sys", "usr", response_format=PromptBuilder.response_schema([]))
+    post.assert_called_once()
+    assert client.last_call_diagnostics["outcome"] != "success"
+
+
+@pytest.mark.parametrize("value", [0, 16])
+def test_exact_nonnegative_output_token_usage_is_accepted(monkeypatch, value):
+    data = envelope("{}")
+    data["usage"] = {"output_tokens": value}
+    post = Mock(return_value=raw_response(json.dumps(data)))
+    monkeypatch.setattr("project_workflow.infrastructure.llm.requests.post", post)
+    client = OpenAICompatibleClient(max_tokens=16)
+    assert client.respond("sys", "usr", response_format=PromptBuilder.response_schema([])) == {}
+    post.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    "content",
+    ['{"verdict":"PASS","verdict":"PARTIAL"}', '{"assessments":[],"assessments":[]}'],
+)
+def test_duplicate_assessment_json_keys_fail_without_retry(monkeypatch, content):
+    post = Mock(return_value=raw_response(json.dumps(envelope(content))))
+    monkeypatch.setattr("project_workflow.infrastructure.llm.requests.post", post)
+    client = OpenAICompatibleClient()
+    with pytest.raises(ValueError, match="duplicate object keys"):
+        client.respond("sys", "usr", response_format=PromptBuilder.response_schema([]))
+    post.assert_called_once()
+    assert client.last_call_diagnostics["outcome"] != "success"
+
+
+def test_refusal_cannot_accept_parseable_output(monkeypatch):
+    data = envelope('{"verdict":"PASS"}')
+    data["output"][0]["content"].append({"type": "refusal", "refusal": "not available"})
+    post = Mock(return_value=raw_response(json.dumps(data)))
+    monkeypatch.setattr("project_workflow.infrastructure.llm.requests.post", post)
+    client = OpenAICompatibleClient()
+    with pytest.raises(ValueError, match="refused"):
+        client.respond("sys", "usr", response_format=PromptBuilder.response_schema([]))
+    post.assert_called_once()
+    assert client.last_call_diagnostics["outcome"] == "refusal"

@@ -1,4 +1,4 @@
-"""Canonical dependency-free human admission; use only after trusted Auth identity verification."""
+"""Verified human identity context and the separate identity-deletion proof validator."""
 from __future__ import annotations
 
 import math
@@ -8,7 +8,6 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
-DEFAULT_USER_APPLICATIONS = ("task-tracker", "wiki", "ci-cd")
 _FIELDS = {"schema_version", "issuer", "subject", "role", "applications", "revision", "enforced",
            "observed_at", "expires_at"}
 
@@ -76,37 +75,37 @@ def confirm_access(value: object, *, issuer: str, subject: str,
 
 @dataclass(frozen=True)
 class HumanAccess:
+    issuer: str
+    subject: str
     role: str
-    proof: ApplicationAccess | None
+    expires_at: datetime
     _deadline: float
 
     def is_current(self) -> bool:
-        return time.monotonic() < self._deadline and (self.proof is None or self.proof.is_current())
+        return time.monotonic() < self._deadline and _utc_now() < self.expires_at
 
     def monotonic_deadline(self) -> float:
         """Compose another owner permit without creating a new confirmation window."""
         return self._deadline
 
-    def permits(self, required: Iterable[str], *, administration: bool = False) -> bool:
-        if not self.is_current() or (administration and self.role != "admin"):
-            return False
-        return self.proof is None or not self.proof.enforced or self.proof.permits(required)
+    def permits(self, *, administration: bool = False) -> bool:
+        return self.is_current() and (not administration or self.role == "admin")
 
 
 def human_access(identity: Mapping[str, object], *, issuer: str, subject: str,
-                 started: float, wall_started: datetime, require_proof: bool) -> HumanAccess:
-    """Profile names/local historical roles are never authority; technical subjects are separate."""
+                 started: float, wall_started: datetime, expires_at: datetime) -> HumanAccess:
+    """Use only after Auth verifies this credential and its active owner; never read app grants."""
     if identity.get("role") == "service_account":
         raise PermissionError("Technical identity cannot become human authority")
-    proof = None
-    if identity.get("application_access") is not None:
-        proof = confirm_access(identity["application_access"], issuer=issuer, subject=subject,
-                               started=started, wall_started=wall_started)
-    if require_proof and (proof is None or not proof.enforced):
-        raise PermissionError("Current enforced human admission is required")
-    role = proof.role if proof is not None else ("admin" if identity.get("role") == "admin" else "user")
-    deadline = proof._deadline if proof is not None else started + 60.0
-    access = HumanAccess(role, proof, deadline)
+    role = identity.get("role")
+    if (role not in ("user", "admin") or not isinstance(role, str)
+            or not isinstance(issuer, str) or not issuer or not isinstance(subject, str) or not subject
+            or wall_started.tzinfo is None or wall_started.utcoffset() is None
+            or expires_at.tzinfo is None or expires_at.utcoffset() is None
+            or not math.isfinite(started) or started > time.monotonic()):
+        raise ValueError("Invalid human identity or credential clock")
+    deadline = started + min(60.0, (expires_at - wall_started).total_seconds())
+    access = HumanAccess(issuer, subject, role, expires_at, deadline)
     if not access.is_current():
         raise PermissionError("Human authority expired")
     return access

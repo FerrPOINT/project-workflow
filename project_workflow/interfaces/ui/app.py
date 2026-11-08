@@ -6,6 +6,7 @@ import logging
 import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from ipaddress import ip_address
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Request
@@ -63,7 +64,7 @@ def _validation_details(exc: RequestValidationError) -> list[dict[str, str]]:
 
 
 def _database_not_ready_response(request: Request) -> JSONResponse | HTMLResponse:
-    if request.url.path.startswith("/api/"):
+    if request.url.path.startswith(("/api/", "/internal/")):
         return JSONResponse(
             {
                 "ok": False,
@@ -182,6 +183,15 @@ def _health() -> JSONResponse:
 @asynccontextmanager
 async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Check database connectivity before accepting traffic."""
+    settings = app.state.workflow_settings
+    if settings.PROJECT_WORKFLOW_MODE == "platform" and not settings.AUTH_ISSUER:
+        raise RuntimeError("Platform mode requires AUTH_ISSUER; standalone must be selected explicitly")
+    if settings.PROJECT_WORKFLOW_MODE == "standalone":
+        from project_workflow.application.standalone import validate_database
+        from project_workflow.infrastructure.db.uow import SAUnitOfWork
+
+        with SAUnitOfWork() as uow:
+            validate_database(uow)
     try:
         engine = get_engine()
         with engine.connect() as conn:
@@ -197,7 +207,9 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 def create_app() -> FastAPI:
+    settings = get_settings()
     app = FastAPI(title="Интерфейс project-workflow", version=__version__, lifespan=_lifespan)
+    app.state.workflow_settings = settings
     app.mount(
         "/base-assets/fonts",
         StaticFiles(directory=Path(__file__).parent / "templates/base/fonts"),
@@ -218,7 +230,30 @@ def create_app() -> FastAPI:
 
     app.add_middleware(_RequestLoggingMiddleware)
     app.add_middleware(_UoWMiddleware)
-    install_sso(app)
+    install_sso(app, settings)
+
+    @app.middleware("http")
+    async def standalone_boundary(request: Request, call_next):
+        if settings.PROJECT_WORKFLOW_MODE == "standalone":
+            if not settings.PROJECT_WORKFLOW_STANDALONE_CONTAINER_NETWORK:
+                try:
+                    local_peer = request.client is not None and ip_address(request.client.host).is_loopback
+                except ValueError:
+                    local_peer = False
+                if not local_peer:
+                    return JSONResponse({"ok": False, "error": "Standalone requires a loopback peer"}, status_code=403)
+            host = request.url.hostname
+            origin = request.headers.get("origin")
+            if (host not in {"127.0.0.1", "localhost", "::1"}
+                    or request.headers.get("sec-fetch-site") == "cross-site"
+                    or origin is not None and origin != f"{request.url.scheme}://{request.url.netloc}"):
+                return JSONResponse({"ok": False, "error": "Standalone requires a same-origin loopback request"},
+                                    status_code=403)
+            if (request.url.path.startswith(("/internal/", "/api/internal/", "/api/pm/",
+                                           "/api/v2/execution-contexts", "/api/v1/space-admission"))
+                    and request.url.path not in {"/internal/runtime/step", "/internal/runtime/history"}):
+                return JSONResponse({"ok": False, "error": "Platform operation is not enabled"}, status_code=404)
+        return await call_next(request)
 
     @app.middleware("http")
     async def identity_owner_no_store(request: Request, call_next):
@@ -235,7 +270,7 @@ def create_app() -> FastAPI:
 
     @app.exception_handler(RequestValidationError)
     async def _validation_error(request: Request, exc: RequestValidationError) -> JSONResponse | HTMLResponse:
-        if not request.url.path.startswith("/api/"):
+        if not request.url.path.startswith(("/api/", "/internal/")):
             html_response = pages.validation_error_page(request, exc.errors())
             if html_response is not None:
                 return html_response
@@ -251,7 +286,7 @@ def create_app() -> FastAPI:
     @app.exception_handler(StarletteHTTPException)
     async def _http_error(request: Request, exc: StarletteHTTPException) -> JSONResponse | HTMLResponse:
         path_parts = request.url.path.strip("/").split("/")
-        if not request.url.path.startswith("/api/"):
+        if not request.url.path.startswith(("/api/", "/internal/")):
             if exc.status_code == 403:
                 return pages.http_error_page(request, title="Нет доступа",
                                              message="Требуются права администратора PDLC", status_code=403)

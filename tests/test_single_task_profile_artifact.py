@@ -8,6 +8,7 @@ import pytest
 from project_workflow import config
 from project_workflow.domain.namespace import legacy_code_from_cli_command, normalize_namespace_cli_command
 from project_workflow.infrastructure.db.managed_catalog import ManagedCatalog, ManagedMode
+from project_workflow.infrastructure.db.single_task_catalog import load_profile
 from scripts import build_single_task_profile as builder
 from scripts.build_single_task_profile import CATALOG_PATH, MANIFEST_PATH, ROOT, encoded, render
 
@@ -17,6 +18,7 @@ def test_profile_matches_actual_source_and_committed_artifact_hashes():
     assert (ROOT / CATALOG_PATH).read_bytes() == catalog_bytes
     assert (ROOT / MANIFEST_PATH).read_bytes() == manifest_bytes
     catalog, manifest = json.loads(catalog_bytes), json.loads(manifest_bytes)
+    assert load_profile() == (catalog, manifest)
     assert manifest["proposal"] is False
     assert manifest["workflow_catalog"]["sha256"] == hashlib.sha256(catalog_bytes).hexdigest()
     assert manifest["instruction_source"] == catalog["instruction_source"]
@@ -34,14 +36,18 @@ def test_profile_matches_actual_source_and_committed_artifact_hashes():
             ManagedMode.model_validate(mode)
 
 
-def test_analyst_read_scope_keeps_other_profession_instructions_unchanged():
+def test_common_status_instruction_changes_role_hashes_but_not_profile_bindings():
     _, current_bytes = render()
     current = json.loads(current_bytes)
     previous = json.loads((ROOT / "project_workflow/references/retained" /
                            "9384121a0c1bc9c869a25fcdf11cab4064a0491ebcf329a6310229874ab835d0" /
                            "single_task_manifest_v1.json").read_bytes())
     changed = {role for role, definition in current["roles"].items() if definition != previous["roles"][role]}
-    assert changed == {"analyst"}
+    assert changed == set(previous["roles"])
+    for role, definition in current["roles"].items():
+        assert {k: v for k, v in definition.items() if k != "role_instructions_sha256"} == {
+            k: v for k, v in previous["roles"][role].items() if k != "role_instructions_sha256"
+        }
 
 
 def test_new_profile_identities_cannot_impersonate_legacy_or_base_metadata():

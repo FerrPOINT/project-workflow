@@ -202,7 +202,7 @@ def test_post_snapshot_worktree_mutation_cannot_change_docker_context(git_source
     ):
         builder.build_image(
             git_source, "project-workflow:test", "docker",
-            skills_root=git_source, catalog_variant="legacy",
+            catalog_variant="single-task-v1",
         )
 
     command = docker_run.call_args.args[0]
@@ -373,7 +373,7 @@ def test_image_builder_passes_one_snapshot_to_docker(git_source: Path):
     ):
         builder.build_image(
             git_source, "project-workflow:test", "docker",
-            skills_root=git_source, catalog_variant="legacy",
+            catalog_variant="single-task-v1",
         )
 
     command = docker_run.call_args.args[0]
@@ -416,11 +416,11 @@ def test_pax_context_uses_deterministic_gzip_transport(git_source: Path):
     ):
         builder.build_image(
             git_source, "project-workflow:test", "docker",
-            skills_root=git_source, catalog_variant="legacy",
+            catalog_variant="single-task-v1",
         )
         builder.build_image(
             git_source, "project-workflow:test", "docker",
-            skills_root=git_source, catalog_variant="legacy",
+            catalog_variant="single-task-v1",
         )
 
     first = docker_run.call_args_list[0].kwargs["input"]
@@ -576,46 +576,32 @@ def test_dockerfile_verifies_manifest_before_package_install(git_source, tmp_pat
 
 
 @pytest.fixture
-def compatible_sources(git_source, tmp_path):
+def compatible_sources(git_source):
     root = Path(__file__).resolve().parents[1]
     shutil.copytree(root / "project_workflow", git_source / "project_workflow",
                     dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
     shutil.copyfile(root / "scripts/build_runtime_image.py", git_source / "scripts/build_runtime_image.py")
-    catalog_path = git_source / "project_workflow/references/hermes_sdlc_catalog_v1.json"
-    catalog = json.loads(catalog_path.read_bytes())
-    skills = tmp_path / "skills"
-    skills.mkdir()
-    native = {"schema": catalog["skills_source"]["manifest_schema"], "roles": {
-        workflow["role_key"]: {"physicalSkills": workflow["skill_allowlist"]}
-        for workflow in catalog["workflows"]}}
-    manifest = skills / catalog["skills_source"]["manifest_path"]
-    manifest.parent.mkdir(parents=True)
-    manifest.write_text(json.dumps(native), encoding="utf-8")
-    _run_git(skills, "init")
-    _run_git(skills, "config", "user.email", "fixture@example.invalid")
-    _run_git(skills, "config", "user.name", "Fixture")
-    _run_git(skills, "add", ".")
-    _run_git(skills, "commit", "-m", "native skills")
-    catalog["skills_source"]["revision"] = _run_git(skills, "rev-parse", "HEAD").stdout.decode().strip()
-    catalog_path.write_text(json.dumps(catalog), encoding="utf-8")
     _run_git(git_source, "add", ".")
     _run_git(git_source, "commit", "-m", "compatible source")
-    return git_source, skills, manifest, catalog
+    return git_source
 
 
 def test_compatible_context_uses_exact_commits_and_is_verified(compatible_sources, tmp_path):
-    source, skills, manifest, catalog = compatible_sources
+    from project_workflow.domain.single_task_profile import CATALOG_SHA256, MANIFEST_SHA256
+
+    source = compatible_sources
     builder = _builder_module()
     snapshot = builder.immutable_git_snapshot(source, "HEAD")
-    context = builder.compatible_build_context(snapshot, skills, "legacy")
-    (source / builder.CATALOG_PATH).write_text("dirty catalog", encoding="utf-8")
-    manifest.write_text("dirty skills", encoding="utf-8")
-    assert builder.compatible_build_context(snapshot, skills, "legacy") == context
+    context = builder.compatible_build_context(snapshot, None)
+    (source / "project_workflow/references/single_task_catalog_v1.json").write_text("dirty catalog", encoding="utf-8")
+    (source / "scripts/build_runtime_image.py").write_text("raise RuntimeError('dirty exporter')", encoding="utf-8")
+    assert builder.compatible_build_context(snapshot, None) == context
     descriptor = json.loads(_member_bytes(context, builder.COMPATIBILITY_PATH))
     assert descriptor["catalogRevision"] == snapshot.provenance.source_revision
-    assert descriptor["skillsRevision"] == catalog["skills_source"]["revision"]
-    assert descriptor["catalogVersion"] == 2
-    assert len(descriptor) == 7
+    assert descriptor["catalogSha256"] == CATALOG_SHA256
+    assert descriptor["instructionManifestSha256"] == MANIFEST_SHA256
+    assert descriptor["catalogVersion"] == 1
+    assert len(descriptor) == 6
     assert runtime_bundle_sha256_from_archive(context) == snapshot.provenance.runtime_bundle_sha256
     extracted = tmp_path / "compatible-context"
     extracted.mkdir()
@@ -624,7 +610,7 @@ def test_compatible_context_uses_exact_commits_and_is_verified(compatible_source
     result = subprocess.run([sys.executable, "-m", "scripts.build_runtime_image",
                              "verify-compatibility", "--root", str(extracted)],
                             cwd=extracted, capture_output=True, text=True,
-                            env=dict(os.environ, PROJECT_WORKFLOW_CATALOG_VARIANT="legacy"))
+                            env=dict(os.environ, PROJECT_WORKFLOW_CATALOG_VARIANT="single-task-v1"))
     assert result.returncode == 0, result.stderr
     descriptor["catalogRevision"] = "f" * 40
     # The release context deliberately carries read-only generated inputs.
@@ -634,12 +620,12 @@ def test_compatible_context_uses_exact_commits_and_is_verified(compatible_source
     result = subprocess.run([sys.executable, "-m", "scripts.build_runtime_image",
                              "verify-compatibility", "--root", str(extracted)],
                             cwd=extracted, capture_output=True, text=True,
-                            env=dict(os.environ, PROJECT_WORKFLOW_CATALOG_VARIANT="legacy"))
+                            env=dict(os.environ, PROJECT_WORKFLOW_CATALOG_VARIANT="single-task-v1"))
     assert result.returncode == 2 and "immutable source inputs" in result.stderr
 
 
 def test_compatible_image_delivers_descriptor_to_docker(compatible_sources):
-    source, skills, _, _ = compatible_sources
+    source = compatible_sources
     builder = _builder_module()
     actual_run = subprocess.run
     docker_calls = []
@@ -651,22 +637,28 @@ def test_compatible_image_delivers_descriptor_to_docker(compatible_sources):
         return actual_run(command, **kwargs)
 
     with patch.object(builder.subprocess, "run", side_effect=run):
-        builder.build_image(source, "workflow:test", "fixture-docker", skills_root=skills, catalog_variant="legacy")
+        builder.build_image(source, "workflow:test", "fixture-docker", catalog_variant="single-task-v1")
     assert len(docker_calls) == 1
     command, kwargs = docker_calls[0]
     descriptor = json.loads(_member_bytes(kwargs["input"], builder.COMPATIBILITY_PATH))
     assert f"SOURCE_REVISION={descriptor['catalogRevision']}" in command
+    assert "CATALOG_VARIANT=single-task-v1" in command
+    with tarfile.open(fileobj=io.BytesIO(kwargs["input"]), mode="r:*") as context:
+        assert "runtime-skills-manifest.json" not in context.getnames()
     dockerfile = (Path(__file__).resolve().parents[1] / "Dockerfile").read_text()
     assert "verify-compatibility --root /app" in dockerfile
     assert "COPY --from=builder /app/runtime-compatibility.json /app/runtime-compatibility.json" in dockerfile
 
 
 @pytest.mark.parametrize("explicit", [False, True])
-def test_configured_image_derives_its_sealed_profile_without_native_skills(compatible_sources, tmp_path, explicit):
+@pytest.mark.parametrize("profile", ["single_task_catalog_v1.json", "single_task_manifest_v1.json"])
+def test_configured_image_derives_its_sealed_profile_without_native_skills(
+    compatible_sources, tmp_path, explicit, profile,
+):
     from project_workflow.build_provenance import validate_runtime_compatibility
     from project_workflow.domain.single_task_profile import CATALOG_SHA256, MANIFEST_SHA256
 
-    source, _, _, _ = compatible_sources
+    source = compatible_sources
     builder = _builder_module()
     snapshot = builder.immutable_git_snapshot(source, "HEAD")
     options = {"catalog_variant": "single-task-v1"} if explicit else {}
@@ -687,19 +679,41 @@ def test_configured_image_derives_its_sealed_profile_without_native_skills(compa
     command = [sys.executable, "-m", "scripts.build_runtime_image", "verify-compatibility", "--root", str(extracted)]
     result = subprocess.run(command, cwd=extracted, env=environment, capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
-    path = extracted / "project_workflow/references/single_task_catalog_v1.json"
+    path = extracted / "project_workflow/references" / profile
     path.chmod(0o644)
-    path.write_bytes(path.read_bytes().replace(b"PM-DRAFT-01", b"PM-DRAFT-99"))
+    path.write_bytes(path.read_bytes() + b"\n")
     result = subprocess.run(command, cwd=extracted, env=environment, capture_output=True, text=True)
     assert result.returncode == 2 and "profile" in result.stderr.lower()
 
 
-def test_native_build_still_requires_its_explicit_skills_input(compatible_sources):
-    source, _, _, _ = compatible_sources
+@pytest.mark.parametrize("variant", ["legacy", "base", "unknown", ""])
+def test_retired_catalog_variant_refused_before_context_or_process(tmp_path, variant):
     builder = _builder_module()
-    snapshot = builder.immutable_git_snapshot(source, "HEAD")
-    with pytest.raises(BuildProvenanceError, match="explicit skills checkout"):
-        builder.compatible_build_context(snapshot, None, "legacy")
+    with (
+        patch.object(builder, "docker_context_with_manifest") as context,
+        patch.object(builder, "immutable_git_snapshot") as snapshot,
+        patch.object(builder.subprocess, "run") as process,
+    ):
+        with pytest.raises(BuildProvenanceError, match="Only single-task-v1"):
+            builder.compatible_build_context(None, None, variant)
+        with pytest.raises(BuildProvenanceError, match="Only single-task-v1"):
+            builder.build_image(tmp_path, "workflow:test", "fixture-docker", catalog_variant=variant)
+    context.assert_not_called()
+    snapshot.assert_not_called()
+    process.assert_not_called()
+
+
+@pytest.mark.parametrize("variant", ["legacy", "base", "unknown", ""])
+@pytest.mark.parametrize("command", ["derive-compatibility", "verify-compatibility"])
+def test_retired_environment_variant_never_runs_exporter(tmp_path, monkeypatch, capsys, variant, command):
+    builder = _builder_module()
+    monkeypatch.setenv("PROJECT_WORKFLOW_CATALOG_VARIANT", variant)
+    (tmp_path / builder.COMPATIBILITY_PATH).write_text("{}", encoding="utf-8")
+    with patch.object(builder, "load_build_provenance") as provenance:
+        assert builder.main([command, "--root", str(tmp_path)]) == 2
+    provenance.assert_not_called()
+    assert "Only single-task-v1" in capsys.readouterr().err
+    assert (tmp_path / builder.COMPATIBILITY_PATH).read_text(encoding="utf-8") == "{}"
 
 
 @pytest.mark.parametrize("change", [
@@ -733,13 +747,13 @@ def test_build_resource_limits_preserve_context_and_provenance(git_source, monke
     ):
         builder.build_image(
             git_source, "workflow:test", "fixture-docker",
-            skills_root=git_source, catalog_variant="legacy",
+            catalog_variant="single-task-v1",
         )
-        legacy = docker_run.call_args
+        unrestricted = docker_run.call_args
         provenance = snapshot.provenance
-        assert legacy.args[0] == [
+        assert unrestricted.args[0] == [
             "fixture-docker", "build",
-            "--build-arg", "CATALOG_VARIANT=legacy",
+            "--build-arg", "CATALOG_VARIANT=single-task-v1",
             "--build-arg", f"SOURCE_REVISION={provenance.source_revision}",
             "--build-arg", f"SOURCE_ARCHIVE_SHA256={provenance.source_archive_sha256}",
             "--build-arg", f"RUNTIME_BUNDLE_SHA256={provenance.runtime_bundle_sha256}",
@@ -755,7 +769,7 @@ def test_build_resource_limits_preserve_context_and_provenance(git_source, monke
             monkeypatch.setenv("PROJECT_WORKFLOW_BUILD_CPUS", cpus)
         builder.build_image(
             git_source, "workflow:test", "fixture-docker",
-            skills_root=git_source, catalog_variant="legacy",
+            catalog_variant="single-task-v1",
         )
 
     docker_run.assert_called_once()
@@ -764,8 +778,8 @@ def test_build_resource_limits_preserve_context_and_provenance(git_source, monke
         "--resource", f"memory={limits[0]}m", "--resource", f"memory-swap={limits[0]}m",
         "--resource", "cpu-period=100000", "--resource", f"cpu-quota={100000 * int(limits[1])}",
     ]
-    assert actual.args[0] == [*legacy.args[0][:-1], *flags, "-"]
-    assert actual.kwargs == legacy.kwargs == {"check": True, "input": gzip.compress(context, mtime=0)}
+    assert actual.args[0] == [*unrestricted.args[0][:-1], *flags, "-"]
+    assert actual.kwargs == unrestricted.kwargs == {"check": True, "input": gzip.compress(context, mtime=0)}
     assert runtime_bundle_sha256_from_archive(gzip.decompress(actual.kwargs["input"])) == (
         provenance.runtime_bundle_sha256
     )
@@ -791,22 +805,30 @@ def test_build_resource_limits_refuse_invalid_before_process(tmp_path, monkeypat
         with pytest.raises(BuildProvenanceError, match="Set both PROJECT_WORKFLOW_BUILD"):
             builder.build_image(
                 tmp_path, "workflow:test", "fixture-docker",
-                skills_root=tmp_path, catalog_variant="legacy",
+                catalog_variant="single-task-v1",
             )
     process.assert_not_called()
 
 
-def test_missing_pinned_skills_ref_fails_before_docker(compatible_sources):
-    source, skills, _, _ = compatible_sources
+@pytest.mark.parametrize("profile", ["single_task_catalog_v1.json", "single_task_manifest_v1.json"])
+def test_missing_pinned_profile_fails_before_docker(compatible_sources, profile):
+    source = compatible_sources
     builder = _builder_module()
-    catalog_path = source / builder.CATALOG_PATH
-    catalog = json.loads(catalog_path.read_bytes())
-    catalog["skills_source"]["revision"] = "f" * 40
-    catalog_path.write_text(json.dumps(catalog), encoding="utf-8")
+    (source / "project_workflow/references" / profile).unlink()
     _run_git(source, "add", ".")
-    _run_git(source, "commit", "-m", "unavailable native pin")
-    with pytest.raises(subprocess.CalledProcessError):
-        builder.build_image(source, "workflow:test", "fixture-docker", skills_root=skills, catalog_variant="legacy")
+    _run_git(source, "commit", "-m", "missing sealed profile")
+    actual_run = subprocess.run
+    docker = MagicMock()
+
+    def run(command, **kwargs):
+        if command[0] == "fixture-docker":
+            return docker(command, **kwargs)
+        return actual_run(command, **kwargs)
+
+    with patch.object(builder.subprocess, "run", side_effect=run):
+        with pytest.raises(subprocess.CalledProcessError):
+            builder.build_image(source, "workflow:test", "fixture-docker")
+    docker.assert_not_called()
 
 
 def test_frozen_runtime_compatibility_rejects_missing_and_source_mismatch(tmp_path):
@@ -844,9 +866,44 @@ def test_current_cli_build_chooses_the_configured_catalog_without_native_skills(
     assert build.call_args.kwargs["skills_root"] is None
 
 
-def test_current_build_rejects_an_irrelevant_native_skills_checkout(compatible_sources):
-    source, skills, _, _ = compatible_sources
+def test_current_base_cli_caller_preserves_explicit_source_and_image(tmp_path):
     builder = _builder_module()
-    snapshot = builder.immutable_git_snapshot(source, "HEAD")
-    with pytest.raises(BuildProvenanceError, match="no native skills"):
-        builder.compatible_build_context(snapshot, skills)
+    revision = "a" * 40
+    with patch.object(builder, "build_image") as build:
+        assert builder.main([
+            "build", "--root", str(tmp_path), "--revision", revision,
+            "--image", "owned:configured", "--catalog-variant", "single-task-v1",
+        ]) == 0
+    build.assert_called_once_with(
+        tmp_path.resolve(), "owned:configured", "docker", revision,
+        skills_root=None, catalog_variant="single-task-v1",
+    )
+
+
+def test_current_build_rejects_native_skills_before_snapshot_context_or_process(tmp_path, capsys):
+    builder = _builder_module()
+    with (
+        patch.object(builder, "immutable_git_snapshot") as snapshot,
+        patch.object(builder, "docker_context_with_manifest") as context,
+        patch.object(builder.subprocess, "run") as process,
+    ):
+        with pytest.raises(BuildProvenanceError, match="no native skills"):
+            builder.compatible_build_context(None, tmp_path)
+        with pytest.raises(BuildProvenanceError, match="no native skills"):
+            builder.build_image(tmp_path, "workflow:test", "fixture-docker", skills_root=tmp_path)
+        assert builder.main(["build", "--image", "workflow:test", "--skills-root", str(tmp_path)]) == 2
+    snapshot.assert_not_called()
+    context.assert_not_called()
+    process.assert_not_called()
+    assert "no native skills" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("variant", ["legacy", "base", "unknown"])
+def test_cli_refuses_retired_catalog_choices_before_build(variant, capsys):
+    builder = _builder_module()
+    with patch.object(builder, "build_image") as build:
+        with pytest.raises(SystemExit) as exc:
+            builder.main(["build", "--image", "workflow:test", "--catalog-variant", variant])
+    assert exc.value.code == 2
+    build.assert_not_called()
+    assert "invalid choice" in capsys.readouterr().err

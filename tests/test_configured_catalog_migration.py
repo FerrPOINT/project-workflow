@@ -84,7 +84,7 @@ def assert_populated_catalog_upgrade_preserves_history(engine, monkeypatch, pred
             from project_workflow.application.catalog_publication import read_revision
 
             workflow = uow.workflows.get_by_id(int(analyst.workflow_id))
-            assert workflow.active_catalog_version == 3
+            assert workflow.active_catalog_version == 4
             assert len(read_revision(uow, workflow, 1)["modes"][0]["phases"]) == 3
             assert len(read_revision(uow, workflow, 2)["modes"][0]["phases"]) == 12
         with engine.connect() as connection:
@@ -92,11 +92,12 @@ def assert_populated_catalog_upgrade_preserves_history(engine, monkeypatch, pred
                 assert connection.execute(sa.text(f"SELECT * FROM {name}")).mappings().all() == rows
             after_phases = connection.execute(sa.text("SELECT id,code,mode_id FROM phases ORDER BY id")).all()
             assert after_phases[:len(phases)] == phases
-            assert len(after_phases) == len(phases) + 24
+            assert len(after_phases) == len(phases) + 24 + 33
             new_modes = connection.execute(sa.text(
-                "SELECT id FROM workflow_modes WHERE role_key='analyst' AND catalog_version IN (2,3)"
+                "SELECT id FROM workflow_modes"
             )).scalars().all()
-            assert {row.mode_id for row in after_phases[len(phases):]} == set(new_modes)
+            assert {row.mode_id for row in after_phases[len(phases):]} == set(new_modes) - {
+                row.mode_id for row in phases}
             if revision in {
                 "0024_analyst_research_catalog", "0025_pm_analysis_acceptance", "0026_analyst_artifact_acceptance",
                 "0027_analyst_no_pm_return", "0028_analyst_read_sources"
@@ -110,7 +111,7 @@ def assert_populated_catalog_upgrade_preserves_history(engine, monkeypatch, pred
                     "SELECT id,phase_id FROM phase_evidence_requirements ORDER BY id"
                 )).all()[:len(evidence)] == evidence
             assert (
-                "0030_analyst_baseline_ledger"
+                "0031_explicit_stage_start"
                 == connection.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one()
             )
     finally:
@@ -206,6 +207,14 @@ def test_structural_upgrade_preserves_operator_publications_and_drafts(tmp_path,
                 return {t.name: connection.execute(sa.select(t)).mappings().all() for t in tables.sorted_tables}
 
         before = snapshot()
+        if published and role == "developer":
+            with pytest.raises(ValueError, match="Explicit Start cutover publication required"):
+                ensure_migrated(engine)
+            assert snapshot() == before
+            with SAUnitOfWork(engine) as uow:
+                assert editor.read_operation(uow, workflow_id, "retained-publication") == saved
+                assert editor.read_active(uow, workflow_id)["catalog_version"] == saved["catalog_version"]
+            return
         ensure_migrated(engine)
         with SAUnitOfWork(engine) as uow:
             assert catalog.observe_installation(uow).phases == 33

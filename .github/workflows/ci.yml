@@ -60,7 +60,7 @@ jobs:
         with:
           repository: FerrPOINT/services-base
           path: workflow-cli-base
-          ref: 278be4a2eb0b3ce49dac2cd14ea7e2871f2ffe1d
+          ref: 25b0b2aafaa9feaa854ca86f11043ff825842229
           ssh-key: ${{ secrets.SERVICES_BASE_DEPLOY_KEY }}
           persist-credentials: false
       - name: Verify generated dependency-free namespace contract

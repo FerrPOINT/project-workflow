@@ -141,6 +141,8 @@ class _SsoMiddleware(BaseHTTPMiddleware):
             if len(response.content) > 16384:
                 raise ValueError("oversized identity")
             identity = response.json()
+            if not isinstance(identity, dict):
+                raise ValueError("invalid identity")
             subject = identity["sub" if is_personal_token else "id"]
             if not isinstance(subject, str) or not subject:
                 raise ValueError("invalid identity")
@@ -150,19 +152,42 @@ class _SsoMiddleware(BaseHTTPMiddleware):
                     or subject in machine_subjects):
                 return _auth_error(request, 403, "Машинный credential не разрешён на human routes")
             if is_personal_token:
+                # Auth introspection rejects inactive owners before returning 200.
+                if "status" in identity and identity["status"] != "active":
+                    return _auth_error(request, 403, "Учётная запись не активна")
+                if identity["subject_role"] != identity["role"]:
+                    raise ValueError("conflicting human role")
+                observed = datetime.fromisoformat(identity["observed_at"].replace("Z", "+00:00"))
+                expires_at = datetime.fromisoformat(identity["expires_at"].replace("Z", "+00:00"))
+                if (observed.tzinfo is None or observed.utcoffset() is None
+                        or observed.timestamp() > time.time() + 1
+                        or observed.timestamp() < wall_started.timestamp() - 60):
+                    raise ValueError("invalid token clock")
+                scopes = identity["scopes"]
+                if not isinstance(scopes, list) or any(not isinstance(scope, str) for scope in scopes):
+                    raise ValueError("invalid token scopes")
                 action = "read" if request.method in {"GET", "HEAD", "OPTIONS"} else "write"
-                if f"project-workflow:{action}" not in identity["scopes"]:
+                if f"project-workflow:{action}" not in scopes:
                     return _auth_error(request, 403, "Недостаточно прав токена")
+            else:
+                if not isinstance(identity.get("status"), str):
+                    raise ValueError("missing account status")
+                if identity["status"] != "active":
+                    return _auth_error(request, 403, "Учётная запись не активна")
+                # Auth has verified this exact JWT; claims only bind identity and shorten its clock.
+                claims = jwt.decode(token, options={"verify_signature": False})
+                if (claims.get("iss") != settings.AUTH_ISSUER or claims.get("sub") != subject
+                        or type(claims.get("exp")) is not int):
+                    raise ValueError("invalid credential binding or expiry")
+                expires_at = datetime.fromtimestamp(claims["exp"], timezone.utc)
             access = human_access(identity, issuer=settings.AUTH_ISSUER, subject=subject,
                                   started=started, wall_started=wall_started,
-                                  require_proof=settings.AUTH_APPLICATION_ACCESS_REQUIRED)
-            if not access.permits([_CLIENT_ID]):
-                return _auth_error(request, 403, "Нет доступа к приложению Workflow")
+                                  expires_at=expires_at)
             request.state.central_access = access
             request.state.central_subject = subject
         except PermissionError:
-            return _auth_error(request, 403, "Нет действующего допуска к приложению Workflow")
-        except (KeyError, TypeError, ValueError):
+            return _auth_error(request, 403, "Личность пользователя не подтверждена или срок учётных данных истёк")
+        except (KeyError, TypeError, ValueError, AttributeError, OverflowError, OSError, jwt.PyJWTError):
             return _auth_error(request, 503, "Central Auth вернул некорректный ответ")
         async def authorized_dispatch():
             clock_token = None
@@ -187,27 +212,10 @@ class _SsoMiddleware(BaseHTTPMiddleware):
         from project_workflow.interfaces.ui.project_admission import confirm, policy_active
         if not policy_active():
             return await authorized_dispatch()
-        if not is_personal_token and identity.get("status") != "active":
-            return _auth_error(request, 403, "Учётная запись не активна")
-        role = access.role if access.proof is not None else identity.get(
-            "subject_role" if is_personal_token else "role")
-        if not isinstance(role, str):
-            return _auth_error(request, 503, "Не подтверждена роль пользователя")
         try:
-            if is_personal_token:
-                observed = datetime.fromisoformat(identity["observed_at"].replace("Z", "+00:00")).timestamp()
-                token_expiry = datetime.fromisoformat(identity["expires_at"].replace("Z", "+00:00")).timestamp()
-                if observed > time.time() + 1 or time.time() - observed > 60:
-                    raise ValueError("Invalid token clock")
-            else:
-                # Auth has confirmed this exact bearer; exp is used only to shorten its permit.
-                claims = jwt.decode(token, options={"verify_signature": False})
-                token_expiry = claims["exp"]
-                if type(token_expiry) is not int:
-                    raise ValueError("Invalid token expiry")
-            scope = await confirm(request, token=token, issuer=settings.AUTH_ISSUER.rstrip("/"),
-                                  subject=subject, role=role, original_started=original_started,
-                                  token_expiry=token_expiry)
+            scope = await confirm(request, token=token, issuer=access.issuer,
+                                  subject=subject, role=access.role, original_started=original_started,
+                                  token_expiry=access.expires_at.timestamp())
             scope = replace(scope, deadline=min(scope.deadline, access.monotonic_deadline()))
             request.state.project_scope = scope
             if request.method not in {"GET", "HEAD", "OPTIONS"}:
@@ -228,21 +236,20 @@ class _SsoMiddleware(BaseHTTPMiddleware):
 
 def can_administer(request: Request) -> bool:
     """Use the same current authority for server dependencies and rendered controls."""
-    if not get_settings().AUTH_ISSUER:
-        return True  # Explicit legacy standalone mode.
+    if get_settings().PROJECT_WORKFLOW_MODE == "standalone":
+        return True
     access = getattr(request.state, "central_access", None)
-    return isinstance(access, HumanAccess) and access.permits([_CLIENT_ID], administration=True)
+    return isinstance(access, HumanAccess) and access.permits(administration=True)
 
 
 def visible_services(request: Request, services: list[dict]) -> list[dict]:
     """Filter a per-request view; never cache personal access in the public catalog."""
-    if not get_settings().AUTH_ISSUER:
+    if get_settings().PROJECT_WORKFLOW_MODE == "standalone":
         return list(services)
     access = getattr(request.state, "central_access", None)
     if not isinstance(access, HumanAccess):
         return []
-    return [service for service in services
-            if isinstance(service.get("key"), str) and access.permits([service["key"]])]
+    return [service for service in services if isinstance(service.get("key"), str) and access.permits()]
 
 
 def require_administrator(request: Request) -> None:
@@ -251,17 +258,17 @@ def require_administrator(request: Request) -> None:
         raise HTTPException(status_code=403, detail="Требуются права администратора PDLC")
 
 
-def install_sso(app: FastAPI) -> None:
-    if os.environ.get("PROJECT_WORKFLOW_SPACES__ENABLED") == "true" and not os.environ.get("AUTH_ISSUER"):
-        raise RuntimeError("Shared project policy requires central authentication")
-    if not os.environ.get("AUTH_ISSUER"):
+def install_sso(app: FastAPI, settings: Settings | None = None) -> None:
+    settings = get_settings() if settings is None else settings
+    if settings.PROJECT_WORKFLOW_MODE == "standalone":
+        if os.environ.get("PROJECT_WORKFLOW_SPACES__ENABLED") == "true":
+            raise RuntimeError("Standalone mode conflicts with shared project policy")
         return
-    settings = get_settings()
     if not settings.AUTH_ISSUER:
-        return
-    _cipher(settings)
+        raise RuntimeError("Platform mode requires central authentication (AUTH_ISSUER)")
     if not settings.AUTH_INTERNAL_BASE_URL:
         raise RuntimeError("AUTH_INTERNAL_BASE_URL is required for SSO")
+    _cipher(settings)
     app.add_middleware(_SsoMiddleware, settings=settings)
 
     @app.get("/login", include_in_schema=False)
@@ -322,14 +329,23 @@ def install_sso(app: FastAPI) -> None:
                 signing_key = await asyncio.to_thread(jwt.PyJWKClient(jwks_url, timeout=5).get_signing_key_from_jwt,
                                                       tokens["id_token"])
                 claims = jwt.decode(tokens["id_token"], signing_key.key, algorithms=["ES256"],
-                                    audience=_CLIENT_ID, issuer=settings.AUTH_ISSUER.rstrip("/"),
+                                    audience=_CLIENT_ID, issuer=settings.AUTH_ISSUER,
                                     options={"require": ["exp", "sub", "iss", "aud", "nonce"]})
                 if not secrets.compare_digest(str(claims["nonce"]), str(transaction["nonce"])):
                     return _auth_error(request, 401, "Подтверждение входа не совпало")
                 confirmation = await client.get(settings.AUTH_INTERNAL_BASE_URL.rstrip("/") + "/auth/me",
                                                 headers={"Authorization": f"Bearer {access_token}"})
-                if confirmation.status_code != 200 or confirmation.json().get("id") != claims["sub"]:
+                if confirmation.status_code != 200:
                     return _auth_error(request, 401, "Центральная сессия недействительна")
+                identity = confirmation.json()
+                if not isinstance(identity, dict) or identity.get("id") != claims["sub"]:
+                    return _auth_error(request, 401, "Центральная сессия недействительна")
+                machines = {item.strip() for item in os.environ.get(
+                    "PROJECT_WORKFLOW_NAMESPACE__MACHINE_SUBJECTS", "").split(",") if item.strip()}
+                if (identity.get("status") != "active" or identity.get("role") not in ("user", "admin")
+                        or identity.get("subject_role") == "service_account"
+                        or identity["id"] in machines):
+                    return _auth_error(request, 403, "Действующая учётная запись пользователя не подтверждена")
         except (httpx.RequestError, jwt.PyJWTError, KeyError, ValueError, TypeError):
             return _auth_error(request, 503, "Не удалось завершить центральный вход")
         destination = settings.UI_BASE_PATH + _safe_next(str(transaction["next"]))

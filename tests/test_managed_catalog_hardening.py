@@ -117,12 +117,33 @@ def _install_runtime_credentials(monkeypatch, tmp_path: Path) -> tuple[str, str]
 def test_runtime_capabilities_require_installed_managed_catalog(
     monkeypatch, tmp_path: Path
 ):
+    from project_workflow.infrastructure.db.single_task_catalog import ensure_single_task_catalog
+
+    monkeypatch.setenv("PROJECT_WORKFLOW_MODE", "platform")
+    monkeypatch.setenv("AUTH_ISSUER", "https://auth.test")
+    monkeypatch.setenv("AUTH_INTERNAL_BASE_URL", "https://auth.test")
+    monkeypatch.setenv("AUTH_SESSION_SECRET", "catalog-hardening-fixture-session-secret-32-characters")
     runtime_token, _catalog_token = _install_runtime_credentials(monkeypatch, tmp_path)
     monkeypatch.setattr(
         "project_workflow.infrastructure.db.session.schema_is_ready", lambda _engine: True
     )
 
-    with TestClient(create_app()) as client:
+    with SAUnitOfWork() as uow:
+        installation = ensure_single_task_catalog(uow)
+        binding = next(item for item in installation.bindings if item.role_key == "developer")
+        uow.commit()
+    with TestClient(create_app(), base_url="http://127.0.0.1", client=("127.0.0.1", 50000)) as client:
+        baseline = client.get("/internal/runtime/capabilities", headers={"Authorization": f"Bearer {runtime_token}"})
+        assert baseline.status_code == 200, baseline.text
+        assert baseline.json()["instruction_manifest_sha256"] == installation.instruction_manifest_sha256
+        assert baseline.json()["workflow_catalog_sha256"] == installation.workflow_catalog_sha256
+        with SAUnitOfWork() as uow:
+            row = uow.session.get(db_models.Workflow, int(binding.workflow_id))
+            assert row is not None and row.key == binding.workflow_key
+            row.key = "user:missing-current-developer"
+            uow.commit()
+        with SAUnitOfWork() as uow:
+            assert uow.workflows.get_by_id(int(binding.workflow_id)).key == "user:missing-current-developer"
         response = client.get(
             "/internal/runtime/capabilities",
             headers={"Authorization": f"Bearer {runtime_token}"},
@@ -148,7 +169,9 @@ def test_namespace_theme_edits_keep_editor_and_executor_available(
         "project_workflow.infrastructure.db.session.schema_is_ready", lambda _engine: True
     )
 
-    with TestClient(create_app()) as client:
+    with TestClient(create_app(), base_url="http://127.0.0.1", client=("127.0.0.1", 50000)) as client:
+        baseline = client.get("/internal/runtime/capabilities", headers={"Authorization": f"Bearer {runtime_token}"})
+        assert baseline.status_code == 200, baseline.text
         with SAUnitOfWork() as drift:
             from project_workflow.infrastructure.db.single_task_catalog import observe_installation
 
@@ -178,6 +201,9 @@ def test_namespace_theme_edits_keep_editor_and_executor_available(
 
 
 def test_startup_keeps_saved_namespace_theme(monkeypatch):
+    monkeypatch.setenv("PROJECT_WORKFLOW_MODE", "standalone")
+    monkeypatch.setenv("PROJECT_WORKFLOW_STANDALONE_CONTAINER_NETWORK", "false")
+    config.get_settings.cache_clear()
     _bootstrap_global_managed_catalog()
     monkeypatch.setattr(
         "project_workflow.infrastructure.db.session.schema_is_ready", lambda _engine: True
@@ -190,7 +216,7 @@ def test_startup_keeps_saved_namespace_theme(monkeypatch):
         assert row is not None
         row.theme_icon = "rocket"
 
-    with TestClient(create_app()) as client:
+    with TestClient(create_app(), base_url="http://127.0.0.1", client=("127.0.0.1", 50000)) as client:
         assert client.get("/namespaces").status_code == 200
     with SAUnitOfWork() as readback:
         assert readback.projects.get_by_id(int(namespace.id)).theme_icon == "rocket"

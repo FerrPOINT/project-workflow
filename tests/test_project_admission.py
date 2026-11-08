@@ -104,36 +104,38 @@ def test_invalid_project_proof_cannot_become_scope(change):
         ProjectAccessV2.model_validate(value)
 
 
-@pytest.mark.parametrize("application_policy", [False, True])
-def test_http_sso_uses_current_project_proof_without_promotion_or_cache_fallback(monkeypatch, pm, application_policy):
+@pytest.mark.parametrize("credential_seconds", [15, 60])
+def test_http_sso_uses_current_project_proof_without_promotion_or_cache_fallback(monkeypatch, pm, credential_seconds):
     import httpx
     import jwt
     from fastapi.testclient import TestClient
 
+    from project_workflow import config
     from project_workflow.interfaces.ui import sso
     from project_workflow.interfaces.ui.app import create_app
-    from tests.test_sso import _app
+    from tests._human_access_helpers import human_token
 
-    _, settings = _app(monkeypatch, AUTH_APPLICATION_ACCESS_REQUIRED=application_policy)
+    monkeypatch.setenv("PROJECT_WORKFLOW_MODE", "platform")
+    monkeypatch.setenv("AUTH_ISSUER", "http://auth.test")
+    monkeypatch.setenv("AUTH_INTERNAL_BASE_URL", "http://auth.test")
+    monkeypatch.setenv("AUTH_SESSION_SECRET", "synthetic-test-secret-with-at-least-32-bytes")
+    config.get_settings.cache_clear()
+    settings = config.get_settings()
     monkeypatch.setenv("PROJECT_WORKFLOW_SPACES__ENABLED", "true")
     monkeypatch.setenv("PROJECT_WORKFLOW_SPACES__TRACKER_URL", "http://tracker.test")
     monkeypatch.setenv("PROJECT_WORKFLOW_SPACES__TRACKER_INSTANCE_ID", "tracker:one")
-    current = {"projects": [PROJECT_REF], "role": "member", "unavailable": False,
-               "foreign": False, "apps": ["project-workflow"]}
+    current = {"projects": [PROJECT_REF], "role": "user", "unavailable": False,
+               "foreign": False, "apps": ["project-workflow"], "application_access": True}
     original_client = httpx.AsyncClient
 
     def upstream(request):
         if request.url.path == "/auth/me":
             identity = {"id": "ordinary-user", "status": "active", "role": current["role"]}
-            if application_policy:
-                from datetime import datetime, timedelta, timezone
-
-                now = datetime.now(timezone.utc)
-                identity["role"] = "admin"  # A profile hint cannot bypass the authoritative user proof.
+            if current["application_access"]:
+                # App grants cannot change the current identity role or project ownership.
                 identity["application_access"] = {
                     "schema_version": 1, "issuer": settings.AUTH_ISSUER, "subject": "ordinary-user",
-                    "role": "user", "applications": current["apps"], "revision": 3, "enforced": True,
-                    "observed_at": now.isoformat(), "expires_at": (now + timedelta(seconds=15)).isoformat(),
+                    "role": "admin", "applications": current["apps"], "revision": 3, "enforced": True,
                 }
             return httpx.Response(200, json=identity)
         assert request.url.path == "/api/v2/sdlc/project-access"
@@ -141,14 +143,15 @@ def test_http_sso_uses_current_project_proof_without_promotion_or_cache_fallback
             return httpx.Response(503)
         proof = scope(current["projects"]).proof.model_dump(mode="json")
         proof["identity"]["issuer"] = settings.AUTH_ISSUER
+        proof["validity"]["valid_until"] = min(proof["validity"]["valid_until"],
+                                                jwt.decode(bearer, options={"verify_signature": False})["exp"])
         if current["foreign"]:
             proof["identity"]["subject"] = "another-user"
         return httpx.Response(200, json=proof)
 
     monkeypatch.setattr(sso.httpx, "AsyncClient",
                         lambda **kwargs: original_client(transport=httpx.MockTransport(upstream), **kwargs))
-    bearer = jwt.encode({"exp": int(time.time()) + 3600},
-                        "synthetic-test-key-with-at-least-32-bytes", algorithm="HS256")
+    bearer = human_token("ordinary-user", issuer=settings.AUTH_ISSUER, seconds=credential_seconds)
     headers = {"Authorization": "Bearer " + bearer}
     with TestClient(create_app(), follow_redirects=False) as client:
         opened = client.get("/api/tasks", headers=headers)
@@ -157,7 +160,7 @@ def test_http_sso_uses_current_project_proof_without_promotion_or_cache_fallback
         assert opened.headers["cache-control"] == "private, no-store"
         window = client.get("/api/v1/space-admission", headers=headers)
         assert window.status_code == 200, window.text
-        ceiling = 15_000 if application_policy else 30_000
+        ceiling = min(credential_seconds, 30) * 1000
         assert window.json()["enforced"] is True and 0 < window.json()["remaining_millis"] <= ceiling
         assert window.headers["cache-control"] == "private, no-store"
         # Ordinary member cannot acquire write through another login or broad session scopes.
@@ -174,13 +177,16 @@ def test_http_sso_uses_current_project_proof_without_promotion_or_cache_fallback
         current["foreign"] = False
         current["unavailable"] = True
         assert client.get("/api/tasks", headers=headers).status_code == 503
-        if application_policy:
-            current["unavailable"] = False
-            current["apps"] = []
-            denied = client.get("/api/tasks", headers=headers)
-            assert denied.status_code == 403 and "location" not in denied.headers
-            current["apps"] = ["project-workflow"]
-            assert client.get("/api/tasks", headers=headers).status_code == 200
+        current["unavailable"] = False
+        current["apps"] = []
+        admitted = client.get("/api/tasks", headers=headers)
+        assert admitted.status_code == 200 and "location" not in admitted.headers
+        current["apps"] = ["project-workflow"]
+        assert client.get("/api/tasks", headers=headers).status_code == 200
+        current["application_access"] = False
+        assert client.get("/api/tasks", headers=headers).status_code == 200
+        current["application_access"] = True
+        assert client.get("/api/tasks", headers=headers).status_code == 200
 
 
 def test_retained_context_does_not_open_a_different_space_of_the_same_project(monkeypatch):
@@ -274,6 +280,8 @@ def test_display_window_policy_off_is_explicit_and_missing_proof_fails_closed(mo
 def test_display_window_does_not_expose_a_zero_millisecond_human_window(
     monkeypatch, project_policy, remaining_seconds,
 ):
+    from datetime import datetime, timedelta, timezone
+
     from fastapi import Request
 
     from project_workflow.infrastructure.platform_auth import HumanAccess
@@ -284,11 +292,13 @@ def test_display_window_does_not_expose_a_zero_millisecond_human_window(
     monkeypatch.setenv("PROJECT_WORKFLOW_SPACES__ENABLED", "true" if project_policy else "false")
     request = Request({"type": "http", "method": "GET", "path": "/"})
     request.state.central_subject = "ordinary-user"
-    request.state.central_access = HumanAccess("user", None, 1000.0 + remaining_seconds)
+    request.state.central_access = HumanAccess("https://auth.test", "ordinary-user", "user",
+                                               datetime.now(timezone.utc) + timedelta(seconds=remaining_seconds),
+                                               1000.0 + remaining_seconds)
     original = human_scope.set(scope((PROJECT_REF,)))
     try:
         if remaining_seconds < 0.001:
-            with pytest.raises(SpaceAccessDenied, match="Original .* admission expired"):
+            with pytest.raises(SpaceAccessDenied, match="Original .* expired"):
                 display_window(request)
         else:
             window = display_window(request)

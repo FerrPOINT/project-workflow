@@ -12,7 +12,15 @@ pytestmark = [pytest.mark.ui]
 from project_workflow.domain.exceptions import ConflictError, NotFoundError
 from project_workflow.interfaces.ui import app
 
-client = TestClient(app)
+client = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
+
+
+@pytest.fixture(autouse=True)
+def standalone_mode(monkeypatch):
+    from project_workflow.config import get_settings
+
+    monkeypatch.setenv("PROJECT_WORKFLOW_MODE", "standalone")
+    get_settings.cache_clear()
 
 
 def _fake_app_state(**kwargs):

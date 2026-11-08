@@ -132,12 +132,20 @@ html[data-pdlc-access-pending] body{visibility:hidden}
 {% endset %}
 {% set shell_services %}
 {% set current_service = other_services | selectattr('key', 'equalto', 'project-workflow') | first %}
-{% call base_ui.service_switcher(current_service.label if current_service else 'Project Workflow', id='serviceMenu', source=services_source|default('fallback-unreachable')) %}
+{% set catalog_error = services_source|default('disabled') in ['unavailable', 'invalid'] %}
+{% if other_services or catalog_error %}
+{% call base_ui.service_switcher(current_service.label if current_service else 'Project Workflow', id='serviceMenu', source='runtime' if services_source|default('') == 'runtime' else none) %}
   {% for service in other_services %}
     {% set service_href = ui_base_path() ~ '/' if service.key == 'project-workflow' else service.url if services_source|default('') == 'runtime' else none %}
     {{ base_ui.service_switcher_item(service.key, service.label, href=service_href, current=service.key == 'project-workflow', health=service.health) }}
   {% endfor %}
+  {% if not other_services and catalog_error %}
+    {{ base_ui.state('error', 'Каталог сервисов недоступен') }}
+  {% endif %}
 {% endcall %}
+{% else %}
+  {{ base_ui.resource_list_description('Project Workflow', class_name='base-ssr-service-label') }}
+{% endif %}
 {% endset %}
 {% call base_ui.app_shell('Project Workflow', sidebar_navigation, leading=shell_leading,
     services=shell_services, context=shell_context|trim, actions=base_ui.account(), layout=layout_mode|trim) %}

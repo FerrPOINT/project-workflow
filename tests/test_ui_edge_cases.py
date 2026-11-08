@@ -15,11 +15,20 @@ from project_workflow.interfaces.ui import (
     _load_cli_reference,
     _load_tasks,
     _load_workflows,
-    app,
 )
 from project_workflow.interfaces.ui.helpers import _resolve_task_phase_id
 
-client = TestClient(app)
+
+@pytest.fixture
+def client(monkeypatch):
+    from project_workflow import config
+    from project_workflow.interfaces.ui.app import create_app
+
+    monkeypatch.setenv("PROJECT_WORKFLOW_MODE", "standalone")
+    monkeypatch.setenv("PROJECT_WORKFLOW_STANDALONE_CONTAINER_NETWORK", "false")
+    config.get_settings.cache_clear()
+    with TestClient(create_app(), base_url="http://127.0.0.1", client=("127.0.0.1", 50000)) as local_client:
+        yield local_client
 
 
 # ═══════════════════════════════════════════════════════════
@@ -321,12 +330,12 @@ class TestTaskDetailEdgeCases:
 
 
 class TestApiErrorPaths:
-    def test_api_phase_detail_not_found(self):
+    def test_api_phase_detail_not_found(self, client):
         response = client.get("/api/phases/999999")
         assert response.status_code == 404
         assert response.json()["ok"] is False
 
-    def test_health_endpoint_ok(self):
+    def test_health_endpoint_ok(self, client):
         with patch("project_workflow.infrastructure.db.session.schema_is_ready", return_value=True):
             response = client.get("/health")
         assert response.status_code == 200
@@ -335,7 +344,7 @@ class TestApiErrorPaths:
         assert data["database"] == "ok"
         assert "version" in data
 
-    def test_health_endpoint_bad_db(self, monkeypatch):
+    def test_health_endpoint_bad_db(self, client, monkeypatch):
         def _bad_engine(*a, **kw):
             raise RuntimeError("db down")
 
@@ -352,7 +361,7 @@ class TestApiErrorPaths:
         assert data["error_code"] == "database-unavailable"
         assert "db down" not in response.text
 
-    def test_health_endpoint_rejects_schema_drift_without_details(self):
+    def test_health_endpoint_rejects_schema_drift_without_details(self, client):
         with patch(
             "project_workflow.infrastructure.db.session.schema_is_ready",
             return_value=False,
@@ -368,35 +377,35 @@ class TestApiErrorPaths:
         assert "SELECT" not in response.text
         assert "postgresql" not in response.text
 
-    def test_api_workflow_create_missing_name(self):
+    def test_api_workflow_create_missing_name(self, client):
         response = client.post("/api/workflows", json={})
         assert response.status_code == 422
         assert "name" in response.text
 
-    def test_api_workflow_create_with_code_rejected(self):
+    def test_api_workflow_create_with_code_rejected(self, client):
         response = client.post("/api/workflows", json={"code": "X", "name": "Test"})
         assert response.status_code == 422
         assert "code" in response.text
 
-    def test_api_tasks(self):
+    def test_api_tasks(self, client):
         response = client.get("/api/tasks")
         assert response.status_code == 200
         assert response.json()["ok"] is True
 
-    def test_api_workflows(self):
+    def test_api_workflows(self, client):
         response = client.get("/api/workflows")
         assert response.status_code == 200
         assert response.json()["ok"] is True
 
-    def test_api_phase_update_invalid(self):
+    def test_api_phase_update_invalid(self, client):
         response = client.put("/api/phases/999999", json={"name": "x"})
         assert response.status_code == 404
 
-    def test_api_agents(self):
+    def test_api_agents(self, client):
         response = client.get("/api/agents")
         assert response.status_code == 404
 
-    def test_api_namespaces(self):
+    def test_api_namespaces(self, client):
         response = client.get("/api/namespaces")
         assert response.status_code == 200
         assert "namespaces" in response.json()
@@ -408,42 +417,42 @@ class TestApiErrorPaths:
 
 
 class TestPageEdgeCases:
-    def test_index_page(self):
+    def test_index_page(self, client):
         response = client.get("/")
         assert response.status_code == 200
         assert "Дашборд" in response.text
 
-    def test_phases_page(self):
+    def test_phases_page(self, client):
         response = client.get("/phases")
         assert response.status_code == 200
 
-    def test_tasks_page(self):
+    def test_tasks_page(self, client):
         response = client.get("/tasks")
         assert response.status_code == 200
 
-    def test_contexts_page_is_removed(self):
+    def test_contexts_page_is_removed(self, client):
         response = client.get("/contexts")
         assert response.status_code == 404
 
-    def test_settings_page(self):
+    def test_settings_page(self, client):
         response = client.get("/settings")
         assert response.status_code == 200
 
-    def test_agents_page(self):
+    def test_agents_page(self, client):
         response = client.get("/agents")
         assert response.status_code == 404
 
-    def test_workflows_page(self):
+    def test_workflows_page(self, client):
         response = client.get("/workflows")
         assert response.status_code == 200
 
-    def test_task_detail_missing(self):
+    def test_task_detail_missing(self, client):
         response = client.get("/task/999999")
         assert response.status_code == 404
         assert "Задача не найдена" in response.text
         assert "К списку задач" in response.text
 
-    def test_phase_detail_missing(self):
+    def test_phase_detail_missing(self, client):
         response = client.get("/phase/999999")
         assert response.status_code == 404
         assert "Фаза не найдена" in response.text

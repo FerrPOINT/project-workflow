@@ -1,0 +1,93 @@
+{
+  "schema": "advisor-v18-architecture-controls-v1",
+  "status": "prospective_labels_frozen_not_run",
+  "date": "2026-11-04",
+  "source": {
+    "frozen_cases": {"file": "docs/evidence/clean-workflow-case-labels-20261104.json", "sha256": "0fbc357de5ec2f26d1636f319025c5f20aab61250fc396be353537e0475eefce", "immutable": true},
+    "original_gold": {"file": "docs/evidence/advisor-v16-case-labels-20261103.json", "sha256": "1ef1f4590b1242a35c6423189c8774ed844e15fec98821248d7c9631d0bfdeb3", "immutable": true},
+    "reviewed_controls": {"file": "docs/evidence/advisor-v18-reviewed-controls-20261104.json", "sha256": "d3a819128866304e617c7c63fe5baa7df5be2b0f4230b05aa1edeaa613dab214", "immutable": true},
+    "analysis_controls": {"file": "docs/evidence/advisor-v18-analysis-controls-20261104.json", "sha256": "0a863f4969067cae0974e260f4addebc32ed6a46b9a4554c867eac22e604c8e2", "immutable": true},
+    "diagnostic": {"file": "docs/evidence/advisor-v18-analysis-qualification-20261104.json", "case_id": "architect-role-work-complete", "sample": 1}
+  },
+  "settings": {
+    "model": "app-test", "reasoning_effort": "high", "max_tokens": 4000, "temperature": 0.1, "timeout": 1200,
+    "response_format": {"type": "json_object"}, "max_model_calls_per_evaluation": 1,
+    "format_retry": false, "transport_retry": false, "semantic_retry": false
+  },
+  "execution_binding": {
+    "policy": "supervisor-evaluator-v18",
+    "system_sha256": "95f558095cd62b01deed27e3bda9e53f71b5229e8a14ab3ab144e72b438c9583",
+    "input": "Use the production PromptBuilder with the exact criteria, report and empty history/assessments below; transmit no manifest metadata.",
+    "stop": "Any technical error or unexpected classification stops execution. One provider call per new slot; no repairs or retries. This manifest does not authorize calls."
+  },
+  "quarantine": [
+    {
+      "id": "architect-role-work-complete", "status": "ambiguous_positive_gold_quarantined_not_relabelled",
+      "old_labels_preserved": true, "original_expected_verdict": "PASS",
+      "labels_sha256": "f5a56587db0af84d9b5a4450d0fe05844970b04e196032f54777c15baac4cfd5",
+      "origin_user_payload_sha256": "18dd5d7e9105e42a4350ef2af55784f5f66973a2d3f4fc76da0310a5f01f86c3",
+      "reason": "C1 requires tracing existing components. The source names TaskForm, POST /tasks, TaskService and tasks and says new components are not needed, while the report routes writes through repository without stating its existing provenance. The saved refusal is defensible on that evidence gap; it does not prove repository is a newly added layer. Preserve the archived report and PASS gold rather than relabelling either after the response."
+    }
+  ],
+  "cases": [
+    {
+      "id": "architect-direct-dataflow-complete",
+      "role": "architect", "mode": "decomposition", "phase": "AR-DECOMP-02", "phase_name": "Role work on one task",
+      "allowed_verdicts": ["PASS", "PARTIAL", "BLOCKED"],
+      "criteria": [
+        {"id": "AR-DECOMP-02:check:1", "text": "Architecture traces existing components, interfaces, dataflow, risks and rollback for this task."},
+        {"id": "AR-DECOMP-02:check:2", "text": "An ordered implementation plan covers every criterion without child cards or integration barriers."},
+        {"id": "AR-DECOMP-02:check:3", "text": "Unresolved blockers remain explicit; no additional Tracker tasks were created."},
+        {"id": "AR-DECOMP-02:evidence:1", "text": "Architecture decisions, dataflow, ordered plan, criterion coverage and rollback references."}
+      ],
+      "aliases": {"C1": "AR-DECOMP-02:check:1", "C2": "AR-DECOMP-02:check:2", "C3": "AR-DECOMP-02:check:3", "E1": "AR-DECOMP-02:evidence:1"},
+      "report": {
+        "source": {
+          "request": "Исходные согласованные критерии единственного задания: название после trim длиной 1–200 символов, начальный статус «Новая», неверные данные не сохраняются. Используется существующая форма TaskForm, POST /tasks, сервис TaskService и таблица tasks; новые компоненты и интерфейсы не нужны.",
+          "decisions": []
+        },
+        "result": {
+          "artifacts": [
+            {"name": "architecture_decision", "content": "Решение для реализации в существующих компонентах: TaskForm передаёт название через POST /tasks в TaskService. TaskService удаляет крайние пробелы и проверяет длину 1–200 до записи. Для корректного названия TaskService задаёт статус «Новая» и записывает строку непосредственно в существующую таблицу tasks. Для неверного названия запись в tasks не выполняется; результат проверки возвращается в TaskForm. Новый компонент, промежуточный слой или интерфейс не добавляется."},
+            {"name": "dataflow_and_risks", "content": "Поток корректного ввода: TaskForm -> POST /tasks -> TaskService -> непосредственная запись в tasks -> результат в TaskForm. Поток неверного ввода: TaskForm -> POST /tasks -> проверка TaskService -> отказ без записи в tasks -> результат в TaskForm. Риск расхождения клиентской и серверной валидации: окончательную проверку выполняет TaskService. Риск записи до проверки: в плане все проверки предшествуют записи, а интеграционный тест проверяет отсутствие новой строки при неверных данных. Риск регрессии начального статуса: проверка сохранённой строки должна подтвердить «Новая». Существование отдельной проверки сессии, конкретного HTTP-кода ошибки или готовой транзакционной реализации не утверждается."},
+            {"name": "implementation_plan", "content": "Упорядоченный план в этом же задании: 1) реализовать trim и проверку длины в TaskService, добавить unit cases для « A » и длин после trim 0/1/200/201; 2) в том же TaskService задать «Новая» перед непосредственной записью корректной строки в tasks; 3) через POST /tasks проверить сохранённое trimmed название и статус для корректного ввода, а для пробелов и 201 символа — отказ и отсутствие новой строки; 4) проверить в TaskForm отображение результата POST /tasks и regression создания записи. Покрытие: название/trim/границы — шаги 1 и 3; начальный статус — шаги 2 и 3; отсутствие записи при неверных данных — шаги 1 и 3; существующий пользовательский поток — шаг 4. Детские карточки и отдельные integration barriers не создаются."},
+            {"name": "rollback_and_references", "content": "Rollback предложенного изменения: вернуть предыдущую версию TaskService и TaskForm. План не меняет схему tasks, не удаляет сохранённые записи и не требует миграции данных. Ссылки плана реализации и проверок: src/task_service.py, src/task_form.js, tests/test_tasks.py; это цели изменений и проверок, не утверждение об независимо прочитанном содержимом файлов. Внешних блокеров и неразрешённых вопросов нет; новых задач Tracker и дочерних карточек нет."}
+          ],
+          "assumptions": []
+        },
+        "unresolved": []
+      },
+      "previous_reports": [], "previous_assessments": {}, "previously_covered": [],
+      "expected": {"verdict": "PASS", "covered": ["AR-DECOMP-02:check:1", "AR-DECOMP-02:check:2", "AR-DECOMP-02:check:3", "AR-DECOMP-02:evidence:1"], "missing": [], "blockers": []},
+      "expected_assessments": {
+        "C1": {"covered": true, "reason_basis": "The report traces exactly the source-named existing TaskForm, POST /tasks, TaskService and tasks, with direct validation/write and rejection paths, task-specific risks and rollback. It introduces no unsupported intervening component or claim of existing authentication/error/transaction behavior."},
+        "C2": {"covered": true, "reason_basis": "The ordered same-task plan explicitly maps title trim/length, initial New status and no-save-on-invalid-input to implementation and verification steps; no child cards or integration barriers are introduced."},
+        "C3": {"covered": true, "reason_basis": "The report explicitly states no unresolved questions or external blockers and no new Tracker tasks or child cards; no contrary obstacle is reported."},
+        "E1": {"covered": true, "reason_basis": "Architecture decision, direct dataflow, risks, ordered plan, criterion coverage, rollback and all three implementation/test reference paths are present."}
+      },
+      "provenance": {
+        "synthetic": true, "timing": "New prospective report and expectations fixed before any call on this new case ID.",
+        "source_mapping": "source.request is the exact archived architect-role-work-complete source string; no source facts or owner decisions are added.",
+        "report_change": "Replace the unsupported repository hop with the proposed direct TaskService-to-tasks write. Remove unsupported existing-session, existing-422 and existing-transaction claims. Retain the full plan, coverage, rollback and reference paths. This changes report evidence, not the criterion, prompt or old labels.",
+        "criteria_from": "architect-role-work-complete in the immutable frozen_cases file; exact item IDs and texts unchanged."
+      }
+    }
+  ],
+  "qualification_set": {
+    "base_plan": {"file": "docs/evidence/advisor-v18-analysis-controls-20261104.json", "sha256": "0a863f4969067cae0974e260f4addebc32ed6a46b9a4554c867eac22e604c8e2", "field": "planned_evaluations"},
+    "replace_case": {"old": "architect-role-work-complete", "new": "architect-direct-dataflow-complete", "preserve_sample_numbers_and_order": true},
+    "inherited_quarantine": ["actual-pm-189", "actual-pm-190", "analyst-role-work-complete", "incremental-remaining-analysis-complete"],
+    "distinct_cases": 17, "evaluation_slots": 36, "samples_per_case": 2,
+    "extra_samples": {"pm-unresolved-retention-policy": [3, 4]},
+    "campaign_calls_already_spent": 16, "campaign_http_limit": 48, "remaining_http_budget": 32,
+    "reused_slots": 4, "new_calls_if_reuse_revalidated": 32, "campaign_total_if_completed_without_error": 48,
+    "reuse_rule": "Revalidate each named matched sample1 against the exact current production-built payload and labels, complete system text/hash and settings including fixed JSON mode, with nontruncated diagnostics. The old Architect PARTIAL earns no credit. If any reuse check fails, stop and replan; the campaign has no replacement-call allowance. No format/transport/semantic retries.",
+    "reuse_candidates": [
+      {"case_id": "pm-context-164", "sample": 1, "file": "docs/evidence/advisor-v18-reviewed-qualification-20261104.json", "user_payload_sha256": "28f767909574d77e5e5b60ccfdf9bd30580889008a36779e82675de33f6c0690"},
+      {"case_id": "pm-preparation-search-defined", "sample": 1, "file": "docs/evidence/advisor-v18-reviewed-qualification-20261104.json", "user_payload_sha256": "14f4d33bfb0b3369a5770168a3abdb6d478410a85c14c431a808e91a271b627d"},
+      {"case_id": "pm-final-163", "sample": 1, "file": "docs/evidence/advisor-v18-approval-mapping-results-20261104.json", "user_payload_sha256": "75ddcee21a285d3b48fb637a09f301f678e348c088cf021179b38328aa2ff195"},
+      {"case_id": "analyst-explicit-source-complete", "sample": 1, "file": "docs/evidence/advisor-v18-analysis-qualification-20261104.json", "user_payload_sha256": "124411292e85be370cbf0d4bd6e2c156fa1a44fe1ea68f64ca579edd3718f6ff"}
+    ],
+    "claim": "Qualification applies only to the newly defined 17-case set and the exact reused inputs; archived ambiguous/invalid positive oracles and all their gold/results remain unchanged."
+  }
+}

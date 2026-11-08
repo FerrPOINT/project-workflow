@@ -7,6 +7,7 @@ import pytest
 from project_workflow import config
 from project_workflow.infrastructure.db.managed_catalog import ensure_managed_catalog
 from project_workflow.infrastructure.db.session import ensure_schema, reset_engine
+from project_workflow.infrastructure.db.single_task_catalog import observe_installation
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.infrastructure.db.uow_bootstrap import bootstrap_default_project
 from scripts.init_db import main
@@ -42,37 +43,47 @@ def test_fresh_managed_install_has_seven_russian_professions_without_generic_sta
     assert hashlib.sha256(catalog_path.read_bytes()).hexdigest() == original_hash
 
 
-def test_repeated_init_localizes_only_old_defaults_and_preserves_execution_state(tmp_path, monkeypatch):
+def test_repeated_current_init_preserves_sealed_defaults_and_custom_presentation(tmp_path, monkeypatch):
+    from project_workflow.application.project import ProjectService
+    from project_workflow.application.workflow import WorkflowService
+
     url = f"sqlite:///{tmp_path / 'upgrade.db'}"
     monkeypatch.setenv("DATABASE_URL", url)
+    monkeypatch.setenv("PROJECT_WORKFLOW_MODE", "platform")
+    monkeypatch.setenv("AUTH_ISSUER", "https://auth.fixture.invalid")
+    monkeypatch.setenv("AUTH_INTERNAL_BASE_URL", "https://auth.fixture.invalid")
+    monkeypatch.setenv("AUTH_SESSION_SECRET", "profession-fixture-session-secret-32-characters")
+    monkeypatch.setattr(config, "CATALOG_VARIANT", "single-task-v1")
     config.get_settings.cache_clear()
     reset_engine()
     try:
         assert main() == 0
         with SAUnitOfWork(url) as uow:
-            professions = list(uow.projects.list())
-            for p in professions:
-                role = p.cli_command.removeprefix("workflow-")
-                uow.projects.update(p.id, {
-                    "name": "hermes-" + role.replace("_", "-"),
-                    "description": f"Managed namespace for hermes-sdlc:{role}",
-                })
-            analyst = uow.projects.get_by_cli_command("workflow-analyst")
-            uow.projects.update(analyst.id, {"name": "Эксперт по данным", "description": "Авторское описание"})
-            uow.commit()
+            installation = observe_installation(uow)
+            assert len(installation.bindings) == len(uow.projects.list()) == 7
+            custom_workflow = WorkflowService(uow).create_workflow({"name": "Custom workflow"})
+            custom = ProjectService(uow).create_project({
+                "code": "CUSTOM", "cli_command": "workflow-custom", "workflow_id": custom_workflow["id"],
+                "name": "Эксперт по данным", "description": "Авторское описание",
+            })
             identities = {p.id: (p.code, p.workflow_id, p.cli_command, p.launch_profile) for p in uow.projects.list()}
+            presentation = {p.id: (p.name, p.description) for p in uow.projects.list()}
             workflows = [(w.id, w.key, w.active_catalog_version) for w in uow.workflows.list()]
             phases = [p.to_dict() for p in uow.phases.list()]
         assert main() == 0
         assert main() == 0
         with SAUnitOfWork(url) as uow:
             professions = list(uow.projects.list())
-            assert [p.name for p in professions] == [EXPECTED_NAMES[0], "Эксперт по данным", *EXPECTED_NAMES[2:]]
-            assert uow.projects.get_by_cli_command("workflow-analyst").description == "Авторское описание"
+            assert {p.id: (p.name, p.description) for p in professions} == presentation
+            assert uow.projects.get_by_id(custom["id"]).name == "Эксперт по данным"
+            assert uow.projects.get_by_id(custom["id"]).description == "Авторское описание"
             assert {p.id: (p.code, p.workflow_id, p.cli_command, p.launch_profile) for p in professions} == identities
             assert [(w.id, w.key, w.active_catalog_version) for w in uow.workflows.list()] == workflows
             assert [p.to_dict() for p in uow.phases.list()] == phases
-            assert len(professions) == 7
+            assert observe_installation(uow) == installation
+            assert {p.id for p in professions} == {int(item.namespace_id) for item in installation.bindings} | {
+                custom["id"],
+            }
     finally:
         config.get_settings.cache_clear()
         reset_engine()

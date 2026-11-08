@@ -1,0 +1,19 @@
+{
+  "schema": "advisor-controlled-experiment-v1",
+  "candidate": "supervisor-evaluator-v18",
+  "baseline": "advisor-v18-reviewed-qualification-20261104.json",
+  "baseline_campaign_calls": 12,
+  "maximum_campaign_calls": 48,
+  "independent_reviewers": 2,
+  "confirmed_mismatch": "pm-final-163 C2 demands separate approval of details despite the reported approval of the complete unchanged document. C3/E2 accept the same approval. This is an unsupported refusal, not ambiguous gold.",
+  "hypothesis": "The fixture placed the explicit owner confirmation business fact under work artifacts while source.decisions was empty. Move the exact existing confirmation into source.decisions to align the typed report contract; do not grow the evaluator prompt.",
+  "changed_field": "Move result.owner_confirmation verbatim to source.decisions[{subject:owner_confirmation,value:original_text}], removing the corresponding artifact. Keep the entire document, completed-presentation account, criteria, labels, system prompt and model settings unchanged.",
+  "limitation": "The prior model saw the confirmation text. Correcting its field does not establish the model's hidden reason or guarantee acceptance.",
+  "reused_evaluations": [
+    {"case_id": "pm-context-164", "sample": 1, "source_slot": 0, "reason_review": "all three reasons independently supported"},
+    {"case_id": "pm-preparation-search-defined", "sample": 1, "source_slot": 1, "reason_review": "all six reasons independently supported"}
+  ],
+  "reuse_guard": "Require exact system text, user payload, settings and frozen labels before any call. Old rejected slot163 is not reused. Historical output files are never overwritten or resumed.",
+  "new_schedule": "The remaining 34 slots of the same reviewed 36-evaluation plan, beginning with the corrected163. Stop at the first mismatch. This yields at most46 campaign HTTP calls, leaving two explicit context-baseline calls if qualification passes.",
+  "acceptance": "Review each assessment and reason. Model classification and server parser remain separate; no automatic verdict correction or retry."
+}

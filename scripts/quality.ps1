@@ -21,7 +21,7 @@ function Initialize-SharedCli {
         $CliBase = Join-Path $PSScriptRoot "../../workflow-cli-base"
     }
     $Revision = & git -C $CliBase rev-parse HEAD
-    if ($LASTEXITCODE -ne 0 -or $Revision -ne "278be4a2eb0b3ce49dac2cd14ea7e2871f2ffe1d") {
+    if ($LASTEXITCODE -ne 0 -or $Revision -ne "25b0b2aafaa9feaa854ca86f11043ff825842229") {
         throw "CLI Base must be the qualified checkout; set WORKFLOW_CLI_BASE or -CliBase (see docs/quality-gate.md)."
     }
     $Changes = & git -C $CliBase status --porcelain --untracked-files=all

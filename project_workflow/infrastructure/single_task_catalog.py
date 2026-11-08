@@ -48,7 +48,8 @@ SINGLE_TASK = (
     "an implementation plan inside this task only. Stages are Draft, Backlog, Analysis, Architecture, "
     "Development, Review, Testing, Rework, Deployment. Status is separately Ready, InProgress or Completed; "
     "waiting_reason and runtime/agent state are separate observations, never substitute statuses. "
-    "Only a real Tracker receipt establishes a business transition; do not set InProgress yourself on startup. "
+    "Only a real Tracker receipt establishes a business transition; explicitly Start the current stage "
+    "as InProgress before business work, but never choose the stage or borrow a scheduler lease. "
     "Use the ordinary terminal with project-workflow, task-tracker and cicd-cli as actually installed and "
     "authorized. Do not modify original Hermes, install skills or infer capabilities from their names. "
     "Existing skill names are references, not authorization to execute legacy multi-task instructions."
@@ -163,7 +164,7 @@ ROLE_EVIDENCE = {
 
 
 
-ANALYST_PREVIOUS_MANIFEST = "7aa0e6c758e2c31cd1dd69ce30826aecaf565e25e4f5fcedcdf9215fcddd1075"
+PREVIOUS_MANIFEST = "2f16635c0f588d1f285393b4ad8c163119b4dba4b9918335c821f295e88a4f64"
 ANALYST_RULES = (
     "Work independently on this approved PM scope. Never interview the user, request analysis consent, "
     "return the task to PM or invoke critical PM review. Do not rewrite approved requirements or choose "
@@ -336,6 +337,7 @@ def load_single_task_professions() -> list[dict[str, Any]]:
     for original in donor["workflows"]:
         role = original["role_key"]
         workflow = copy.deepcopy(original)
+        workflow["previous_baseline_manifest_sha256"] = PREVIOUS_MANIFEST
         if role == "analyst":
             workflow["skill_allowlist"] = sorted(set(workflow["skill_allowlist"]) | {"wiki-operator", "forge-operator"})
         workflow.pop("terminal_contract", None)
@@ -380,7 +382,6 @@ def load_single_task_professions() -> list[dict[str, Any]]:
                      PM_CONFIRMATION_CHECKS, PM_CONFIRMATION_EVIDENCE),
                 ]
             elif role == "analyst":
-                workflow["previous_baseline_manifest_sha256"] = ANALYST_PREVIOUS_MANIFEST
                 prototype = copy.deepcopy(mode["phases"][0])
                 mode["phases"] = [dict(copy.deepcopy(prototype), code=f"AN-ANALYSIS-{number:02}",
                                       phase_order=number) for number in range(1, len(ANALYST_PHASES) + 1)]

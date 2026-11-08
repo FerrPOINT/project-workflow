@@ -69,16 +69,17 @@ def test_service_account_cannot_borrow_a_valid_admin_application_proof(admission
     with pytest.raises(PermissionError, match="Technical identity cannot become human authority"):
         platform_auth.human_access(
             {"role": "service_account", "application_access": _decision(admission_clock)},
-            issuer=ISSUER, subject=SUBJECT, started=100.0, wall_started=admission_clock, require_proof=True,
+            issuer=ISSUER, subject=SUBJECT, started=100.0, wall_started=admission_clock,
+            expires_at=admission_clock + timedelta(seconds=60),
         )
 
 
-def test_legacy_admin_without_proof_still_cannot_outlive_the_original_window(admission_clock, monkeypatch):
+def test_current_admin_cannot_outlive_the_original_identity_window(admission_clock, monkeypatch):
     monkeypatch.setattr(platform_auth.time, "monotonic", lambda: 161.0)
     with pytest.raises(PermissionError, match="Human authority expired"):
         platform_auth.human_access(
             {"role": "admin"}, issuer=ISSUER, subject=SUBJECT,
-            started=100.0, wall_started=admission_clock, require_proof=False,
+            started=100.0, wall_started=admission_clock, expires_at=admission_clock + timedelta(seconds=3600),
         )
 
 

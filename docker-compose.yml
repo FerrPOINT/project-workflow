@@ -20,6 +20,8 @@ services:
       context: .
     command: ["python", "scripts/init_db.py"]
     environment:
+      PROJECT_WORKFLOW_MODE: standalone
+      PROJECT_WORKFLOW_STANDALONE_CONTAINER_NETWORK: "true"
       DATABASE_URL: postgresql+psycopg://project_workflow:project_workflow@db:5432/project_workflow
       DB_SCHEMA: project_workflow
     depends_on:
@@ -32,6 +34,8 @@ services:
     ports:
       - "127.0.0.1:8812:8811"
     environment:
+      PROJECT_WORKFLOW_MODE: standalone
+      PROJECT_WORKFLOW_STANDALONE_CONTAINER_NETWORK: "true"
       DATABASE_URL: postgresql+psycopg://project_workflow:project_workflow@db:5432/project_workflow
       DB_SCHEMA: project_workflow
       UI_HOST: 0.0.0.0
@@ -39,11 +43,11 @@ services:
       LOG_LEVEL: INFO
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-http://192.168.10.1:4000/v1}
       OPENAI_MODEL: ${OPENAI_MODEL:-app-test}
-      OPENAI_TIMEOUT: ${OPENAI_TIMEOUT:-120}
-      OPENAI_MAX_TOKENS: ${OPENAI_MAX_TOKENS:-4000}
+      OPENAI_TIMEOUT: ${OPENAI_TIMEOUT:-1200}
+      OPENAI_MAX_TOKENS: ${OPENAI_MAX_TOKENS:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      OPENAI_REASONING_EFFORT: ${OPENAI_REASONING_EFFORT:-none}
-      PLATFORM_SERVICES_URL: ${PLATFORM_SERVICES_URL:-http://host.docker.internal:7771/api/v1/runtime/services}
+      OPENAI_REASONING_EFFORT: ${OPENAI_REASONING_EFFORT:-high}
+      PLATFORM_SERVICES_URL: ${PLATFORM_SERVICES_URL:-}
       PROJECT_WORKFLOW_FLEET_CATALOG_TOKEN: ${PROJECT_WORKFLOW_FLEET_CATALOG_TOKEN:-}
       PROJECT_WORKFLOW_BASE_READER_SUBJECTS_JSON: ${PROJECT_WORKFLOW_BASE_READER_SUBJECTS_JSON:-}
       PROJECT_WORKFLOW_CONFIGURED_TRACKER_URL: ${PROJECT_WORKFLOW_CONFIGURED_TRACKER_URL:-}

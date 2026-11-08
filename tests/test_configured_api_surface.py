@@ -6,7 +6,8 @@ from types import SimpleNamespace
 import pytest
 
 from scripts.export_runtime_openapi import OUTPUT, RUNTIME_PATHS, runtime_openapi
-from tests.test_configured_cli import WRITER, enroll
+from tests._report_helpers import report_json
+from tests.test_configured_cli import MACHINE, WRITER, enroll
 from tests.test_configured_cli import configured as configured
 
 
@@ -18,6 +19,32 @@ def test_published_runtime_contract_matches_the_actual_models():
     for name in ("ConfiguredAssignment", "ConfiguredStep", "ConfiguredTerminalReadback", "ConfiguredArtifactReadback"):
         assert models[name]["additionalProperties"] is False
     assert not {"PMBind", "PMCheckpoint", "RuntimeStepRequest", "BootstrapRetry"} & set(models)
+
+
+@pytest.mark.parametrize("setting,value", [
+    ("timeout", 30), ("timeout", None), ("connect_timeout", 1), ("read_timeout", 30),
+    ("model", "agent-selected-model"), ("provider", "agent-selected-provider"),
+    ("base_url", "https://other.test"), ("api_key", "synthetic-only"),
+    ("max_tokens", 4000), ("max_output_tokens", 4000), ("reasoning_effort", "low"),
+    ("retries", 3), ("response_format", {"type": "json_object"}),
+])
+def test_agent_report_cannot_override_application_execution_settings(configured, monkeypatch, setting, value):
+    from project_workflow.application import configured_cli
+
+    client, assignment = configured
+    initial = enroll(configured)
+
+    def execution_was_not_allowed(*args, **kwargs):
+        raise AssertionError("Unknown execution settings must be refused before application dispatch")
+
+    monkeypatch.setattr(configured_cli, "step", execution_was_not_allowed)
+    response = client.post("/internal/runtime/step", headers=MACHINE, json={
+        "interaction_protocol": "configured-cli-v1", "task": assignment["task"],
+        "namespace_id": assignment["namespace_id"], "operation_key": "report-with-forbidden-setting",
+        "expected_version": initial["version"], "report": report_json("Actual work"), setting: value,
+    })
+    assert response.status_code == 422, response.text
+    assert enroll(configured) == initial
 
 
 def test_capabilities_describe_current_catalog_without_a_native_profile_switch(configured, monkeypatch):
@@ -56,7 +83,7 @@ def test_retired_runtime_token_cannot_advertise_a_second_protocol(configured, mo
 
 def test_openapi_exposes_only_common_execution_commands(configured):
     client, _ = configured
-    paths = client.get("/openapi.json").json()["paths"]
+    paths = client.app.openapi()["paths"]
     runtime = {path for path in paths if path.startswith("/internal/runtime/")}
     assert {"/internal/runtime/assign", "/internal/runtime/step", "/internal/runtime/history",
             "/internal/runtime/terminal-receipt/readback"} <= runtime
@@ -97,6 +124,25 @@ def test_history_requires_explicit_protocol_and_namespace(configured):
         assert client.get("/internal/runtime/history", headers=WRITER, params=params).status_code == 422
 
 
+def test_internal_database_error_is_json_not_a_browser_admission_page(configured, monkeypatch):
+    from sqlalchemy.exc import OperationalError
+
+    from project_workflow.interfaces.ui.routes import configured_cli_api
+
+    client, assignment = configured
+
+    def unavailable(*args, **kwargs):
+        raise OperationalError("SELECT unavailable", {}, None)
+
+    monkeypatch.setattr(configured_cli_api, "history", unavailable)
+    response = client.get("/internal/runtime/history", headers=WRITER, params={
+        "task": assignment["task"], "interaction_protocol": "configured-cli-v1",
+        "namespace_id": assignment["namespace_id"]})
+    assert response.status_code == 503
+    assert response.headers["content-type"].startswith("application/json")
+    assert response.json()["ok"] is False
+
+
 def test_unknown_history_operation_is_not_an_empty_success_and_selectors_cannot_mix(configured):
     client, assignment = configured
     initial = enroll(configured)
@@ -129,13 +175,16 @@ def test_retired_native_routes_are_absent_and_cannot_write_any_ledger(configured
 
     client, assignment = configured
     original = enroll(configured)
+    # Human-route admission runs before routing; inspect registration without bypassing Auth.
+    registered = {getattr(route, "path", None) for route in client.app.routes}
+    assert not {"/api/cli/step", "/api/cli/history"} & registered
     def counts():
         with SAUnitOfWork() as uow:
             return [uow.session.scalar(select(func.count()).select_from(model))
                     for model in (m.Task, m.TaskRuntimeAssignment, m.TaskStepHistoryEntry,
                                   m.PMExecution, m.PMRun, m.PMOperation)]
     before = counts()
-    for path in ["/internal/runtime/bind", "/internal/runtime/rebind", "/api/cli/step",
+    for path in ["/internal/runtime/bind", "/internal/runtime/rebind",
                  "/internal/runtime/v1/pm/assign", "/internal/runtime/v1/pm/bind",
                  "/internal/runtime/v1/pm/checkpoint", "/internal/runtime/v1/pm/rebind",
                  "/internal/runtime/v1/pm/resume", "/internal/runtime/v1/pm/resume-retry",
@@ -143,5 +192,6 @@ def test_retired_native_routes_are_absent_and_cannot_write_any_ledger(configured
                  "/internal/runtime/base/terminal-receipt/readback"]:
         response = client.post(path, headers=WRITER, json={"task": assignment["task"]})
         assert response.status_code == 404, (path, response.text)
+        assert response.headers["content-type"].startswith("application/json")
     assert counts() == before
     assert enroll(configured) == original

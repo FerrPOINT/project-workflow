@@ -1,0 +1,22 @@
+{
+  "schema": "advisor-controlled-experiment-v1",
+  "candidate": "supervisor-evaluator-v18",
+  "predeclared_after": "advisor-v18-materiality-results-20261104.json",
+  "hypothesis": "An explicit boundary separating the evaluator's own assessments from report evidence prevents C3's discovered gap from being credited as E2 report content.",
+  "scope": "Integrated candidate, not a one-factor format comparison: typed report, current-phase history contract, required_change and the general evidence boundary.",
+  "cases": [{
+    "id": "actual-pm-190",
+    "expected_verdict": "PARTIAL",
+    "expected_missing": ["C3", "E2"],
+    "reason_basis": "Both refusals must identify the absent owner decision about Closed in the source or unresolved questions. The evaluator's C3 finding is not evidence supplied by the worker. Manual UI operation alone is not the missing material choice."
+  }],
+  "campaign_budget": {
+    "maximum_http_calls": 48,
+    "already_attempted": 7,
+    "this_precheck_maximum": 1,
+    "reserved_context_comparisons": 4,
+    "reserved_final_qualification": 36
+  },
+  "controls": "Frozen old labels and documents unchanged. Candidate fixture conversion preserves source and artifact contents verbatim and identifies synthetic previous marks. No automatic retries. Classification match is insufficient without independent reason review.",
+  "checkpoint_status": "Source integration continues in the existing branch; neither CP1 nor installation is accepted by this precheck alone."
+}

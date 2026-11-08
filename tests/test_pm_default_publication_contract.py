@@ -333,7 +333,7 @@ def test_pm_default_preparation_cursor_never_requires_confirmation_before_final_
         assert terminal["terminal_receipt"]["confirmation_id"] == confirmed["id"]
         instructions = terminal["completion_instructions"]
         assert instructions.index("discussion publish") < instructions.index("pm completion submit")
-        assert "Backlog" in instructions and "Ready" in instructions
+        assert "Draft / Completed" in instructions and "Analysis / Ready" in instructions
         readback = step(configured).json()["result"]
         assert readback["complete"] is True
         assert readback["terminal_receipt"] == terminal["terminal_receipt"]

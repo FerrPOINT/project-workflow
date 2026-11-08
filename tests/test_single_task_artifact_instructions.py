@@ -1,10 +1,13 @@
 """Exercise generator output directly; main owns regenerated catalog/manifest pins."""
 
+import copy
+import hashlib
 import json
 
 import pytest
 
 from project_workflow.infrastructure import single_task_delivery_instructions as instructions
+from project_workflow.infrastructure.db.single_task_catalog import load_profile
 from scripts.build_single_task_profile import render
 
 TECHNICAL_MODES = [
@@ -35,6 +38,29 @@ def mode_for(catalog, role, mode):
 
 def phase_text(phase):
     return " ".join(item["description"] for item in phase["instructions"])
+
+
+@pytest.mark.parametrize("role,mode", [("project_manager", "draft"), *TECHNICAL_MODES])
+def test_first_step_validates_readbacks_without_technical_report_copy(generated, role, mode):
+    catalog, _ = generated
+    first = mode_for(catalog, role, mode)["phases"][0]["instructions"][0]["description"]
+    assert first == instructions.FIRST_STEP
+    for required in (
+        "inspect the actual scalar fields", "parsed stdout JSON", "fields at top level",
+        "Tracker context.assignment.assignment_id equals Workflow assignment_ref",
+        "Tracker context.assignment.agent_id equals Workflow concrete_agent_ref",
+        "Tracker context.task_id and root_task_id equal Workflow business_task_ref",
+        "Tracker workflow_task_key equals Workflow task",
+        "two execution IDs are intentionally separate and are not required to be equal",
+        "validate each against its own authority", "Actual task/assignment/agent mismatches remain blockers",
+        "not a future PASS verdict", "Never invent response values",
+        "Do not copy the technical stdout envelope, identity fields, counters or receipts into the substantive report",
+        "project-workflow-executor skill for reporting business inputs and verified phase work",
+        "command fences remain separate metadata",
+    ):
+        assert required in first
+    assert "include an 'Actual first Workflow step response' block" not in first
+    assert "copy the actual scalar fields" not in first
 
 
 @pytest.mark.parametrize("role,mode", TECHNICAL_MODES)
@@ -153,3 +179,64 @@ def test_generator_keeps_single_task_inventory_architecture_rework_and_devops_bo
     assert "deployment and verification ArtifactReceipts" in devops
     checks = " ".join(mode_for(catalog, "devops", "delivery")["phases"][-1]["checks"]).lower()
     assert "health" in checks and "acceptance" in checks
+
+
+def test_status_alignment_preserves_all_phase_ids_criteria_skills_and_evidence(generated):
+    catalog, _ = generated
+    workflows = copy.deepcopy(catalog["workflows"])
+    predecessor = "2f16635c0f588d1f285393b4ad8c163119b4dba4b9918335c821f295e88a4f64"
+    previous = {item["key"]: item for item in load_profile(predecessor)[0]["workflows"]}
+    for workflow in workflows:
+        assert workflow.pop("previous_baseline_manifest_sha256") == predecessor
+        if "previous_baseline_manifest_sha256" in previous[workflow["key"]]:
+            workflow["previous_baseline_manifest_sha256"] = previous[workflow["key"]][
+                "previous_baseline_manifest_sha256"]
+        for mode in workflow["modes"]:
+            for phase in mode["phases"]:
+                for instruction in phase["instructions"]:
+                    instruction["description"] = "<worker-description>"
+    encoded = json.dumps(workflows, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    # Apart from the explicit source lineage and worker text, the pre-change contract is exact.
+    assert hashlib.sha256(encoded).hexdigest() == "f1651ae4917e52e6293538c8cc96534c2bd418c341562cae25b61caf25528487"
+
+
+@pytest.mark.parametrize("role,mode", [("project_manager", "draft"), *TECHNICAL_MODES])
+def test_every_mode_explicitly_starts_same_assignment_before_business_work(generated, role, mode):
+    catalog, _ = generated
+    first = mode_for(catalog, role, mode)["phases"][0]["instructions"][0]["description"]
+    assert first == instructions.FIRST_STEP
+    for required in (
+        "initial context/instruction reads are allowed in Ready",
+        "Before business work, explicitly start the current Ready stage",
+        "installed tracker-operator skill's Stage Start contract",
+        "That skill owns the command, typed fences and original-key readback",
+        "never fabricate a delivery lease for PM",
+        "verify the same assignment is InProgress", "already InProgress",
+        "Reports require InProgress", "not substantive business-report content",
+    ):
+        assert required in first
+    assert first.index("project-workflow --json step") < first.index("Before business work")
+    for phase in mode_for(catalog, role, mode)["phases"]:
+        assert "sdlc stage start" not in phase_text(phase)  # Command schema belongs to the common skill.
+    for phase in mode_for(catalog, role, mode)["phases"][1:]:
+        assert instructions.FIRST_STEP not in phase_text(phase)
+    guard = phase_text(mode_for(catalog, role, mode)["phases"][0])
+    assert "never choose the stage or borrow a scheduler lease" in guard
+    assert "do not set InProgress yourself" not in guard
+
+
+@pytest.mark.parametrize("role,mode", TECHNICAL_MODES)
+def test_stage_completion_does_not_replace_native_handoff_or_lease_authority(generated, role, mode):
+    catalog, _ = generated
+    final = phase_text(mode_for(catalog, role, mode)["phases"][-1])
+    assert "Do not renew it as scheduler or choose the stage yourself" in final
+    assert "or set status yourself" not in final
+    after = instructions.completion_instruction(role)
+    assert "accepted proposal records the current stage as Completed but is not a stage handoff" in after
+    assert "Fleet verifies real terminal before Tracker Complete" in after
+    assert "Only an actual next-stage handoff resets Ready" in after
+    if role in {"reviewer", "tester"}:
+        assert f"{'Review' if role == 'reviewer' else 'Testing'} / Completed" in instructions.TARGETS[role]
+        assert "rework_limit_reached" in after
+    if role == "devops":
+        assert instructions.TARGETS[role] == "Deployment / Completed"

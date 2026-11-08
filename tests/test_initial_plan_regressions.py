@@ -16,7 +16,7 @@ from tests._ui_source_helpers import page_source as _page_source
 
 pytestmark = [pytest.mark.ui]
 
-client = TestClient(app)
+client = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
 _counter = itertools.count()
 
 

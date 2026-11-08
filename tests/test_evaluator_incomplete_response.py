@@ -16,21 +16,15 @@ def test_token_limited_json_is_not_a_completed_evaluation(monkeypatch):
     response.json.return_value = {
         **response_body(
             content,
-            status=("incomplete" if "length" in ("length", "content_filter") else "completed"),
-            reason=(
-                "max_output_tokens"
-                if "length" == "length"
-                else "content_filter"
-                if "length" == "content_filter"
-                else None
-            ),
+            status="incomplete",
+            reason="max_output_tokens",
         ),
         "usage": {"output_tokens": 4000},
     }
     monkeypatch.setattr("project_workflow.infrastructure.llm.requests.post", Mock(return_value=response))
     client = OpenAICompatibleClient(api_key="test-only", reasoning_effort="high")
 
-    with pytest.raises(ValueError, match="token limit"):
+    with pytest.raises(ValueError, match="response is incomplete"):
         client.respond("Evaluate criteria and return JSON", "Report", response_format=PromptBuilder.response_schema([]))
 
     assert client.last_response_content is None

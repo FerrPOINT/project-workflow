@@ -120,17 +120,29 @@ def test_completed_read_does_not_admit_other_stage_status_pairs(authority, stage
         tracker.assignment(request, allow_completed_read=True)
 
 
-def test_real_pm_reservation_and_owner_wait_can_read_and_report_before_confirmation(authority):
+def test_ready_pm_reservation_and_owner_wait_only_admit_initial_read(authority):
     request, bodies, _ = authority
-    bodies["context"].update(stage="Draft", status="Ready", draft_submode="brainstorming")
+    bodies["context"].update(stage="Draft", status="Ready")
+    for submode in ("brainstorming", "awaiting_confirmation"):
+        bodies["context"]["draft_submode"] = submode
+        tracker.assignment(request, purpose="initial_read")
+        with pytest.raises(ConflictError):
+            tracker.assignment(request)
+        with pytest.raises(ConflictError):
+            tracker.assignment(request, purpose="report")
+    bodies["context"]["status"] = "InProgress"
     tracker.assignment(request)
-    bodies["context"]["draft_submode"] = "awaiting_confirmation"
-    tracker.assignment(request)
-    # Ready is not a shortcut into technical execution or a missing assignment.
+    tracker.assignment(request, purpose="report")
     request.update(role_key="analyst", mode_key="analysis")
-    bodies["context"].update(stage="Analysis")
+    bodies["context"].update(stage="Analysis", status="Ready")
+    tracker.assignment(request, purpose="initial_read")
     with pytest.raises(ConflictError):
         tracker.assignment(request)
+    with pytest.raises(ConflictError):
+        tracker.assignment(request, purpose="report")
+    bodies["context"]["assignment"] = None
+    with pytest.raises(ConflictError):
+        tracker.assignment(request, purpose="initial_read")
 
 
 @pytest.mark.parametrize("field", ["task_id", "root_task_id", "owner_subject"])

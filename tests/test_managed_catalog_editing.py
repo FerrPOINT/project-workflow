@@ -2,17 +2,42 @@
 
 from __future__ import annotations
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 
+from project_workflow import config
 from project_workflow.infrastructure.db.managed_catalog import ensure_managed_catalog
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.interfaces.ui.app import create_app
+from tests._human_access_helpers import human_identity, human_token
 
 pytestmark = pytest.mark.unit
 
 
-def test_installed_instruction_and_phase_edits_survive_readback_and_restart(monkeypatch):
+@pytest.fixture(autouse=True)
+def platform_editor(monkeypatch):
+    issuer = "https://auth.catalog-editor.test"
+    authorization = "Bearer " + human_token("catalog-editor-admin", issuer=issuer)
+    monkeypatch.setenv("PROJECT_WORKFLOW_MODE", "platform")
+    monkeypatch.setenv("AUTH_ISSUER", issuer)
+    monkeypatch.setenv("AUTH_INTERNAL_BASE_URL", issuer)
+    monkeypatch.setenv("AUTH_SESSION_SECRET", "catalog-editor-unit-session-secret-only")
+    config.get_settings.cache_clear()
+    original_client = httpx.AsyncClient
+
+    def identity(request):
+        assert str(request.url) == issuer + "/auth/me"
+        assert request.headers["Authorization"] == authorization
+        return httpx.Response(200, json=human_identity("catalog-editor-admin", role="admin"))
+
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: original_client(
+        transport=httpx.MockTransport(identity), **kwargs,
+    ))
+    return {"Authorization": authorization}
+
+
+def test_installed_instruction_and_phase_edits_survive_readback_and_restart(monkeypatch, platform_editor):
     monkeypatch.setattr(
         "project_workflow.infrastructure.db.session.schema_is_ready", lambda _engine: True,
     )
@@ -26,7 +51,7 @@ def test_installed_instruction_and_phase_edits_survive_readback_and_restart(monk
         instruction = uow.phase_instructions.list(phase.id)[0]
         namespace_id, phase_id, instruction_id = namespace.id, phase.id, instruction["id"]
 
-    with TestClient(create_app()) as client:
+    with TestClient(create_app(), headers=platform_editor) as client:
         saved = client.put(
             f"/api/instructions/{instruction_id}?namespace_id={namespace_id}",
             json={"description": "Saved instruction text"},
@@ -39,7 +64,7 @@ def test_installed_instruction_and_phase_edits_survive_readback_and_restart(monk
         )
         assert saved_phase.status_code == 200, saved_phase.text
 
-    with TestClient(create_app()) as restarted:
+    with TestClient(create_app(), headers=platform_editor) as restarted:
         detail = restarted.get(f"/phase/{phase_id}?namespace_id={namespace_id}")
         assert detail.status_code == 200, detail.text
         assert "Saved instruction text" in detail.text
@@ -49,10 +74,10 @@ def test_installed_instruction_and_phase_edits_survive_readback_and_restart(monk
         assert health.status_code == 200, health.text
 
 
-def test_installed_catalog_does_not_block_unrelated_crud():
+def test_installed_catalog_does_not_block_unrelated_crud(platform_editor):
     with SAUnitOfWork() as uow:
         ensure_managed_catalog(uow)
-    with TestClient(create_app()) as client:
+    with TestClient(create_app(), headers=platform_editor) as client:
         workflow = client.post("/api/workflows", json={"name": "Another workflow"})
         assert workflow.status_code == 200, workflow.text
         profession = client.post("/api/namespaces", json={
@@ -63,7 +88,6 @@ def test_installed_catalog_does_not_block_unrelated_crud():
 
 
 def test_init_db_preserves_saved_catalog_edits(tmp_path, monkeypatch):
-    from project_workflow import config
     from project_workflow.infrastructure.db.session import ensure_migrated, get_engine, reset_engine
     from scripts import init_db
 

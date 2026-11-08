@@ -31,7 +31,7 @@ def upgrade() -> None:
             pass
         for digest in PREVIOUS:
             try:
-                _observe_profile(uow, *load_profile(digest))
+                installed = _observe_profile(uow, *load_profile(digest))
                 break
             except ValueError:
                 continue
@@ -40,12 +40,15 @@ def upgrade() -> None:
         for definition in target["workflows"]:
             if definition["role_key"] != "analyst":
                 continue
-            workflow = next((w for w in uow.workflows.list() if w.key == definition["key"]), None)
-            assert workflow is not None
-            modes = {mode.key: mode for mode in uow.workflows.list_modes(workflow.id)}
+            binding = next(b for b in installed.bindings if b.workflow_key == definition["key"])
+            modes = {mode.key: mode for mode in binding.modes}
             for source_mode in definition["modes"]:
                 mode = modes[source_mode["key"]]
-                phases = {p.code: p for p in uow.phases.list(workflow_id=workflow.id, mode_id=mode.id)}
+                phases = {
+                    p.code: p for p in uow.phases.list(
+                        workflow_id=int(binding.workflow_id), mode_id=int(mode.mode_id),
+                    )
+                }
                 for phase_model in ManagedMode.model_validate(source_mode).phases:
                     canonical = _phase_item_to_supervisor(phase_model)
                     source_phase = {

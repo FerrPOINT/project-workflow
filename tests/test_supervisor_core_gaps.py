@@ -18,7 +18,7 @@ class TestSupervisorCoreGaps:
     def _phase(
         code: str = "1",
         name: str = "Test",
-        id: int = 1,
+        id: int | None = 1,
         rollback_target: str | None = None,
         parallel_with: str | None = None,
         execution_type: str = "sync",
@@ -58,10 +58,10 @@ class TestSupervisorCoreGaps:
         with pytest.raises(ValueError, match="current_phase_code"):
             engine._resolve_current_phase_code()
 
-    def test_get_previously_covered_no_task(self):
+    def test_get_phase_evaluation_history_no_task(self):
         engine = SupervisorEngine("RUN-1")
         engine.task = None
-        assert engine._get_previously_covered("1") == set()
+        assert engine._get_phase_evaluation_history("1") == {"reports": [], "assessments": {}}
 
     def test_phase_contract_does_not_route_historical_rollback_feedback(self):
         engine = SupervisorEngine("RUN-1")
@@ -89,32 +89,30 @@ class TestSupervisorCoreGaps:
         assert contract is not None
         assert "evaluation_feedback" not in contract
 
-    def test_get_previously_covered_no_task_id(self):
+    def test_get_phase_evaluation_history_no_task_id(self):
         engine = SupervisorEngine("RUN-1")
         engine.task = {"id": 0}
-        assert engine._get_previously_covered("1") == set()
+        assert engine._get_phase_evaluation_history("1") == {"reports": [], "assessments": {}}
 
-    def test_get_previously_covered_run_phase_id_none(self):
+    def test_get_phase_evaluation_history_unsaved_phase(self):
         engine = SupervisorEngine("RUN-1")
         engine.task = {"id": 1}
+        engine.all_phases = [self._phase(code="1", id=None)]
         uow = MagicMock()
-        Run = type("R", (), {"to_dict": lambda self: {"phase_id": None, "covered": []}})()
-        uow.step_history.list.return_value = [Run]
         engine._uow = uow
-        assert engine._get_previously_covered("1") == set()
+        assert engine._get_phase_evaluation_history("1") == {"reports": [], "assessments": {}}
+        uow.step_history.list.assert_not_called()
 
-    def test_get_previously_covered_phase_mismatch(self):
+    def test_get_phase_evaluation_history_phase_mismatch(self):
         engine = SupervisorEngine("RUN-1")
         ph = self._phase(code="1", id=1)
         engine.all_phases = [ph]
         engine.phase_map = {"1": ph}
         engine.task = {"id": 1}
         db = MagicMock()
-        db.phases.get_by_id.return_value = ph
-        Row = type("R", (), {"to_dict": lambda self: {"phase_id": 1, "covered": []}})()
-        db.step_history.list.return_value = [Row]
         engine.db = db
-        assert engine._get_previously_covered("99") == set()
+        assert engine._get_phase_evaluation_history("99") == {"reports": [], "assessments": {}}
+        db.step_history.list.assert_not_called()
 
     def test_record_transition_no_task(self):
         engine = SupervisorEngine("RUN-1")
