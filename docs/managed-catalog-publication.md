@@ -8,10 +8,11 @@ configuration; they do not assert that a live deployment is complete.
 
 | Repository | Development branch / merged checkpoint | Source scope |
 | --- | --- | --- |
-| Workflow | `master` / [`a04e5c9d7a2d93c47c4bb7ff163d49b211cfac65`](https://github.com/FerrPOINT/project-workflow/pull/164) | CLI, typed reports, evaluator, canonical catalog and profiles |
-| Base | `main` / [`0fb8733163ca39bbccc11d0f8f9aef50a8348474`](https://github.com/FerrPOINT/services-base/pull/476) | Shared/professional skills, including common instruction commit `d09c84707`, packaging and operator |
+| Workflow | `master` / [`032272504d291cd7cad6f621e713bc827909de1a`](https://github.com/FerrPOINT/project-workflow/pull/173) | CLI, typed reports, evaluator, canonical catalog/profiles and current PM checkpoint |
+| Base skills | `main` / [`0fb8733163ca39bbccc11d0f8f9aef50a8348474`](https://github.com/FerrPOINT/services-base/pull/476) | Independent canonical shared/professional package, including common instruction commit `d09c84707` |
+| Base operator | `main` / [`ac95ebe74e88ddf6ee30f169495e7ac955a8ccaf`](https://github.com/FerrPOINT/services-base/pull/517) | Qualified host release consumer of Fleet087 presubmit proof; not skill activation or deployment |
 | Tracker | `main` / [`7c4c96b31dfc973d26d399ed2c931591fb85d97f`](https://github.com/FerrPOINT/task-tracker/pull/212) | Agent Start/Completed and application-owned next-stage Ready |
-| Fleet | [PR172](https://github.com/FerrPOINT/fleet-control/pull/172), not yet merged | Separate source review/qualification; do not assume it is in `main` |
+| Fleet | `main` / [`f279ce371e284e3c0f48ee28b0a3b880b683e5b9`](https://github.com/FerrPOINT/fleet-control/pull/172) | Qualified first-birth/replay and configured presubmit maintenance source; not a deployment |
 
 For Workflow, update a clean development checkout using the existing branch:
 
@@ -61,11 +62,18 @@ between runs, not a manual copy or a second executor. SDK/UI pins stay independe
 do not repin them merely to obtain newer instructions.
 
 Live acceptance remains separate: SDLC-40 completed PM with separate owner consent
-and Analysis/Ready handoff. SDLC-41 has saved revision6 but no owner consent;
-217/PASS completes PM-DRAFT-01, while current PM-DRAFT-02 is not yet accepted.
+and Analysis/Ready handoff. SDLC-41 also completed PM: final history220 is PASS,
+the full saved revision9 has matching separate owner consent, and the immutable
+receipt is Draft/Completed while the application readback is Analysis/Ready.
+Earlier corrected PARTIALs, duplicate revisions and transport failure remain
+recorded; this is not a clean-first-try run. The three browser reading checks
+passed, but the overall browser gate and post-handoff machine readback remain
+open; see the [current diagnosis](ADVISOR_DIAGNOSIS_20261101.md).
 The separate Analyst registrar credential is issued, not applied; the Forge403
 selector issue is resolved without broader rights. Analyst/live delivery acceptance
 and runtime follow-up remain open, not prerequisites for sharing this source baseline.
+The installed Fleet remains the previously qualified first-birth89 runtime;
+merging the new presubmit source does not install migration087 or replace it.
 
 Historical product/text checkpoint `fc71000f01ddf94ce2b8121124ecfd8c2349eb8e`
 and earlier Base `86ca4359f28e784a4885ca2dcfdd952f74c07e61` remain historical
