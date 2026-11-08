@@ -111,7 +111,8 @@ def test_role_work_keeps_architecture_rework_independent_review_and_deployment_p
         assert all(word in criteria for word in ("artifact", "deployment receipt", "health", "acceptance"))
 
 
-@pytest.mark.parametrize("role,mode", [(role, mode) for role, mode in MODES[1:] if role != "analyst"])
+@pytest.mark.parametrize("role,mode", [(role, mode) for role, mode in MODES[1:]
+                                       if role not in {"analyst", "architect"}])
 def test_critical_hold_uses_actual_sealed_evidence_and_assignment_key_without_false_completion(catalog, role, mode):
     text = instruction_text(mode_for(catalog, role, mode)["phases"][1])
     for required in ("requirements_contradiction", "missing_business_decision", "sealed evidence",

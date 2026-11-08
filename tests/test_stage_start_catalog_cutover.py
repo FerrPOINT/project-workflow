@@ -21,6 +21,7 @@ from tests.test_postgres_integration import pg_url as pg_url
 PREVIOUS = "2f16635c0f588d1f285393b4ad8c163119b4dba4b9918335c821f295e88a4f64"
 PREVIOUS_REVISION = "0030_analyst_baseline_ledger"
 TARGET_REVISION = "0031_explicit_stage_start"
+TARGET_MANIFEST = "852e0647ad8645c9c6280b21c1595b9efa6ff87754d07df8dcc92bcb04f76381"
 
 
 def snapshot(engine):
@@ -110,13 +111,13 @@ def test_cutover_preserves_populated_history_and_pending_drafts(predecessor, dra
     assert len(receipts) == 7
     with SAUnitOfWork(engine) as uow:
         current = catalog.observe_installation(uow)
-        assert current.instruction_manifest_sha256 == catalog.MANIFEST_SHA256
+        assert current.instruction_manifest_sha256 == TARGET_MANIFEST
         old_workflows = {row["id"]: row for row in before["workflows"]}
         for receipt in receipts:
             old = old_workflows[receipt["workflow_id"]]
             assert receipt["parent_version"] == old["active_catalog_version"]
             assert receipt["operation_key"] == (
-                f'{editor.BASELINE_OPERATION}{old["id"]}:{catalog.MANIFEST_SHA256}')
+                f'{editor.BASELINE_OPERATION}{old["id"]}:{TARGET_MANIFEST}')
             assert receipt["published_by_subject"] is None and receipt["published_at"] is None
             workflow = uow.workflows.get_by_id(old["id"])
             assert workflow.active_catalog_version == receipt["catalog_version"]
@@ -192,7 +193,7 @@ def test_exact_target_operator_publication_is_sealed_without_overriding_content(
     engine, installed = predecessor
     binding = next(binding for binding in installed.bindings if binding.role_key == role)
     workflow_id = int(binding.workflow_id)
-    target = editor._definition(binding.workflow_key)
+    target = editor._definition(binding.workflow_key, TARGET_MANIFEST)
     reader = catalog.load_profile
     with monkeypatch.context() as old_runtime, SAUnitOfWork(engine) as uow:
         old_runtime.setattr(catalog, "load_profile", lambda digest=None: reader(digest or PREVIOUS))
@@ -228,7 +229,7 @@ def test_exact_target_operator_publication_is_sealed_without_overriding_content(
                  "phase_evidence_requirements", "workflow_catalog_publications"):
         assert all(row in after[name] for row in before[name]), name
     with SAUnitOfWork(engine) as uow:
-        assert catalog.observe_installation(uow).instruction_manifest_sha256 == catalog.MANIFEST_SHA256
+        assert catalog.observe_installation(uow).instruction_manifest_sha256 == TARGET_MANIFEST
         selected = editor.read_active(uow, workflow_id)
         assert selected["catalog_version"] == published["catalog_version"] + 1
         assert selected["modes"] == published["modes"]

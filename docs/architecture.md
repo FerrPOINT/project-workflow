@@ -5,7 +5,7 @@
 `PROJECT_WORKFLOW_MODE=platform|standalone` выбирает допуск к операции, не другой
 Advisor или формат отчёта. Default — platform; отсутствие зависимости не включает
 запасной путь. Platform использует Auth/Tracker identity, assignment и отдельное
-подтверждение владельца. Standalone использует собственную PostgreSQL без
+подтверждение требований владельцем у PM. Standalone использует собственную PostgreSQL без
 Auth/Fleet/Tracker. Прямой сервер и опубликованный Compose-порт ограничены loopback;
 не публиковать standalone через внешний ingress. Платформенные ownership,
 execution contexts и assignments запрещают запуск такой БД без авторизации.
@@ -152,6 +152,23 @@ system_prompt=NULL: для аудита требуется разрешить ha
 Поддерживаемого native in-place refresh API с сохранением context/history в
 проверенном комплекте нет; Workflow не добавляет такой механизм, aliases,
 скрытую ротацию session или прямую правку native БД.
+
+### Самостоятельные Analyst И Architect
+
+PM уточняет требования и получает exact-revision consent владельца; Analyst и
+Architect не повторяют опрос и не ждут согласования. Бизнес-противоречия и
+недостающие решения трактуют самостоятельно с decision log в той же Task по
+общему project-workflow-executor. Предположения не становятся проверенными
+фактами; исходные требования, owner consent и история не переписываются.
+Права, доступ к обязательным источникам и доказательства действий сохраняются.
+
+Architect читает закреплённые исходники по canonical forge-operator, без
+обязательного pipeline, checkout или Task workspace. Новый design result
+ссылается на точную сохранённую decomposition revision и её content_sha256;
+attachment не заменяет structured plan. Это source-контракт: доставка skill,
+selected required_skills, конфигурация и установленный API проверяются отдельно.
+Новый source default не заменяет уже выбранные публикации и execution snapshots;
+baseline852 и registered0031 сохранены для точного исторического чтения/перехода.
 
 ## Стадия, Статус И Завершение Исполнения
 

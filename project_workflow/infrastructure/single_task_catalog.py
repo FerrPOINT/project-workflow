@@ -13,6 +13,7 @@ from typing import Any
 
 from project_workflow.infrastructure.db.managed_catalog import ManagedMode
 from project_workflow.infrastructure.single_task_delivery_instructions import (
+    AUTONOMOUS_BUSINESS_DECISIONS,
     CRITICAL_BUSINESS_REVIEW,
     FIRST_STEP,
     PM_CONFIRMATION_CHECKS,
@@ -174,8 +175,8 @@ ANALYST_RULES = (
     "or integrations. Record actual limitations; optional unavailable sources and unspecified implementation "
     "parameters do not automatically block analysis. Earlier phases assess their own completed work, "
     "not a future final specification. Missing mandatory business evidence blocks final acceptance, "
-    "not honest recording of completed research. Retain one evolving analysis and one final analysis.md."
-)
+    "not honest recording of completed research. Retain one evolving analysis and one final analysis.md. "
+) + AUTONOMOUS_BUSINESS_DECISIONS
 ANALYST_PHASES = [
     (
         "Problem, users and scope",
@@ -340,6 +341,8 @@ def load_single_task_professions() -> list[dict[str, Any]]:
         workflow["previous_baseline_manifest_sha256"] = PREVIOUS_MANIFEST
         if role == "analyst":
             workflow["skill_allowlist"] = sorted(set(workflow["skill_allowlist"]) | {"wiki-operator", "forge-operator"})
+        if role == "architect":
+            workflow["skill_allowlist"] = sorted(set(workflow["skill_allowlist"]) | {"forge-operator"})
         workflow.pop("terminal_contract", None)
         workflow["description"] = f"{PROFILE_KEY}: {role} for one Tracker task; opt-in instructions."
         workflow["modes"] = []
@@ -392,7 +395,8 @@ def load_single_task_professions() -> list[dict[str, Any]]:
             else:
                 contents = [
                     opening,
-                    ("Role work on one task", ACTIONS[(role, mode_key)] + [CRITICAL_BUSINESS_REVIEW, REPORT],
+                    ("Role work on one task", ACTIONS[(role, mode_key)] + [
+                        AUTONOMOUS_BUSINESS_DECISIONS if role == "architect" else CRITICAL_BUSINESS_REVIEW, REPORT],
                      ROLE_CHECKS[role] + [
                          "Unresolved blockers remain explicit; no additional Tracker tasks were created."],
                      ROLE_EVIDENCE[role]),
@@ -408,7 +412,8 @@ def load_single_task_professions() -> list[dict[str, Any]]:
                     name=name,
                     description=f"{PROFILE_KEY}: {role}/{mode_key}; {name}.",
                     instructions=[
-                        {"description": text, "skills": ["project-workflow-executor", "tracker-operator"]}
+                        {"description": text, "skills": ["project-workflow-executor", "tracker-operator"]
+                         + (["forge-operator"] if role == "architect" else [])}
                         for text in instructions
                     ],
                     checks=list(checks),
