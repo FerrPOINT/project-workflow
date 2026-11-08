@@ -137,15 +137,56 @@ def test_pm_initial_criteria_assess_original_business_inputs_not_server_admissio
     assert first["code"] == "PM-DRAFT-01"
     assert first["checks"] == [
         "The original request and available business inputs were actually reviewed; "
-        "the intended result and boundaries are understood.",
-        "Known facts and unresolved business questions are distinguished, "
-        "without invented requirements or owner decisions.",
+        "the report explicitly states the source goal, scope and exclusions.",
+        "Business/product claims in the report and resulting document match supplied inputs, "
+        "including limits and actual unresolved business questions; no requirements or owner decisions are invented. "
+        "Workflow/process approval gates are outside this business-scope check.",
     ]
     assert first["evidence"] == [
-        "The original request, relevant provided input contents and completed initial review, "
-        "including any actual gaps.",
+        "Complete original request and relevant supplied input contents, "
+        "with a factual account of initial review and any gaps in those inputs.",
     ]
     assert first["instructions"][0]["description"] == instructions.FIRST_STEP
+
+
+def test_pm_initial_review_does_not_wait_for_or_claim_future_owner_presentation():
+    first = candidate("project_manager")[0]
+    worker = phase_text(first)
+    for required in (
+        "Report the current initial review and only work actually performed.",
+        "Future owner confirmation is a phase-3 process gate, not an unresolved business question.",
+        "Wait for owner consent only after Workflow actually returns phase 3.",
+        "Never claim presentation before the full saved document has appeared in an actual owner-visible message.",
+    ):
+        assert required in worker
+    # C2's process exclusion does not waive the real final-phase consent gate.
+    final = candidate("project_manager")[-1]
+    assert final["checks"][1] == (
+        "The owner explicitly approved the latest saved requirements as presented; "
+        "a complete brief or an agent assumption is not consent."
+    )
+
+
+def test_analyst_document_provenance_excludes_requirements_hash_but_keeps_byte_integrity():
+    final = candidate("analyst")[-1]
+    artifact_instructions = [
+        item["description"] for item in final["instructions"] if ANALYSIS_UPLOAD in item["description"]
+    ]
+    assert len(artifact_instructions) == 1
+    artifact = artifact_instructions[0]
+    assert "approved requirements revision/hash" not in artifact
+    for required in (
+        "source register", "initial specification", "approved requirements source and revision",
+        "exact repository commit/path", "published document source links, revisions or access dates",
+        "Keep the technical requirements SHA256 and Tracker authority binding in command metadata and readbacks, "
+        "not in the business analysis.md document.",
+        "Verify SHA256 of the raw downloaded bytes", "artifact.binding {assignment_id,execution_id,role}",
+        "verify raw SHA256 and size against that receipt", "checksum mismatch or unavailable readback",
+        "leave the phase unfinished", "keep technical receipts and hashes in command metadata and readbacks",
+    ):
+        assert required in artifact
+    # Input provenance is still checked procedurally, outside the business document.
+    assert "approved requirements revision/hash" in phase_text(candidate("analyst")[0])
 
 
 def test_pm_preparation_criteria_keep_real_gap_resolution_without_future_consent_requirement():

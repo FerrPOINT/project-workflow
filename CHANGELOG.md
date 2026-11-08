@@ -4,6 +4,18 @@
 
 ### Report Contract Consistency (2026-11-08)
 
+- SDLC-39/212 preserves all ten saved business fields without technical metadata,
+  but is not accepted live: Advisor mistakes a pending process approval for an
+  invented product requirement; PM prematurely claims presentation and waits in
+  phase1. Separate source review, product consistency and input evidence in PM01;
+  keep consent in phase3. Analyst's full document no longer embeds technical
+  requirements SHA/binding, while upload/download authority checks remain.
+  Original responses, ambiguous prelabels and one invalid diagnostic-runner
+  schema call are retained, not reported as passing qualification. No engine,
+  model, schema or server-state changes are introduced.
+  Final orthogonal controls match6/6 item labels with independently reviewed
+  reasons;19 targeted tests and Ruff pass. This qualifies configuration
+  publication, not the pending full PM/Analyst live acceptance.
 - SDLC-37/208 exposed contradictory report obligations, not a demonstrated
   Advisor defect. PM business checks no longer require technical hashes or
   declarations of future handoff; actual full presentation and valid owner
