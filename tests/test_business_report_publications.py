@@ -77,28 +77,27 @@ def test_analyst_initial_criteria_are_business_only_but_procedural_provenance_re
     worker = phase_text(first)
     for required in (
         "approved requirements revision/hash", "context/input/requirements/source",
-        "Match task=root, Tracker instance and project UUID", "<exact-commit>",
+        "Match task=root, Tracker instance and project UUID", "immutable source commit",
         "no separate PM confirmation read or DevOps snapshot is required",
         "Do not copy the technical stdout envelope, identity fields, counters or receipts",
     ):
         assert required in worker
 
 
-def test_analyst_source_read_uses_supported_scoped_forge_identity_and_storage_selector():
+def test_analyst_source_read_delegates_forge_mechanics_but_keeps_task_authority():
     worker = phase_text(candidate("analyst")[0])
     for required in (
-        "GET /api/v1/catalog/repositories/<repository-id>/sync",
-        "own configured credential without printing it",
-        "verify repository_id and namespace against the binding, without starting sync",
-        "cicd-cli project list", "repository_url /git/<storage_name>.git",
-        "as described by forge-operator; public_name is not the selector",
-        "repository tree/blob --repo <storage_name> --git-ref <exact-commit>",
-        "omit --path for the root", "403/404", "ambiguous project or mismatched identity",
-        "never guess a selector or credentials",
+        "installed canonical forge-operator skill",
+        "resolve the bound repository identity and storage selector",
+        "read the repository at the immutable source commit",
+        "Verify repository UUID, project and namespace against this task's source binding",
+        "Missing rights, ambiguous resolution or identity mismatch are blockers",
+        "do not guess selectors, substitute main or borrow credentials",
     ):
         assert required in worker
-    assert "cicd-cli repository get" not in worker
-    assert "use its public_name" not in worker
+    for recipe in ("cicd-cli repository", "cicd-cli project list", "/api/v1/catalog/",
+                   "Authorization", "repository_url", "public_name", "/git/<storage_name>.git"):
+        assert recipe not in worker
 
 
 def test_analyst_final_business_evidence_preserves_mandatory_gap_refusal():
