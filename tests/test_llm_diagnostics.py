@@ -19,12 +19,14 @@ pytestmark = pytest.mark.unit
 @pytest.mark.parametrize("boundary", ["envelope", "content"])
 @pytest.mark.parametrize("queued_valid", [False, True])
 def test_deep_provider_json_fails_without_retry_even_if_next_response_would_be_valid(
-    client, monkeypatch, boundary, queued_valid,
+    client, monkeypatch, boundary, queued_valid, json_recursion_failure,
 ):
     valid = {"verdict": "PASS", "assessments": {
         "C1": {"covered": True, "reason": "The required result is supplied", "required_change": None},
     }, "blockers": [], "confidence": 0.9}
     deep = '{"nested":' + '[' * 3000 + '0' + ']' * 3000 + '}'
+    if boundary == "content":
+        json_recursion_failure(deep)
 
     def response(bad):
         value = Mock(status_code=200, headers={})

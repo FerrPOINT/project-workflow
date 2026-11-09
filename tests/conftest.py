@@ -19,6 +19,22 @@ from project_workflow.infrastructure.llm import OpenAICompatibleClient
 from tests._db_helpers import prepare_sqlite_uow
 
 
+@pytest.fixture
+def json_recursion_failure(monkeypatch):
+    """Inject the decoder failure; supported nesting differs between Python builds."""
+    original = json.loads
+
+    def reject(payload):
+        def decode(value, *args, **kwargs):
+            if value == payload:
+                raise RecursionError("Synthetic JSON decoder nesting failure")
+            return original(value, *args, **kwargs)
+
+        monkeypatch.setattr(json, "loads", decode)
+
+    return reject
+
+
 @pytest.fixture(autouse=True)
 def isolate_ui_runtime_state(tmp_path, monkeypatch):
     """Keep tests away from the user's real runtime DB/settings and mutable seed file."""
