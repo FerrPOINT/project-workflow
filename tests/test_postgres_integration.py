@@ -1207,6 +1207,7 @@ class TestPostgresInitialMigration:
         engine = get_engine(pg_url)
         with SAUnitOfWork(engine) as uow:
             installation = observe_installation(uow)
+        assert installation.namespaces == installation.workflows == 7
         with engine.connect() as conn:
             counts = {
                 table: conn.execute(
@@ -1215,8 +1216,8 @@ class TestPostgresInitialMigration:
                 for table in ("workflows", "projects", "workflow_modes", "phases", "tasks")
             }
         assert counts == {
-            "workflows": installation.workflows, "projects": installation.namespaces,
-            "workflow_modes": installation.modes, "phases": installation.phases, "tasks": 0,
+            "workflows": installation.workflows + 2, "projects": installation.namespaces + 2,
+            "workflow_modes": installation.modes + 2, "phases": installation.phases + 10, "tasks": 0,
         }
 
     def test_two_concurrent_init_processes_are_idempotent(self, pg_url):
@@ -1238,7 +1239,8 @@ class TestPostgresInitialMigration:
         uow = SAUnitOfWork(pg_url)
         assert {project.cli_command for project in uow.projects.list()} == {
             f"workflow-single-task-{role}" for role in (
-                "project-manager", "analyst", "architect", "developer", "reviewer", "tester", "devops")}
+                "project-manager", "analyst", "architect", "developer", "reviewer", "tester", "devops")
+        } | {"workflow-bug_searcher", "workflow-refactorer"}
         assert len([workflow for workflow in uow.workflows.list() if workflow.is_default]) == 1
         uow.close()
 

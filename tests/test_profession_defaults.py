@@ -60,7 +60,12 @@ def test_repeated_current_init_preserves_sealed_defaults_and_custom_presentation
         assert main() == 0
         with SAUnitOfWork(url) as uow:
             installation = observe_installation(uow)
-            assert len(installation.bindings) == len(uow.projects.list()) == 7
+            assert len(installation.bindings) == 7
+            assert len(uow.projects.list()) == 9
+            background_ids = {
+                uow.projects.get_by_cli_command(command).id
+                for command in ("workflow-bug_searcher", "workflow-refactorer")
+            }
             custom_workflow = WorkflowService(uow).create_workflow({"name": "Custom workflow"})
             custom = ProjectService(uow).create_project({
                 "code": "CUSTOM", "cli_command": "workflow-custom", "workflow_id": custom_workflow["id"],
@@ -83,7 +88,7 @@ def test_repeated_current_init_preserves_sealed_defaults_and_custom_presentation
             assert observe_installation(uow) == installation
             assert {p.id for p in professions} == {int(item.namespace_id) for item in installation.bindings} | {
                 custom["id"],
-            }
+            } | background_ids
     finally:
         config.get_settings.cache_clear()
         reset_engine()

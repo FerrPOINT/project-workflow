@@ -65,7 +65,7 @@ def test_real_bootstrap_repeats_with_exact_persisted_ids(database, monkeypatch, 
     assert first["runtime_ready"] is first["live_activation_allowed"] is False
     with SAUnitOfWork(database) as uow:
         assert observe_installation(uow).model_dump(mode="json", by_alias=True) == first
-        assert len(uow.projects.list()) == len(uow.workflows.list()) == 7
+        assert len(uow.projects.list()) == len(uow.workflows.list()) == 9
 
 
 def test_config_selector_runs_real_bootstrap_subprocess_twice(tmp_path):

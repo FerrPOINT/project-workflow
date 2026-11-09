@@ -247,6 +247,9 @@ def runtime_catalog(
             }
             with SAUnitOfWork() as uow:
                 installation = observe_installation(uow)
+                from project_workflow.infrastructure.db.background_professions import background_catalog
+
+                background = background_catalog(uow)
                 return {
                     "ok": True,
                     "namespaces": [
@@ -255,12 +258,12 @@ def runtime_catalog(
                          **namespace_themes[int(binding.namespace_id)],
                          "workflow_id": int(binding.workflow_id)}
                         for binding in installation.bindings
-                    ],
+                    ] + [{**item, **namespace_themes[item["id"]]} for item in background["namespaces"]],
                     "workflows": [
                         {"id": int(binding.workflow_id), "key": binding.workflow_key,
                          "name": config.MANAGED_NAMESPACE_WORKFLOW_NAME}
                         for binding in installation.bindings
-                    ],
+                    ] + background["workflows"],
                 }
         except (ValueError, KeyError):
             return _error("Single-task installation missing or divergent", 503)
