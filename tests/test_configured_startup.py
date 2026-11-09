@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 
-@pytest.mark.parametrize("mode,professions,modes,phases", [("platform", 7, 8, 33), ("standalone", 0, 0, 0)])
+@pytest.mark.parametrize("mode,professions,modes,phases", [("platform", 9, 10, 43), ("standalone", 0, 0, 0)])
 def test_cold_initialization_uses_explicit_mode_without_retained_catalog_fallback(
     tmp_path, mode, professions, modes, phases,
 ):
