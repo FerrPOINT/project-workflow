@@ -213,7 +213,8 @@ def deep_json():
     return '{"nested":' + '[' * 3000 + '0' + ']' * 3000 + '}'
 
 
-def test_deep_model_content_is_normalized_to_a_response_contract_error():
+def test_deep_model_content_is_normalized_to_a_response_contract_error(json_recursion_failure):
+    json_recursion_failure(deep_json())
     with pytest.raises(ValueError, match="nesting"):
         OpenAICompatibleClient._extract_json(deep_json())
 
@@ -230,9 +231,10 @@ def test_deep_provider_envelope_is_normalized_to_a_response_contract_error(monke
     post.assert_called_once()
 
 
-def test_deep_provider_json_commits_only_structured_technical_failure(configured, monkeypatch):
+def test_deep_provider_json_commits_only_structured_technical_failure(configured, monkeypatch, json_recursion_failure):
     enroll(configured)
     before = step(configured).json()["result"]
+    json_recursion_failure(deep_json())
 
     def answer(**kwargs):
         return OpenAICompatibleClient._extract_json(deep_json())
