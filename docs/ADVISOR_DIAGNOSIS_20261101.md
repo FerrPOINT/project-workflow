@@ -8,20 +8,32 @@
 
 | Проверяемая граница | Подтверждённый результат | Ограничение |
 | --- | --- | --- |
-| Доставка новых инструкций | Новый source manifest не активируется одной заменой image: startup наблюдает установленный852, а draft API требует согласованного sealed baseline. Добавлена зарегистрированная0032 через существующий publisher. | До штатного применения0032 новые source defaults не являются установленной конфигурацией. |
+| Доставка новых инструкций | Зарегистрированная0032 штатно применена через существующий publisher; Workflow8d853aff и Trackeraf1771e9 установлены совместным Build/Apply. | Установка сервера не равна активации инструкций на агенте. |
 | Безопасный переход | До записей проверяются все семь source receipts. Неизвестный custom отклоняется; PM/AN требуют явной canonical prepublication, AR с прежним sealed baseline не требует лишней публикации. Старые rows, IDs, content, execution/task pins и original operations сохраняются. | Business publications PM/AN выполняются отдельно после cutover; история не получает новую authority. |
 | Регрессии |199 уникальных PostgreSQL cases проходят без skips:42 transition/schema,4 concurrency и153 оставшихся, включая реальный CLI/HTTP и отдельную пустую clock DB. Составной native результат:4845 уникальных PASS и75 subtests, coverage94.1202%; production bytes совпадают с проверенным кандидатом. | Исходный полный прогон с5 FAIL сохранён как FAILED; исправлены только независимо разобранные устаревшие test expectations.15 native opt-in/platform/browser skips не объявляются PASS. |
 | Применимость модельных результатов | Prompt, builder и смысловой parser сохраняют прежние36/36 как semantic evidence. После50020 модельная граница, включая фактический Responses/no-cap путь, не менялась;0032 её не затрагивает. | Старые36 вызовов использовали Chat Completions с4000: они не квалифицируют новый транспорт. Его отдельные controls и SDLC40/41 учитываются раздельно. |
 | Таймаут тестового Git | Первый полный прогон остановлен на фикстуре из10 небольших файлов. Fsmonitor/EOF-гипотеза не подтвердилась; следующий полный прогон завершился без этого зависания. | Первоначальная причина UNKNOWN. Давление RAM наблюдалось, но причинная связь не доказана; продуктового исправления по этой гипотезе нет. |
 | История после handoff | Обычный executor history проверяет текущее Tracker assignment до operation key/execution ref. Бывший PM получает409; key не является разрешением доступа. Штатный service reader и terminal-receipt readback читают сохранённые данные без повторной оценки. | Credential reader не передаётся исполнителю. Ранее записанный409 сам по себе не доказывает потерю history или дефект Advisor. |
 
-В локальной установке обновлены Fleet backend438 и соответствующий web,
-восстановлена связь прежних PM/Analyst; собственные registrar credentials и
-три Architect secret refs сверены с действующими контейнерами. Workflow остаётся
-на50020/852, Tracker не объявляется обновлённым только по собранному image.
-Canonical drafts PM/AN подготовлены без публикации; рабочие задачи и документы
-не изменены. Architect подготовлен отдельно, но его native/business readiness
-пока не заявляется. Hermes, модель, параметры, Advisor v19 и критерии не менялись.
+Workflow8d853aff установлен с image4a65184b, Trackeraf1771e9 с image415442c1;
+Fleet438 и original Hermes не пересобирались. Joint Apply journal
+06bd0d099e6e444989ca0e34fe313a23 завершён. При0032 сохранены39 задач,220
+строк истории,40 назначений и160 событий; hash истории и старых публикаций
+совпадает. Добавлены только семь source receipts. PM/AN business publications
+восстановлены отдельно; PM38, AN5 и AR3 прошли validation, но не live-приёмку.
+
+PM38 остаётся activating при effective36 и plan0. Recovery cfe07274 принята;
+native readback подтверждает точную исходную команду и namespace_continued,
+но Fleet receipt и lease ACK отсутствуют, аренда истекла, publication не было.
+Лог Fleet фиксирует отмену handler через60007ms: human_deadline_elapsed=true,
+identity_deadline_elapsed=false, при выключенной application policy. Подтверждён
+синтетический предел60s в SDK; его source-исправление сохраняет настоящий срок
+identity/grant. Оно ещё не установлено. Существующий expired replay также
+блокирует сохранение исторического ACK; это отдельная механическая граница,
+не дефект Advisor и не разрешение продлить просроченную authority. Новых
+сообщений PM и оценок модели для этого исследования нет; резерв50 сохранён.
+Собственные registrar credentials и три Architect secret refs сверены.
+Hermes, модель, параметры, Advisor v19 и критерии не менялись.
 
 Следующий пользовательский результат: две новые цепочки PM -> Analyst ->
 Architect. Агент выполняет InProgress/Completed, приложение атомарно выбирает
