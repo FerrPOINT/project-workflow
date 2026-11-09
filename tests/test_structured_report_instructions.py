@@ -62,7 +62,10 @@ def test_configured_cli_returns_canonical_format_for_each_profession(configured,
     enroll(configured)
     actual = _cli_read(configured, monkeypatch)
     assert PHASE_REPORT_INSTRUCTIONS in actual["instructions"]
-    assert actual["phase_contract"]["skills"] == ["project-workflow-executor", "tracker-operator"]
+    expected_skills = ["project-workflow-executor", "tracker-operator"]
+    if configured[1]["role_key"] == "architect":
+        expected_skills.append("forge-operator")
+    assert actual["phase_contract"]["skills"] == expected_skills
 
 
 def test_published_pm_instructions_keep_one_canonical_format_in_actual_cli_output(configured, monkeypatch):

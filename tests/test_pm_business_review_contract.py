@@ -29,8 +29,10 @@ EXPORT = Path(__file__).resolve().parents[1] / "docs/evidence/pm-business-workfl
 # Published catalog 10's structure, not the stricter historic documentation export.
 BASE_STRUCTURE_SHA256 = "2ec0d49936c7db9bf2434250a26df3f3c0e09be69b030d7f53b8fd9a422ea050"
 BASE_CONTENT_SHA256 = "ae220f915d33987f1ed9b13e39d9a4c3a82ea5d8db133638a6a06f384ae249ef"
-# Current sealed family includes Start and shared business-only report boundaries.
-NON_PM_WORKFLOWS_SHA256 = "ce55e2e37d16cfbdc27db05a0d2eb4e665494d88c76f62d2143fc5f61633a0aa"
+# Reviewed AN/AR instructions and Architect Forge skill; other roles stay byte-exact.
+NON_PM_WORKFLOWS_SHA256 = "719510f8cfeb8bd25b360c8ee6425f7a34aa4363a704fccf2adef398bd86a4de"
+RETAINED_MANIFEST_SHA256 = "852e0647ad8645c9c6280b21c1595b9efa6ff87754d07df8dcc92bcb04f76381"
+RETAINED_NON_PM_WORKFLOWS_SHA256 = "ce55e2e37d16cfbdc27db05a0d2eb4e665494d88c76f62d2143fc5f61633a0aa"
 
 
 @pytest.fixture
@@ -82,6 +84,14 @@ def test_other_roles_and_sealed_profile_are_not_replaced(business):
     others = [w for w in catalog["workflows"] if w["role_key"] != business["role_key"]]
     assert len(others) == 6
     assert payload_sha256(others) == NON_PM_WORKFLOWS_SHA256
+    retained, _ = load_profile(RETAINED_MANIFEST_SHA256)
+    assert payload_sha256([w for w in retained["workflows"] if w["role_key"] != business["role_key"]]) == (
+        RETAINED_NON_PM_WORKFLOWS_SHA256
+    )
+    unchanged_roles = {"project_manager", "developer", "reviewer", "tester", "devops"}
+    assert [w for w in catalog["workflows"] if w["role_key"] in unchanged_roles] == [
+        w for w in retained["workflows"] if w["role_key"] in unchanged_roles
+    ]
     proposed = deepcopy(catalog)
     pm = next(w for w in proposed["workflows"] if w["key"] == business["workflow_key"])
     assert pm["role_key"] == business["role_key"]
