@@ -3143,9 +3143,11 @@ class TestSettingsPage:
             "--task", "--report", "--operation-key", "--expected-version",
             "--requirements-revision", "--requirements-sha256",
             "--start", "--workflow-id", "--mode-key",
+            "--background-run", "--research-result",
         }
         assert set(history_options) == {
             "--task", "--n", "--operation-key", "--execution-ref", "--before-history-id", "--diagnostics",
+            "--background-run",
         }
         assert history_options["--diagnostics"]["required"] is False
         assert "default" not in history_options["--diagnostics"]

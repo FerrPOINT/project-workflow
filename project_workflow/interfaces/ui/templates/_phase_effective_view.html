@@ -12,7 +12,7 @@
   <p id="phaseViewStatus" role="status">Проверка инструкций…</p>
   <div id="phaseEffectiveContent" class="base-page-stack" hidden>
     {% if not effective_instructions_only %}
-      {% set phases_url %}{{ ui_base_path() }}/phases?workflow_id={{ phase.workflow_id }}{% if phase.mode_id %}&mode_id={{ phase.mode_id }}{% endif %}{% if selected_namespace %}&profession_id={{ selected_namespace.id }}{% endif %}{% endset %}
+      {% set phases_url %}{{ ui_base_path() }}/phases?workflow_id={{ phase.workflow_id }}{% if phase.mode_id and not background_phase_read_only|default(false) %}&mode_id={{ phase.mode_id }}{% endif %}{% if selected_namespace %}&profession_id={{ selected_namespace.id }}{% endif %}{% endset %}
       {{ base_ui.button('← Назад к фазам', href=phases_url, variant='secondary') }}
     {% endif %}
     {{ base_ui.badge('Действующие инструкции · configured-cli-v1 · только чтение', 'info') }}

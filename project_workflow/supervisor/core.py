@@ -13,6 +13,7 @@ from __future__ import annotations
 import threading
 from typing import Any
 
+from project_workflow.domain.background import BackgroundFence
 from project_workflow.domain.configured_cli import ConfiguredCliFence
 from project_workflow.domain.standalone import StandaloneFence
 
@@ -68,7 +69,7 @@ class SupervisorEngine:
         uow: SAUnitOfWork | None = None,
         create_if_missing: bool = True,
         project_id: int | None = None,
-        runtime_fence: ConfiguredCliFence | StandaloneFence | None = None,
+        runtime_fence: ConfiguredCliFence | StandaloneFence | BackgroundFence | None = None,
     ):
         self.task_key = task_key
         self.create_if_missing = create_if_missing
@@ -96,7 +97,11 @@ class SupervisorEngine:
         else:
             self.execution_mode_id = None
             self.execution_cycle_number = 0
-        self._uow.commit()
+        # Fenced application calls own admission and their commit boundary. In
+        # particular a newly created background cursor must roll back if the
+        # launch changes while instructions are being built.
+        if self.runtime_fence is None:
+            self._uow.commit()
         self.project = (
             self._project_service.get_project(self.task["project_id"])
             if self.task and self.task.get("project_id")
@@ -572,9 +577,10 @@ class SupervisorEngine:
 
     def _assert_runtime_fence(self) -> None:
         """Fail closed when the current task no longer matches the owner-issued run."""
-        if self.runtime_fence is not None and not isinstance(self.runtime_fence, (ConfiguredCliFence, StandaloneFence)):
+        if self.runtime_fence is not None and not isinstance(
+                self.runtime_fence, (ConfiguredCliFence, StandaloneFence, BackgroundFence)):
             raise ConflictError("Retired execution protocol; current configured assignment required")
-        if isinstance(self.runtime_fence, (ConfiguredCliFence, StandaloneFence)):
+        if isinstance(self.runtime_fence, (ConfiguredCliFence, StandaloneFence, BackgroundFence)):
             self.runtime_fence.assert_task(self.task)
             return
         if self.task is not None:
@@ -583,7 +589,8 @@ class SupervisorEngine:
             workflow_id = self.task.get("workflow_id")
             if isinstance(workflow_id, int) and not isinstance(workflow_id, bool):
                 workflow = self._uow.workflows.get_by_id(workflow_id)
-                if workflow and (workflow.key in MANAGED_WORKFLOW_KEYS or is_single_task_key(workflow.key)):
+                if workflow and (workflow.key in MANAGED_WORKFLOW_KEYS or is_single_task_key(workflow.key)
+                                 or isinstance(workflow.key, str) and workflow.key.startswith("fleet:background:")):
                     raise ConflictError("Managed execution requires the configured CLI API")
 
     def _lock_runtime_fence(self) -> None:
@@ -602,6 +609,10 @@ class SupervisorEngine:
             from project_workflow.application.standalone import check_fence
 
             check_fence(self._uow, self.runtime_fence)
+        elif isinstance(self.runtime_fence, BackgroundFence):
+            from project_workflow.application.background import check_fence as check_background_fence
+
+            check_background_fence(self._uow, self.runtime_fence)
 
     def evaluate(self, report: str) -> dict:
         phase = self._get_current_phase_obj()

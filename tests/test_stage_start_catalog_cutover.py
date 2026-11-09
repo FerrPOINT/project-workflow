@@ -10,7 +10,6 @@ from project_workflow.domain.catalog_publication import CatalogDraft, CatalogPub
 from project_workflow.infrastructure.db import single_task_catalog as catalog
 from project_workflow.infrastructure.db.session import (
     database_revisions,
-    ensure_migrated,
     get_engine,
     migration_head,
     run_alembic_command,
@@ -24,6 +23,8 @@ PREVIOUS = "2f16635c0f588d1f285393b4ad8c163119b4dba4b9918335c821f295e88a4f64"
 PREVIOUS_REVISION = "0030_analyst_baseline_ledger"
 TARGET_REVISION = "0031_explicit_stage_start"
 TARGET_MANIFEST = "852e0647ad8645c9c6280b21c1595b9efa6ff87754d07df8dcc92bcb04f76381"
+# These historical cutover invariants stop at0031; current source-default migration
+# has its own preservation/failure tests and must not change this frozen target.
 
 
 def snapshot(engine):
@@ -56,6 +57,8 @@ def predecessor(database, monkeypatch):
 
 def test_fresh_installation_selects_the_current_start_contract(database):
     engine = database
+    from project_workflow.infrastructure.db.session import ensure_migrated, migration_head
+
     ensure_migrated(engine)
     with SAUnitOfWork(engine) as uow:
         installed = catalog.ensure_single_task_catalog(uow)

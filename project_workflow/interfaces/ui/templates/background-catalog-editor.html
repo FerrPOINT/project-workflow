@@ -1,0 +1,45 @@
+{% macro catalog_field(path, label, value, rows=3) -%}
+{% set field_id = 'catalog-' ~ path|join('-') %}
+<div class="form-stack">
+{{ base_ui.label_control(field_id, label) }}
+{{ base_ui.textarea_control(id=field_id, rows=rows, value=value, autosize=true, attributes={'data-catalog-path':path|tojson|forceescape}) }}
+</div>
+{%- endmacro %}
+{% if background_catalog and can_administer %}
+{% set revision = background_catalog.draft or background_catalog.active %}
+<details id="backgroundCatalogEditor" class="base-page-stack">
+<summary class="base-control">Редактировать инструкции</summary>
+<script type="application/json" id="backgroundCatalogState">{{ background_catalog|tojson }}</script>
+<form class="form-stack" data-catalog-form>
+<p>Действующая редакция {{ background_catalog.active.catalog_version }}. Изменения применяются к следующим запускам после публикации. Сохранённые сессии сохраняют свои инструкции.</p>
+<p role="status" data-catalog-status>{% if background_catalog.draft %}Сохранён черновик {{ revision.catalog_version }}.{% else %}Несохранённых редакций нет.{% endif %}</p>
+{% for mode in revision.modes %}
+{% set mode_index = loop.index0 %}
+{% for phase in mode.phases %}
+{% set path = [mode_index, 'phases', loop.index0] %}
+{% call base_ui.card(padded=true, label=phase.name) %}
+<div class="form-stack">
+<h3>{{ loop.index }}. {{ phase.name }}</h3>
+{{ catalog_field(path + ['name'], 'Название фазы', phase.name, 1) }}
+{{ catalog_field(path + ['description'], 'Описание фазы', phase.description) }}
+{% for instruction in phase.instructions %}
+{{ catalog_field(path + ['instructions', loop.index0, 'description'], 'Инструкция ' ~ loop.index, instruction.description, 5) }}
+{% endfor %}
+{% for check in phase.checks %}
+{{ catalog_field(path + ['checks', loop.index0], 'Проверка ' ~ loop.index, check) }}
+{% endfor %}
+{% for evidence in phase.evidence %}
+{{ catalog_field(path + ['evidence', loop.index0], 'Доказательство ' ~ loop.index, evidence) }}
+{% endfor %}
+</div>
+{% endcall %}
+{% endfor %}
+{% endfor %}
+{% call base_ui.action_group() %}
+{{ base_ui.button('Сохранить черновик', type='button', attributes={'data-catalog-action':'save'}) }}
+{{ base_ui.button('Опубликовать', type='button', variant='primary', disabled=not background_catalog.draft, attributes={'data-catalog-action':'publish'}) }}
+{{ base_ui.button('Сверить результат', type='button', attributes={'hidden':true, 'data-catalog-action':'readback'}) }}
+{% endcall %}
+</form>
+</details>
+{% endif %}

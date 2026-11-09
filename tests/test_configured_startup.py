@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 
-@pytest.mark.parametrize("mode,professions,modes,phases", [("platform", 9, 10, 43), ("standalone", 0, 0, 0)])
+@pytest.mark.parametrize("mode,professions,modes,phases", [("platform", 9, 12, 53), ("standalone", 0, 0, 0)])
 def test_cold_initialization_uses_explicit_mode_without_retained_catalog_fallback(
     tmp_path, mode, professions, modes, phases,
 ):
@@ -33,7 +33,14 @@ with SAUnitOfWork() as uow:
     print(json.dumps({"variant": config.CATALOG_VARIANT,
         "professions": len(uow.projects.list()), "workflows": len(uow.workflows.list()),
         "modes": uow.session.scalar(select(func.count()).select_from(m.WorkflowMode)),
-        "phases": uow.session.scalar(select(func.count()).select_from(m.Phase))}))
+        "phases": uow.session.scalar(select(func.count()).select_from(m.Phase)),
+        "active_modes": uow.session.scalar(select(func.count()).select_from(m.WorkflowMode).join(m.Workflow,
+            (m.Workflow.id == m.WorkflowMode.workflow_id) &
+            (m.Workflow.active_catalog_version == m.WorkflowMode.catalog_version))),
+        "active_phases": uow.session.scalar(select(func.count()).select_from(m.Phase).join(m.WorkflowMode,
+            m.Phase.mode_id == m.WorkflowMode.id).join(m.Workflow,
+            (m.Workflow.id == m.WorkflowMode.workflow_id) &
+            (m.Workflow.active_catalog_version == m.WorkflowMode.catalog_version)))}))
 """
     result = subprocess.run([sys.executable, "-X", "utf8", "-c", code], cwd=tmp_path,
                             env=environment, capture_output=True, text=True, encoding="utf-8", timeout=45)
@@ -43,5 +50,7 @@ with SAUnitOfWork() as uow:
     assert value["professions"] == value["workflows"] == professions
     assert value["modes"] == modes
     assert value["phases"] == phases
+    assert value["active_modes"] == (10 if mode == "platform" else 0)
+    assert value["active_phases"] == (43 if mode == "platform" else 0)
     assert not list(tmp_path.glob("*.json"))
     assert not (tmp_path / ".fleet-cli").exists()

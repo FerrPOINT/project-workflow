@@ -437,6 +437,16 @@ def _add_workflow_phases(
 ) -> HTMLResponse | None:
     """Resolve one mode and its phases for both workflow entry points."""
     workflow_id = workflow["id"] if workflow else None
+    if workflow and str(workflow.get("key") or "").startswith("fleet:background:"):
+        from project_workflow.application import catalog_publication
+        from project_workflow.infrastructure.db.uow import SAUnitOfWork
+
+        with SAUnitOfWork() as uow:
+            active = catalog_publication.read_active(uow, workflow["id"])
+            pending = (catalog_publication.read_pending_draft(uow, workflow["id"])
+                       if context.get("can_administer") else None)
+        context["background_catalog"] = {"active": active, "draft": pending,
+                                         "operator": getattr(request.state, "central_subject", None)}
     modes, selected_mode = _select_workflow_mode(workflow, mode_id)
     if workflow_id is not None and selected_mode is None:
         return _workflow_mode_error_page(request, context, int(workflow_id), mode_id)
@@ -544,6 +554,9 @@ def phase_detail(request: Request, phase_id: PositivePathId) -> HTMLResponse:
     for instruction in phase.get("instructions", []):
         instruction["skills"] = PhaseService.normalize_skills(instruction.get("skills"))
     context["phase"] = phase
+    workflow = _app_state.workflow_service().get_workflow(phase["workflow_id"])
+    context["background_phase_read_only"] = bool(
+        workflow and str(workflow.get("key") or "").startswith("fleet:background:"))
     return _template_response(
         request=request,
         name="phase_detail.html",
