@@ -52,8 +52,11 @@ BASELINE_OPERATION = "@catalog-baseline:"
 
 
 def _definition(workflow_key: str | None, manifest: str | None = None) -> dict:
+    from project_workflow.infrastructure.db.background_professions import definition as background_definition
     from project_workflow.infrastructure.db.single_task_catalog import load_profile
 
+    if manifest is None and (background := background_definition(workflow_key)) is not None:
+        return background
     catalog, _ = load_profile(manifest) if manifest is not None else load_profile()
     definition = next((item for item in catalog["workflows"] if item["key"] == workflow_key), None)
     if definition is None:
@@ -79,6 +82,17 @@ def _baseline_request(workflow_id: int, version: int, parent: int, manifest: str
 
 def sealed_baseline(uow: SAUnitOfWork, workflow: Any, version: int | None = None) -> tuple[dict, int]:
     """Resolve immutable source provenance from the existing publication ledger."""
+    if isinstance(workflow.key, str) and workflow.key.startswith("fleet:background:"):
+        background_receipt = uow.session.scalar(select(m.WorkflowCatalogPublication).where(
+            m.WorkflowCatalogPublication.workflow_id == workflow.id,
+            m.WorkflowCatalogPublication.operation_key == f"@background-bootstrap:{workflow.id}"))
+        if background_receipt is None or (version is not None and version < background_receipt.catalog_version):
+            raise ConflictError("Published background baseline required")
+        modes = _normalize(json.loads(background_receipt.content))
+        if (background_receipt.content_sha256 != payload_sha256(modes)
+                or background_receipt.request_sha256 != payload_sha256({"workflow_id": workflow.id, "modes": modes})):
+            raise ConflictError("Background baseline receipt changed")
+        return {**_definition(workflow.key), "modes": modes}, background_receipt.catalog_version
     prefix = f"{BASELINE_OPERATION}{workflow.id}:"
     query = select(m.WorkflowCatalogPublication.catalog_version, m.WorkflowCatalogPublication.parent_version,
         m.WorkflowCatalogPublication.operation_key, m.WorkflowCatalogPublication.request_sha256,
@@ -100,6 +114,41 @@ def sealed_baseline(uow: SAUnitOfWork, workflow: Any, version: int | None = None
             or receipt.content != canonical_json(modes)):
         raise ConflictError("Sealed baseline receipt changed")
     return definition, receipt.catalog_version
+
+
+def ensure_background_publication(uow: Any, workflow_id: int) -> None:
+    """Adopt existing editor content once, preserving it in a new immutable revision.
+
+    Caller owns the initialization transaction and catalog lock. This installs
+    definitions only; it grants no agent execution and never overwrites edits.
+    """
+    workflow = uow.workflows.lock(workflow_id)
+    if workflow is None:
+        raise NotFoundError("Background workflow not found")
+    definition = _definition(workflow.key)
+    operation = f"@background-bootstrap:{workflow_id}"
+    if uow.session.scalar(select(m.WorkflowCatalogPublication.catalog_version).where(
+            m.WorkflowCatalogPublication.operation_key == operation)) is not None:
+        read_revision(uow, workflow, workflow.active_catalog_version, selected=True)
+        return
+    if uow.session.scalar(select(m.WorkflowCatalogPublication.catalog_version).where(
+            m.WorkflowCatalogPublication.workflow_id == workflow_id).limit(1)) is not None:
+        raise ConflictError("Background publication provenance missing")
+    # Unpublished editor modes predate scope-specific admission. Read their
+    # complete content, then set the background-only scope in the new revision.
+    modes = _draft_modes(uow, workflow_id, workflow.active_catalog_version, background_adoption=True)
+    latest = uow.session.scalar(select(func.max(m.WorkflowMode.catalog_version)).where(
+        m.WorkflowMode.workflow_id == workflow_id))
+    version = (latest or 1) + 1
+    for mode in modes:
+        _persist_mode(uow, workflow_id=workflow_id, role_key=definition["role_key"],
+                      mode=ManagedMode.model_validate(mode), catalog_version=version)
+    uow.session.add(m.WorkflowCatalogPublication(workflow_id=workflow_id, catalog_version=version,
+        parent_version=workflow.active_catalog_version, operation_key=operation,
+        request_sha256=payload_sha256({"workflow_id": workflow_id, "modes": modes}),
+        content_sha256=payload_sha256(modes), content=canonical_json(modes)))
+    uow.workflows.update(workflow_id, {"active_catalog_version": version})
+    uow.session.flush()
 
 
 def publish_baseline(uow: SAUnitOfWork, workflow: Any, manifest: str, *, existing_version: int | None = None) -> int:
@@ -150,6 +199,18 @@ def _mode_identity(modes: list[dict]) -> list[tuple]:
 
 def _validate_modes(workflow: Any, modes: list[dict], definition: dict) -> None:
     baseline = _normalize(definition["modes"])
+    if isinstance(workflow.key, str) and workflow.key.startswith("fleet:background:"):
+        if _mode_identity(modes) != _mode_identity(baseline):
+            raise ConflictError("Background mode identity and execution scope are immutable")
+        for mode in modes:
+            for phase in mode["phases"]:
+                if (phase["execution_type"] != "sync" or phase["parallel_with_phase_code"] is not None
+                        or phase["rollback_target_phase_code"] is not None
+                        or not phase["instructions"] or not phase["checks"] or not phase["evidence"]):
+                    raise ConflictError("Background phases require synchronous work, checks and evidence")
+                if any(instruction["execution_type"] != "sync" for instruction in phase["instructions"]):
+                    raise ConflictError("Background instructions must execute synchronously")
+        return
     if workflow.key != "single-task-v1:architect":
         if _structure(modes) != _structure(baseline):
             raise ConflictError("Only text may change; role, scopes, skills and phase structure are frozen")
@@ -227,7 +288,12 @@ def _locked(uow: SAUnitOfWork, workflow_id: int) -> Any:
     # Validate namespace and selected-source provenance before historical revision reads.
     from project_workflow.infrastructure.db.single_task_catalog import observe_installation
 
-    observe_installation(uow)
+    if isinstance(workflow.key, str) and workflow.key.startswith("fleet:background:"):
+        from project_workflow.infrastructure.db.background_professions import background_catalog
+
+        background_catalog(uow)
+    else:
+        observe_installation(uow)
     return workflow
 
 
@@ -283,11 +349,13 @@ def read_pending_draft(uow: SAUnitOfWork, workflow_id: int) -> dict | None:
 
 def save_draft(uow: SAUnitOfWork, workflow_id: int, command: CatalogDraft) -> dict:
     workflow = _locked(uow, workflow_id)
-    if _normalize(sealed_baseline(uow, workflow)[0]["modes"]) != _normalize(_definition(workflow.key)["modes"]):
+    background = isinstance(workflow.key, str) and workflow.key.startswith("fleet:background:")
+    if (not background and _normalize(sealed_baseline(uow, workflow)[0]["modes"])
+            != _normalize(_definition(workflow.key)["modes"])):
         raise ConflictError("Upgrade the sealed catalog baseline before editing instructions")
     _cas(uow, workflow, command.expected_version, command.expected_sha256)
     modes = _normalize(command.modes)
-    _validate_modes(workflow, modes, _definition(workflow.key))
+    _validate_modes(workflow, modes, sealed_baseline(uow, workflow)[0] if background else _definition(workflow.key))
     # Reconcile an unknown save result under the same catalog lock. Drafts use
     # existing version rows, not a second journal or a client-supplied identity.
     pending = uow.session.scalars(select(m.WorkflowMode.catalog_version).where(
@@ -309,7 +377,7 @@ def save_draft(uow: SAUnitOfWork, workflow_id: int, command: CatalogDraft) -> di
     return _draft_result(workflow, version, modes)
 
 
-def _draft_modes(uow: SAUnitOfWork, workflow_id: int, version: int) -> list[dict]:
+def _draft_modes(uow: SAUnitOfWork, workflow_id: int, version: int, *, background_adoption: bool = False) -> list[dict]:
     modes = []
     for mode in uow.workflows.list_modes(workflow_id, catalog_version=version):
         phases = []
@@ -324,7 +392,8 @@ def _draft_modes(uow: SAUnitOfWork, workflow_id: int, version: int) -> list[dict
                 "checks": [item["description"] for item in uow.phase_checks.list(phase.id)],
                 "evidence": [item["description"] for item in uow.phase_evidence_requirements.list(phase.id)]})
         modes.append({"key": mode.key, "name": mode.name, "mode_order": mode.mode_order,
-                      "execution_scopes": mode.execution_scopes, "phases": phases})
+                      "execution_scopes": ["background"] if background_adoption else mode.execution_scopes,
+                      "phases": phases})
     return _normalize(modes)
 
 
@@ -347,7 +416,9 @@ def publish(uow: SAUnitOfWork, workflow_id: int, draft_version: int, command: Ca
     if draft_version <= workflow.active_catalog_version:
         raise ConflictError("Publication must append a newer revision")
     modes = _draft_modes(uow, workflow_id, draft_version)
-    _validate_modes(workflow, modes, _definition(workflow.key))
+    background = isinstance(workflow.key, str) and workflow.key.startswith("fleet:background:")
+    definition = sealed_baseline(uow, workflow)[0] if background else _definition(workflow.key)
+    _validate_modes(workflow, modes, definition)
     _validate_rows(uow, workflow, draft_version, modes)
     digest = payload_sha256(modes)
     if digest != command.draft_sha256:

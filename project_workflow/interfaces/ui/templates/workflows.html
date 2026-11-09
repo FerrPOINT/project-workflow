@@ -1,6 +1,6 @@
 {% import "workflow-cards.html" as workflow_cards %}
 {% extends "workflow-fragment.html" if workflow_fragment else "base.html" %}
-{% set pm_catalog_read_only = selected_workflow and selected_workflow.key == 'single-task-v1:project_manager' %}
+{% set pm_catalog_read_only = selected_workflow and (selected_workflow.key == 'single-task-v1:project_manager' or (selected_workflow.key or '').startswith('fleet:background:')) %}
 {% set phase_scope_suffix = ('&project_scope=all' if selected_namespace else '?project_scope=all') if request is defined and request.query_params.get('project_scope') == 'all' else '' %}
 {% set mode_scope_suffix = '&project_scope=all' if request is defined and request.query_params.get('project_scope') == 'all' else '' %}
 
@@ -175,6 +175,7 @@
       {% endcall %}
       {% endif %}
 </div>
+{% if background_catalog %}{% include 'background-catalog-editor.html' %}{% endif %}
     {% if selected_workflow and modes | length > 1 %}
     <div data-workflow-local-navigation class="mode-navigation" data-testid="workflow-mode-navigation">
       <div class="mode-tabs" data-testid="workflow-mode-tabs">

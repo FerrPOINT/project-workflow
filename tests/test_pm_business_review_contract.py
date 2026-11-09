@@ -29,7 +29,8 @@ EXPORT = Path(__file__).resolve().parents[1] / "docs/evidence/pm-business-workfl
 # Published catalog 10's structure, not the stricter historic documentation export.
 BASE_STRUCTURE_SHA256 = "2ec0d49936c7db9bf2434250a26df3f3c0e09be69b030d7f53b8fd9a422ea050"
 BASE_CONTENT_SHA256 = "ae220f915d33987f1ed9b13e39d9a4c3a82ea5d8db133638a6a06f384ae249ef"
-# Current sealed family includes Start and shared business-only report boundaries.
+# The proposal's original comparison remains pinned while other professions evolve.
+PM_REVIEW_COMPARISON_MANIFEST = "852e0647ad8645c9c6280b21c1595b9efa6ff87754d07df8dcc92bcb04f76381"
 NON_PM_WORKFLOWS_SHA256 = "ce55e2e37d16cfbdc27db05a0d2eb4e665494d88c76f62d2143fc5f61633a0aa"
 
 
@@ -77,11 +78,13 @@ def test_published_structure_roles_scopes_skills_and_counts_are_unchanged(busine
 
 
 def test_other_roles_and_sealed_profile_are_not_replaced(business):
+    historical, _ = load_profile(PM_REVIEW_COMPARISON_MANIFEST)
+    assert payload_sha256([w for w in historical["workflows"] if w["role_key"] != business["role_key"]]) == (
+        NON_PM_WORKFLOWS_SHA256)
     catalog, manifest = load_profile()
     original = deepcopy(catalog)
     others = [w for w in catalog["workflows"] if w["role_key"] != business["role_key"]]
     assert len(others) == 6
-    assert payload_sha256(others) == NON_PM_WORKFLOWS_SHA256
     proposed = deepcopy(catalog)
     pm = next(w for w in proposed["workflows"] if w["key"] == business["workflow_key"])
     assert pm["role_key"] == business["role_key"]

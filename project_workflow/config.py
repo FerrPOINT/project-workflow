@@ -59,6 +59,8 @@ class Settings(BaseSettings):
     PROJECT_WORKFLOW_IDENTITY_LEGACY_ISSUER: str = ""
 
     PROJECT_WORKFLOW_FLEET_CATALOG_TOKEN: str = ""
+    PROJECT_WORKFLOW_BACKGROUND_FLEET_URL: str = ""
+    PROJECT_WORKFLOW_BACKGROUND_READER_TOKEN: str = ""
     PROJECT_WORKFLOW_BASE_SKILLS_ROOT: str = ""
     # Deployment-registered service subject UUID -> canonical role or "catalog".
     # A PAT scope/email or legacy shared token alone never registers a machine.

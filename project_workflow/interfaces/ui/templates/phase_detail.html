@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% import "workflow-cards.html" as workflow_cards %}
+{% set can_edit_phase = can_administer and not background_phase_read_only|default(false) %}
 {% block page_layout %}detail-with-aside{% endblock %}
 
 {% block title %}{{ phase.name }} — Workflow Engine{% endblock %}
@@ -42,7 +43,7 @@
 <li{% if item.id is not none %} data-id="{{ item.id }}"{% endif %}>
 {% call base_ui.resource_list_row(class_name='phase-text-row') %}
   <span class="phase-text-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" focusable="false" aria-hidden="true">{% if checking %}<circle cx="12" cy="12" r="8"/>{% else %}<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M8 13h8M8 17h6"/>{% endif %}</svg></span>
-{% if can_administer %}
+{% if can_edit_phase %}
   {{ base_ui.textarea_control(class_name="inline-input phase-text-content", rows="1", aria_label=(field_label), appearance="inline", autosize=true, value=(item.description), attributes={"data-field": "description", "onblur": ('saveNewTextItem(this)' if fresh else 'scheduleSave()')}) }}
   {% call base_ui.button(variant="destructive-outline", size="icon", class_name="item-delete", type="button", aria_label=(delete_label), attributes={"onclick": "deleteItem(this)"}) %}×{% endcall %}
 {% else %}
@@ -54,6 +55,10 @@
 
 {% block content %}
 {% include '_phase_effective_view.html' %}
+{% if background_phase_read_only|default(false) %}
+<p>Сохранённая редакция фазы доступна для чтения.
+{% if can_administer %}<a href="{{ ui_base_path() }}/workflows?workflow_id={{ phase.workflow_id }}{% if selected_namespace %}&amp;profession_id={{ selected_namespace.id }}{% endif %}">Редактировать инструкции следующего запуска</a>{% endif %}</p>
+{% endif %}
 <div id="phaseStoredEditor" hidden inert>
 <div class="phase-editor-layout">
   <div class="phase-outline">
@@ -81,9 +86,9 @@
 
   <!-- Header -->
   <div class="wiki-header phase-editor-section base-page-stack" id="phase-overview" data-phase-section tabindex="-1">
-{% set phase_back %}{{ base_ui.button('← Назад к фазам', href=ui_base_path() ~ '/phases?workflow_id=' ~ phase.workflow_id ~ ('&mode_id=' ~ phase.mode_id if phase.mode_id else '') ~ ('&profession_id=' ~ selected_namespace.id if selected_namespace else ''), variant='secondary') }}{% endset %}
+{% set phase_back %}{{ base_ui.button('← Назад к фазам', href=ui_base_path() ~ '/phases?workflow_id=' ~ phase.workflow_id ~ ('&mode_id=' ~ phase.mode_id if phase.mode_id and not background_phase_read_only|default(false) else '') ~ ('&profession_id=' ~ selected_namespace.id if selected_namespace else ''), variant='secondary') }}{% endset %}
 {% set phase_heading %}
-{% if can_administer %}
+{% if can_edit_phase %}
     <div class="base-page-stack">
       {{ base_ui.input_control(class_name="inline-input", type="text", value=(phase.name), aria_label="Название фазы", appearance="inline", variant="heading", attributes={"data-field": "name", "onblur": "scheduleSave()"}) }}
       {{ base_ui.textarea_control(class_name="inline-input wiki-subtitle", rows="1", aria_label="Описание фазы", appearance="inline", autosize=true, value=(phase.description or ''), attributes={"data-field": "description", "onblur": "scheduleSave()"}) }}
@@ -98,7 +103,7 @@
   </div>
 
   <!-- Instructions — managed like phases list with inline edit, reorder, add, delete -->
-{% if can_administer %}
+{% if can_edit_phase %}
   <div id="phaseSaveRecovery" hidden>
   {% call base_ui.action_group(align='start') %}
     {{ base_ui.button('Повторить сохранение', id='phaseSaveEditor', attributes={'hidden':true,'onclick':'saveEditorChanges()'}) }}
@@ -112,7 +117,7 @@
     {% macro instruction_body(i, instruction_count) %}
     <div class="timeline-row" >
       {% call base_ui.card(padded=true, class_name='timeline-card', attributes={'data-instruction-id':i.id, 'data-step-num':i.step_num, 'data-type':i.execution_type}) %}
-{% if can_administer %}
+{% if can_edit_phase %}
         {{ base_ui.textarea_control(class_name="timeline-name-input", rows="1", aria_label="Описание инструкции " ~ (i.step_num), appearance="inline", autosize=true, value=(i.description), attributes={"data-field": "description", "data-original-description": (i.description), "onblur": "saveInstructionDescription(this)"}) }}
 {% else %}
         {% call base_ui.prose() %}<p>{{ i.description }}</p>{% endcall %}
@@ -121,8 +126,8 @@
           <div class="base-label" id="instruction-skills-label-{{ i.id }}">Навыки</div>
         <div class="instruction-skills" role="group" aria-labelledby="instruction-skills-label-{{ i.id }}">
           <div class="instruction-skill-labels" role="list" aria-label="Навыки инструкции {{ i.step_num }}">
-            {% for s in i.skills or [] %}{{ workflow_cards.skill_chip(s, i.step_num, can_administer) }}{% endfor %}
-{% if can_administer %}
+            {% for s in i.skills or [] %}{{ workflow_cards.skill_chip(s, i.step_num, can_edit_phase) }}{% endfor %}
+{% if can_edit_phase %}
             <span class="skill-add-item" role="listitem">{{ base_ui.badge_button('+', tone='info', class_name='skill-add-trigger', aria_label='Добавить навык к инструкции ' ~ i.step_num, aria_controls='instruction-skill-form-' ~ i.id, title='Добавить навык') }}
           <form method="post" class="skill-add-form" id="instruction-skill-form-{{ i.id }}" hidden aria-label="Добавление навыка к инструкции {{ i.step_num }}">
             {{ base_ui.badge_input(tone='info', class_name='skill-candidate', placeholder='Навык', aria_label='Название нового навыка к инструкции ' ~ i.step_num, size=6) }}
@@ -134,7 +139,7 @@
         </div>
         <div class="workflow-card-footer instruction-card-footer">
           {{ base_ui.badge('параллельно' if i.execution_type == 'parallel' else 'последовательно', 'info' if i.execution_type == 'parallel' else 'neutral') }}
-{% if can_administer %}
+{% if can_edit_phase %}
           {{ workflow_cards.actions('instruction', i.step_num, parallel=i.execution_type == 'parallel', first=i.step_num == 1, last=i.step_num == instruction_count) }}
 {% endif %}
         </div>
@@ -166,7 +171,7 @@
         <div class="empty-state">{{ base_ui.state('empty', 'Нет инструкций') }}</div>
       {% endfor %}
     </div>
-{% if can_administer %}
+{% if can_edit_phase %}
     {% call base_ui.button(variant="outline", class_name="phase-add-action", type="button", attributes={"onclick": "addInstructionLast()"}) %}+ Добавить шаг{% endcall %}
 {% endif %}
   </div>
@@ -181,14 +186,14 @@
         <li class="empty-state">{{ base_ui.state('empty', empty_message) }}</li>
       {% endfor %}
     {% endcall %}
-{% if can_administer %}
+{% if can_edit_phase %}
     <template id="{{ kind }}-list-item-template">{{ phase_text_item({'id':none, 'description':''}, kind, fresh=true) }}</template>
     <template id="{{ kind }}-list-empty-template">{{ base_ui.state('empty', empty_message) }}</template>
     {% call base_ui.button(variant="outline", class_name="phase-add-action", type="button", attributes={"onclick": ('addCheck()' if kind == 'checks' else 'addEvidence()')}) %}{{ '+ Добавить проверку' if kind == 'checks' else '+ Добавить подтверждение' }}{% endcall %}
 {% endif %}
   </div>
   {% endfor %}
-{% if can_administer %}
+{% if can_edit_phase %}
   <template id="instructions-empty-template"><div class="empty-state">{{ base_ui.state('empty', 'Нет инструкций') }}</div></template>
   <template id="instruction-skill-chip-template">{{ workflow_cards.skill_chip('', 0, true) }}</template>
   <template id="instruction-parallel-group-template">{% call workflow_cards.parallel_group('Параллельная группа инструкций') %}{{ base_ui.badge('Параллельная группа', 'info', class_name='timeline-parallel-label') }}{% endcall %}</template>
@@ -201,4 +206,4 @@
 {% endblock %}
 
 {% block controller_name %}phase_detail{% endblock %}
-{% block controller_data %}{{ {'basePath':ui_base_path(), 'canAdminister':can_administer, 'phaseId':phase.id, 'professionId':selected_namespace.id if selected_namespace else none} | tojson }}{% endblock %}
+{% block controller_data %}{{ {'basePath':ui_base_path(), 'canAdminister':can_administer, 'canEditPhase':can_edit_phase, 'phaseId':phase.id, 'professionId':selected_namespace.id if selected_namespace else none} | tojson }}{% endblock %}

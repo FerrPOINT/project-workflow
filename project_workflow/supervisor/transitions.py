@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from ..domain.background import BackgroundFence
 from ..domain.configured_cli import ConfiguredCliFence
 from ..domain.exceptions import ConcurrentTransitionError
 from ..domain.standalone import StandaloneFence
@@ -16,7 +17,7 @@ def _validate_verdict(verdict: str) -> None:
 
 
 def _task_state(
-    task: dict | None, runtime_fence: ConfiguredCliFence | StandaloneFence | None = None
+    task: dict | None, runtime_fence: ConfiguredCliFence | StandaloneFence | BackgroundFence | None = None
 ) -> tuple[int, int, str]:
     if not task:
         raise ConcurrentTransitionError("Задача отсутствует во время оценки Supervisor")
@@ -53,7 +54,7 @@ def _update_task(
     db,
     task_state: tuple[int, int, str],
     data: dict,
-    runtime_fence: ConfiguredCliFence | StandaloneFence | None = None,
+    runtime_fence: ConfiguredCliFence | StandaloneFence | BackgroundFence | None = None,
 ) -> None:
     task_id, current_phase_id, status = task_state
     fence_kwargs = {}
@@ -91,7 +92,7 @@ def record_transition(
     rollback_phase_code: str | None,
     phase_map: dict[str, Phase],
     step_history_id: int,
-    runtime_fence: ConfiguredCliFence | StandaloneFence | None = None,
+    runtime_fence: ConfiguredCliFence | StandaloneFence | BackgroundFence | None = None,
     commit: bool = True,
 ) -> None:
     """Persist one evaluated phase, its event(s), and the task snapshot."""
@@ -150,7 +151,7 @@ def record_parallel_transition(
     next_phase_code: str | None,
     rollback_phase_code: str | None = None,
     step_history_id: int,
-    runtime_fence: ConfiguredCliFence | StandaloneFence | None = None,
+    runtime_fence: ConfiguredCliFence | StandaloneFence | BackgroundFence | None = None,
     commit: bool = True,
 ) -> None:
     """Persist one evaluated parallel group and its append-only events."""

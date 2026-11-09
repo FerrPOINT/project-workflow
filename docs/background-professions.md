@@ -8,7 +8,13 @@
 реализованы и не проверены, наличие определений не означает готовое исполнение.
 
 Статус 2026-11-09: профессии и workflow входят в штатные platform-дефолты.
-Фоновое исполнение Fleet ещё не подключено.
+В source-кандидате подключён отдельный background admission и CLI step/history;
+установленные серверы ещё не обновлены. Проверка исследовательских запусков остаётся отдельной.
+Текущие проверки: 4911 PASS, 14 SKIP, line coverage 94,0712%; PostgreSQL —
+183 PASS и отдельно 1 PASS application-clock fixture. Ruff, mypy (183 файла)
+и актуальность runtime OpenAPI проходят. В браузере изолированного сервера
+проверены обе профессии, публикация с потерянным ответом, исходный readback,
+чтение прежней фазы и возврат к workflow. Это не live-приёмка исследовательских запусков.
 Продуктовые требования: [Fleet — Фоновые задачи](https://github.com/FerrPOINT/fleet-control/blob/feat/background-tasks-20261108/docs/BACKGROUND_TASKS.md).
 
 ## Границы
@@ -126,3 +132,35 @@ PostgreSQL: 182 неизменённых PASS и два PASS после обно
 Включена application-clock проверка на отдельной пустой БД. Ruff и mypy
 (178 source files) прошли. Временные QA-контейнеры, сети и disposable DB volumes
 убраны штатным Base helper; установленный runtime не заменён.
+
+
+## История фаз для участников проекта
+
+Кандидат добавляет `GET /internal/runtime/background/runs/{run_id}/history`.
+Это read-only backend contract: свежий service PAT с единственным
+`project-workflow:background:history:read`, субъект зарегистрирован как catalog
+в PROJECT_WORKFLOW_BASE_READER_SUBJECTS_JSON. Обычный catalog token, human token
+и агентские background read/write не подходят. Fleet перед этим проверяет
+текущий человеческий доступ к конкретному проекту и сопоставляет ответ со
+снимком run/project/session/agent/workflow/publication.
+
+Чтение использует сохранённое назначение и публикацию. Оно не продлевает право
+на исследование после отзыва прав создателя. Агентские step/history сохраняют
+прежние свежие проверки допуска. Возвращаются полные отчёты фаз, verdict,
+названия и next_before; чужая task-bound история сюда не попадает. HTTP fixture
+с отзывом допуска и пагинацией проходит; source-код ещё не установлен.
+
+## Совместимость установленной БД
+
+На отдельной PostgreSQL 17 восстановлен MVCC-снимок Workflow sdlc3 с ревизии
+`0023_catalog_publication_author`. Штатный `scripts/init_db.py` обновил его до
+`0032_current_source_defaults`; повтор не изменил публикации. Сохранены все
+21 запись `task_step_history` и 13 `task_phase_events`, проверенные по полному
+содержимому; прежних publication receipts в снимке не было.
+Это проверка копии данных, а не обновление установленного сервера.
+
+Прежний установленный образ подтверждённо принимает исходную схему и отклоняет
+новую. Каталог forward-only: откат одним образом после миграции недоступен.
+Восстановление требует согласованной пары образа и снимка данных и сохранения
+принятых после снимка результатов. Rehearsal-снимок одной БД не заменяет
+согласованный recovery backup установки; перед Apply нужен актуальный backup.

@@ -22,6 +22,9 @@ def database_url(tmp_path):
 
 
 def test_defaults_are_editable_idempotent_and_do_not_create_tasks(database_url):
+    from project_workflow.application.catalog_publication import publish, read_active, save_draft
+    from project_workflow.domain.catalog_publication import CatalogDraft, CatalogPublish
+
     with SAUnitOfWork(database_url) as uow:
         ensure_schema(uow.session.get_bind())
         prepared = ensure_background_professions(uow)
@@ -44,7 +47,15 @@ def test_defaults_are_editable_idempotent_and_do_not_create_tasks(database_url):
                 assert uow.phase_checks.list(phase.id)
                 assert uow.phase_evidence_requirements.list(phase.id)
             uow.projects.update(profession_id, {"name": f"Автор: {code}"})
-            uow.phases.update(phases[2].id, {"name": "Моё исследование"})
+            active = read_active(uow, workflow.id)
+            active["modes"][0]["phases"][2]["name"] = "Моё исследование"
+            draft = save_draft(uow, workflow.id, CatalogDraft(expected_version=active["catalog_version"],
+                expected_sha256=active["content_sha256"], modes=active["modes"]))
+            publish(uow, workflow.id, draft["catalog_version"], CatalogPublish(
+                expected_version=active["catalog_version"], expected_sha256=active["content_sha256"],
+                draft_sha256=draft["content_sha256"], operation_key=f"background-edit-{code}"),
+                publisher_subject="author-fixture")
+            assert uow.phases.list(workflow.id, mode.id)[2].name == "Исследование"
         uow.commit()
         assert ensure_background_professions(uow) == prepared
         for code, profession_id in prepared.items():

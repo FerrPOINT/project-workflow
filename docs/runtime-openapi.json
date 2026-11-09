@@ -1,6 +1,130 @@
 {
   "components": {
     "schemas": {
+      "BackgroundConclusion": {
+        "additionalProperties": false,
+        "properties": {
+          "coverage": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Coverage",
+            "type": "array"
+          },
+          "limitations": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Limitations",
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "complete",
+              "incomplete"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "summary": {
+            "minLength": 1,
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "summary",
+          "coverage",
+          "limitations"
+        ],
+        "title": "BackgroundConclusion",
+        "type": "object"
+      },
+      "BackgroundStep": {
+        "additionalProperties": false,
+        "properties": {
+          "execution_mode": {
+            "const": "background",
+            "title": "Execution Mode",
+            "type": "string"
+          },
+          "expected_version": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Version"
+          },
+          "interaction_protocol": {
+            "const": "configured-cli-v1",
+            "title": "Interaction Protocol",
+            "type": "string"
+          },
+          "namespace_id": {
+            "exclusiveMinimum": 0.0,
+            "title": "Namespace Id",
+            "type": "integer"
+          },
+          "operation_key": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Operation Key"
+          },
+          "report": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Report"
+          },
+          "research_result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BackgroundConclusion"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "run_id": {
+            "not": {
+              "const": "00000000-0000-0000-0000-000000000000"
+            },
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Run Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "interaction_protocol",
+          "execution_mode",
+          "run_id",
+          "namespace_id"
+        ],
+        "title": "BackgroundStep",
+        "type": "object"
+      },
       "ConfiguredArtifactReadback": {
         "additionalProperties": false,
         "properties": {
@@ -774,6 +898,151 @@
         "summary": "Runtime Assign"
       }
     },
+    "/internal/runtime/background/catalog/{namespace_id}/{workflow_id}": {
+      "get": {
+        "description": "Catalog-only readback of the selected immutable background publication.",
+        "operationId": "runtime_background_catalog_internal_runtime_background_catalog__namespace_id___workflow_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "namespace_id",
+            "required": true,
+            "schema": {
+              "title": "Namespace Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "workflow_id",
+            "required": true,
+            "schema": {
+              "title": "Workflow Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Runtime Background Catalog"
+      }
+    },
+    "/internal/runtime/background/runs/{run_id}/history": {
+      "get": {
+        "operationId": "archived_history_internal_runtime_background_runs__run_id__history_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "n",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "N",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "before_history_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Before History Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Archived History"
+      }
+    },
     "/internal/runtime/capabilities": {
       "get": {
         "description": "Return authenticated runtime contract and immutable build provenance.",
@@ -827,10 +1096,17 @@
           {
             "in": "query",
             "name": "task",
-            "required": true,
+            "required": false,
             "schema": {
-              "title": "Task",
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Task"
             }
           },
           {
@@ -961,6 +1237,22 @@
             }
           },
           {
+            "in": "query",
+            "name": "background_run",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Background Run"
+            }
+          },
+          {
             "in": "header",
             "name": "authorization",
             "required": false,
@@ -1031,6 +1323,9 @@
                   },
                   {
                     "$ref": "#/components/schemas/StandaloneStep"
+                  },
+                  {
+                    "$ref": "#/components/schemas/BackgroundStep"
                   }
                 ],
                 "title": "Payload"

@@ -13,6 +13,8 @@ OUTPUT = Path(__file__).resolve().parents[1] / "docs" / "runtime-openapi.json"
 RUNTIME_PATHS = {
     "/internal/runtime/capabilities", "/internal/runtime/assign", "/internal/runtime/step",
     "/internal/runtime/history", "/internal/runtime/terminal-receipt/readback",
+    "/internal/runtime/background/catalog/{namespace_id}/{workflow_id}",
+    "/internal/runtime/background/runs/{run_id}/history",
 }
 
 

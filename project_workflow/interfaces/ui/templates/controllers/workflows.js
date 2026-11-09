@@ -4,6 +4,7 @@ window.WorkflowPageControllers["workflows"] = function(page, config){
 const fetch=page.fetch,showToast=page.notify,showRequestError=()=>showToast("Не удалось связаться с сервером","error");
 
 {% include "controllers/workflow-navigation.js" %}
+{% if can_administer %}{% include "controllers/background-catalog.js" %}{% endif %}
 
 function selectMode(modeId){
   const parsed=Number(modeId);
@@ -74,7 +75,7 @@ let previousWorkflowId = selectedWorkflowId;
 let workflowFormMode = selectedWorkflowId == null ? 'create' : 'edit';
 let workflowEditorVisible = selectedWorkflowId == null;
 let workflowWritePending = false;
-window.hasUnsavedWorkflowChanges=()=>workflowWritePending||phaseWritePending||workflowNeedsReadback;
+window.hasUnsavedWorkflowChanges=()=>workflowWritePending||phaseWritePending||workflowNeedsReadback||backgroundCatalogDirty();
 
 function workflowApiUrl(workflowId){
   var url = new URL('' + config.basePath + '/api/workflows' + (workflowId == null ? '' : '/' + workflowId), window.location.origin);
@@ -82,7 +83,7 @@ function workflowApiUrl(workflowId){
   return url.pathname + url.search;
 }
 function workflowById(id){ return workflowStore.find(function(workflow){ return workflow.id === id; }); }
-function historicalPmSelected(){ return workflowById(selectedWorkflowId)?.key === 'single-task-v1:project_manager'; }
+function historicalPmSelected(){ const key=workflowById(selectedWorkflowId)?.key;return key==='single-task-v1:project_manager'||key?.startsWith('fleet:background:'); }
 function workflowSelectionUrl(workflowId){
   var url = new URL(window.location.href);
   url.pathname = '' + config.basePath + '/workflows';
@@ -201,6 +202,7 @@ function cancelCreateWorkflow(){
   selectWorkflow(fallbackId);
 }
 function workflowFormDirty(){
+  if(backgroundCatalogDirty())return true;
   const form=document.getElementById('workflowForm');
   if(!form||form.hidden)return false;
   const original=workflowFormMode==='create'?null:workflowById(selectedWorkflowId);
@@ -466,6 +468,6 @@ workflowIdFromUrl:typeof workflowIdFromUrl==='function'?workflowIdFromUrl:undefi
 workflowSelectionUrl:typeof workflowSelectionUrl==='function'?workflowSelectionUrl:undefined,
 });
 page.handlesHistory=true;
-page.busy=()=>typeof workflowWritePending!=='undefined'&&(workflowWritePending||phaseWritePending);
+page.busy=()=>typeof workflowWritePending!=='undefined'&&(workflowWritePending||phaseWritePending||backgroundCatalogState()?.busy);
 };
 })();

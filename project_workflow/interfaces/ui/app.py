@@ -330,6 +330,13 @@ def create_app() -> FastAPI:
     app.post("/internal/runtime/assign", response_model=None)(runtime_api.runtime_assign)
     app.get("/internal/runtime/history", response_model=None)(runtime_api.runtime_history)
     app.get("/internal/runtime/catalog", response_model=None)(runtime_api.runtime_catalog)
+    from .routes import background_cli_api
+    app.get("/internal/runtime/background/runs/{run_id}/history", response_model=None)(
+        background_cli_api.archived_history
+    )
+    app.get("/internal/runtime/background/catalog/{namespace_id}/{workflow_id}", response_model=None)(
+        runtime_api.runtime_background_catalog
+    )
     from project_workflow.domain.single_task_profile import (
         SingleTaskBindingResponse,
         SingleTaskInstallationResponse,

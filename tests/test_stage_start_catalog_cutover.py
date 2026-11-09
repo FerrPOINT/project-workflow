@@ -10,7 +10,6 @@ from project_workflow.domain.catalog_publication import CatalogDraft, CatalogPub
 from project_workflow.infrastructure.db import single_task_catalog as catalog
 from project_workflow.infrastructure.db.session import (
     database_revisions,
-    ensure_migrated,
     get_engine,
     run_alembic_command,
 )
@@ -22,6 +21,8 @@ PREVIOUS = "2f16635c0f588d1f285393b4ad8c163119b4dba4b9918335c821f295e88a4f64"
 PREVIOUS_REVISION = "0030_analyst_baseline_ledger"
 TARGET_REVISION = "0031_explicit_stage_start"
 TARGET_MANIFEST = "852e0647ad8645c9c6280b21c1595b9efa6ff87754d07df8dcc92bcb04f76381"
+# These historical cutover invariants stop at0031; current source-default migration
+# has its own preservation/failure tests and must not change this frozen target.
 
 
 def snapshot(engine):
@@ -54,6 +55,8 @@ def predecessor(database, monkeypatch):
 
 def test_fresh_installation_selects_the_current_start_contract(database):
     engine = database
+    from project_workflow.infrastructure.db.session import ensure_migrated, migration_head
+
     ensure_migrated(engine)
     with SAUnitOfWork(engine) as uow:
         installed = catalog.ensure_single_task_catalog(uow)
@@ -65,7 +68,7 @@ def test_fresh_installation_selects_the_current_start_contract(database):
             assert active["catalog_version"] == 2
             assert all("Before business work, explicitly start" in
                        mode["phases"][0]["instructions"][0]["description"] for mode in active["modes"])
-    assert database_revisions(engine) == {TARGET_REVISION}
+    assert database_revisions(engine) == {migration_head()}
 
 
 @pytest.mark.parametrize("draft_role", [None, "project_manager", "analyst", "architect"])
@@ -96,7 +99,7 @@ def test_cutover_preserves_populated_history_and_pending_drafts(predecessor, dra
                             covered_item_ids=[], missing_item_ids=["original-gap"], blocker_messages=[],
                             evaluation_snapshot={"original": True}, supervisor_response={"complete": False})
     before = snapshot(engine)
-    ensure_migrated(engine)
+    run_alembic_command("upgrade", engine, TARGET_REVISION)
     after = snapshot(engine)
     additive = {"workflow_modes", "phases", "phase_instructions", "phase_checks",
                 "phase_evidence_requirements", "workflow_catalog_publications"}
@@ -129,7 +132,7 @@ def test_cutover_preserves_populated_history_and_pending_drafts(predecessor, dra
                 assert pending == {**original_draft, "active_catalog_version": workflow.active_catalog_version}
     assert len(after["phases"]) == len(before["phases"]) + 33
     assert database_revisions(engine) == {TARGET_REVISION}
-    ensure_migrated(engine)
+    run_alembic_command("upgrade", engine, TARGET_REVISION)
     assert snapshot(engine) == after
 
 
@@ -149,7 +152,7 @@ def test_cutover_failure_rolls_back_all_seven_and_the_migration_ledger(predecess
     # Alembic loads the registered module afresh; patch its existing imported producer.
     monkeypatch.setattr(editor, "publish_baseline", interrupted)
     with pytest.raises(RuntimeError, match="Controlled cutover interruption"):
-        ensure_migrated(engine)
+        run_alembic_command("upgrade", engine, TARGET_REVISION)
     assert len(calls) == 5
     assert snapshot(engine) == before
     assert database_revisions(engine) == {PREVIOUS_REVISION}
@@ -178,7 +181,7 @@ def test_active_operator_publication_requires_explicit_cutover_before_any_write(
     before = snapshot(engine)
     for _ in range(2):
         with pytest.raises(ValueError, match=f"Explicit Start cutover publication required.*single-task-v1:{role}"):
-            ensure_migrated(engine)
+            run_alembic_command("upgrade", engine, TARGET_REVISION)
         assert snapshot(engine) == before
         assert database_revisions(engine) == {PREVIOUS_REVISION}
         with SAUnitOfWork(engine) as uow:
@@ -221,7 +224,7 @@ def test_exact_target_operator_publication_is_sealed_without_overriding_content(
                                    publisher_subject="verified-test-operator")
         assert catalog._observe_profile(uow, *reader(PREVIOUS)).instruction_manifest_sha256 == PREVIOUS
     before = snapshot(engine)
-    ensure_migrated(engine)
+    run_alembic_command("upgrade", engine, TARGET_REVISION)
     after = snapshot(engine)
     for name in ("tasks", "task_runtime_assignments", "task_step_history", "task_phase_events"):
         assert after[name] == before[name], name
@@ -238,7 +241,7 @@ def test_exact_target_operator_publication_is_sealed_without_overriding_content(
         assert editor.publish(uow, workflow_id, draft["catalog_version"], command,
                               publisher_subject="another-current-operator") == published
         assert uow.workflows.get_by_id(workflow_id).active_catalog_version == selected["catalog_version"]
-    ensure_migrated(engine)
+    run_alembic_command("upgrade", engine, TARGET_REVISION)
     assert snapshot(engine) == after
 
 
@@ -264,7 +267,7 @@ def test_almost_target_publication_is_not_silently_replaced(predecessor, monkeyp
             publisher_subject="verified-test-operator")
     before = snapshot(engine)
     with pytest.raises(ValueError, match="Explicit Start cutover publication required"):
-        ensure_migrated(engine)
+        run_alembic_command("upgrade", engine, TARGET_REVISION)
     assert snapshot(engine) == before
     assert database_revisions(engine) == {PREVIOUS_REVISION}
 
@@ -282,6 +285,6 @@ def test_cutover_rejects_unaccepted_predecessor_without_partial_publication(pred
             uow.workflows.update(workflow.id, {"active_catalog_version": workflow.active_catalog_version + 1})
     before = snapshot(engine)
     with pytest.raises((ValueError, editor.ConflictError)):
-        ensure_migrated(engine)
+        run_alembic_command("upgrade", engine, TARGET_REVISION)
     assert snapshot(engine) == before
     assert database_revisions(engine) == {PREVIOUS_REVISION}

@@ -10,6 +10,17 @@ from project_workflow.domain.repositories import UnitOfWork
 CATALOG_PATH = Path(__file__).resolve().parents[2] / "references/background_professions_v1.json"
 
 
+def definition(workflow_key: str | None) -> dict | None:
+    """The background execution scope carries no Tracker stage permissions."""
+    for profession in json.loads(CATALOG_PATH.read_text(encoding="utf-8"))["professions"]:
+        workflow = profession["workflow"]
+        if workflow["key"] == workflow_key:
+            return {"key": workflow_key, "name": workflow["name"], "description": workflow["description"],
+                    "role_key": profession["code"].lower(),
+                    "modes": [{**workflow["mode"], "mode_order": 1, "execution_scopes": ["background"]}]}
+    return None
+
+
 def ensure_background_professions(uow: UnitOfWork) -> dict[str, int]:
     """Provision once in the caller's transaction; preserve existing author edits.
 
@@ -73,6 +84,12 @@ def ensure_background_professions(uow: UnitOfWork) -> dict[str, int]:
         })
         uow.workflows.assign_profession(workflow_id, profession_id)
         existing_ids[code] = profession_id
+    from project_workflow.application.catalog_publication import ensure_background_publication
+
+    for profession_id in existing_ids.values():
+        profession = uow.projects.get_by_id(profession_id)
+        assert profession is not None and profession.workflow_id is not None
+        ensure_background_publication(uow, profession.workflow_id)
     return existing_ids
 
 

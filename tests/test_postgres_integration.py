@@ -303,7 +303,7 @@ def test_pm_ownership_catalog_lock_order_and_incomplete_schema(pg_url, winner):
     assert not schema_is_ready(engine)
     with pytest.raises(DatabaseRecreateRequired):
         ensure_migrated(engine)
-    assert database_revisions(engine) == {"0031_explicit_stage_start"}
+    assert database_revisions(engine) == {"0032_current_source_defaults"}
 
 
 @pytest.mark.integration
@@ -535,7 +535,7 @@ class TestPostgresInitialMigration:
             version = conn.execute(
                 text("SELECT version_num FROM project_workflow.alembic_version")
             ).scalar_one()
-        assert version == migration_head() == "0031_explicit_stage_start"
+        assert version == migration_head() == "0032_current_source_defaults"
         assert schema_is_ready(engine) is True
 
     def test_managed_bootstrap_serializes_with_public_catalog_creation(self, pg_url):
@@ -1217,8 +1217,20 @@ class TestPostgresInitialMigration:
             }
         assert counts == {
             "workflows": installation.workflows + 2, "projects": installation.namespaces + 2,
-            "workflow_modes": installation.modes + 2, "phases": installation.phases + 10, "tasks": 0,
+            # The editable v1 rows remain history; each background workflow has
+            # one new immutable published baseline selected for future runs.
+            "workflow_modes": installation.modes + 4, "phases": installation.phases + 20, "tasks": 0,
         }
+        with engine.connect() as conn:
+            active_modes = conn.execute(text("SELECT count(*) FROM project_workflow.workflow_modes m "
+                "JOIN project_workflow.workflows w ON w.id=m.workflow_id "
+                "WHERE m.catalog_version=w.active_catalog_version")).scalar_one()
+            active_phases = conn.execute(text("SELECT count(*) FROM project_workflow.phases p "
+                "JOIN project_workflow.workflow_modes m ON m.id=p.mode_id "
+                "JOIN project_workflow.workflows w ON w.id=m.workflow_id "
+                "WHERE m.catalog_version=w.active_catalog_version")).scalar_one()
+        assert active_modes == installation.modes + 2
+        assert active_phases == installation.phases + 10
 
     def test_two_concurrent_init_processes_are_idempotent(self, pg_url):
         env = os.environ.copy()
