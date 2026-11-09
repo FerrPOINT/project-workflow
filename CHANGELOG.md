@@ -4,6 +4,10 @@
 
 ### Current Delivery Checkpoint (2026-11-09)
 
+- The agreed acceptance proceeds autonomously without further operator questions.
+  PM business clarification and exact owner consent remain part of the scenario;
+  Analyst/Architect resolve choices independently and record their rationale.
+
 - Registered0032 appends the current seven-role source baseline through the existing
   publisher. Saved publications, task/execution pins and history are unchanged;
   arbitrary active custom instructions require explicit canonical cutover first.
