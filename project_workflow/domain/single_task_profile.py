@@ -8,8 +8,8 @@ from project_workflow.domain.base_admission import Sha256
 from project_workflow.domain.base_binding import DatabaseId
 
 PROFILE = "single-task-v1"
-CATALOG_SHA256 = "7de17343320acb9ed840d45e09694893a2b1bd958c39e1ada713bf20b1752ed6"
-MANIFEST_SHA256 = "920379c0c86455148e6fae35e2007037595c2d1cc82116c392c575c4625ffd28"
+CATALOG_SHA256 = "96f4cdc1ae5c214ed692d4f45f7a55ee56ad5981c9de370850f90b9fdf7637b4"
+MANIFEST_SHA256 = "230d245a4562a25a71d1d167fbfa3deea2276084447046631aade9056252df68"
 RETAINED_CATALOG_SHA256 = "86e6c983b7aa6a2c99da11d1d4b1f1b4563ff913262236903a19bc86bdec2d67"
 RETAINED_MANIFEST_SHA256 = "652a38c0f7bdb48a569aa3fcd5c2e81e153db6e22b5201cfb6ce15c988dd57f3"
 
@@ -21,6 +21,8 @@ class CatalogManifest(NamedTuple):
 # Earlier revisions predate explicit stage start and are available for readback.
 CATALOG_MANIFESTS = {
     MANIFEST_SHA256: CatalogManifest(CATALOG_SHA256, "configured-cli-v1"),
+    "920379c0c86455148e6fae35e2007037595c2d1cc82116c392c575c4625ffd28":
+        CatalogManifest("7de17343320acb9ed840d45e09694893a2b1bd958c39e1ada713bf20b1752ed6", "configured-cli-v1"),
     "852e0647ad8645c9c6280b21c1595b9efa6ff87754d07df8dcc92bcb04f76381":
         CatalogManifest("554c51e937aa85b5b6a13b3f36965b00180ead8d799f3c0b6d0f109ce962944d", "configured-cli-v1"),
     "e502e0e1bed9f4a16e08423a4ac1f0162e5ef6b006d9a9a7540137ac0ec5c08f":

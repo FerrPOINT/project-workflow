@@ -82,43 +82,39 @@ ACTIONS = {
         "Save architecture/plan evidence for the Developer initial mode on this task.",
     ],
     ("developer", "initial"): [
-        "Read the approved architecture/plan and repository rules in the authorized checkout. Verify source "
-        "SHA, branch, allowed paths and input revisions; implement the acceptance criteria of this one task.",
-        "Make the smallest coherent change using existing project patterns. Add meaningful focused tests for "
-        "behavior and failure paths; reproduce the failure before fixing where practical. Run relevant checks "
-        "and inspect the diff. Never weaken checks to obtain a pass.",
-        "Preserve unrelated work and provide the exact candidate SHA/artifact, changed files, test results, "
-        "criterion coverage and known limitations for independent Review. Do not claim completion of the task "
-        "or deployment from implementation success.",
+        "Read the approved architecture and repository rules in the authorized checkout. For a managed "
+        "workspace, use the checkout prepared by Fleet. "
+        "Confirm the assigned branch and SHA, implement the criteria and add focused regression coverage.",
+        "Preserve unrelated work. Commit and push only the assigned candidate ref, then verify the remote SHA.",
+        "Run the checks prescribed by the assigned Forge procedure. For a managed workspace, open the Forge "
+        "pull request and record it with the check operation receipts in Tracker. For an approved OCI task "
+        "pipeline, retain the original build descriptor and its provenance for DevOps.",
     ],
     ("developer", "rework"): [
-        "Read the immutable findings from Review or Testing and the current Rework cycle on this same task. "
-        "Match findings to the rejected candidate and approved requirements; reproduce each defect first.",
-        "Fix every accepted finding in the permitted checkout, add regression coverage and rerun affected "
-        "checks. Record a finding -> change -> verification matrix and explain any unresolved finding as a blocker.",
-        "Publish the exact new candidate and evidence. Successful Rework always returns to Review / Ready, "
-        "then a fresh Testing run, including defects originally discovered in Testing. Previous Review/Testing "
-        "passes do not qualify a changed candidate; never skip directly to Testing or Deployment.",
+        "Read the immutable findings and match them to the reviewed SHA in the authorized checkout. For a "
+        "managed workspace, use the checkout prepared by Fleet.",
+        "Fix accepted findings, add regression coverage and record finding, change and verification. "
+        "Commit and push only the assigned candidate ref, then verify the remote SHA.",
+        "Run the checks prescribed by the assigned Forge procedure. For a managed workspace, verify the pull "
+        "request for the new candidate. For an approved OCI task pipeline, retain the new descriptor. Successful "
+        "Rework always returns to Review / Ready, followed by a fresh Testing run.",
     ],
     ("reviewer", "delivery"): [
-        "Independently inspect the exact candidate diff, architecture, approved criteria, contracts, security "
-        "and test evidence. Follow dataflow and failure paths; run proportionate checks when needed.",
-        "For defects record immutable findings with severity, exact location/ref, reproduction, expected vs "
-        "actual result and acceptance criterion. Choose needs_rework with at least one actionable defect, or "
-        "passed with evidence. Do not repair the candidate in the Reviewer role or hide defects in a passed report.",
-        "Defects go to Rework / Ready on the same task. After Developer rework perform Review again against "
-        "the new candidate; a pass goes to Testing / Ready for a fresh test run. Do not reuse old candidate approval.",
+        "Acknowledge the assigned handoff. Read the accepted Developer result and confirm its candidate identity.",
+        "Publish the Tracker task comment «Проверено» with task-tracker sdlc discussion publish "
+        "--task <task-uuid> --from-file -. Use the current assignment fence and the stable key "
+        "reviewer-ack:<assignment_id>. Read back that operation and save its comment_id.",
+        "Record the acknowledgment, its comment ID and candidate provenance in the report. "
+        "Use approved for the handoff to Testing / Ready. Tester owns functional verification.",
     ],
     ("tester", "delivery"): [
-        "Test the exact independently reviewed candidate against the approved acceptance matrix. Exercise "
-        "positive, negative, boundary, permission and failure/recovery scenarios; distinguish executed, failed "
-        "and untested cases. Missing test environment or evidence is a blocker, not a product pass.",
-        "For defects record immutable findings with severity, exact location/ref, reproduction, expected vs "
-        "actual result and criterion. Choose needs_rework with actionable findings, or passed with actual results "
-        "and evidence covering acceptance. Do not fix code in the Tester role.",
-        "Defects go to Rework / Ready on the same task; the repaired candidate must pass Review and Testing "
-        "again before Deployment. A previous Testing pass or selective retest of findings cannot replace the "
-        "required acceptance checks for the new candidate.",
+        "Read the accepted candidate and assigned verification target. Confirm the workspace and served SHA "
+        "before testing. Missing target or mismatched identity blocks acceptance.",
+        "Exercise the approved acceptance criteria against that target using the configured tools, including "
+        "the browser for user-facing criteria. Record the actual observations for each criterion.",
+        "For defects record immutable findings with severity, reproduction and expected vs actual results. "
+        "Choose passed with actual evidence or rework with actionable findings. Defects go to Rework / Ready "
+        "on the same task, followed by a fresh acknowledgment and test of the repaired candidate.",
     ],
     ("devops", "delivery"): [
         "Verify the exact candidate SHA/artifact accepted by Review and Testing and the authorized deployment "
@@ -139,12 +135,12 @@ ROLE_CHECKS = {
         "An ordered implementation plan covers every criterion without child cards or integration barriers.",
     ],
     "developer": [
-        "The exact candidate implements approved criteria and relevant checks passed with recorded outputs.",
+        "The pull request, published candidate and successful Forge check receipts identify the same SHA.",
         "For rework, every finding has a verified fix or explicit blocker; new Review and Testing are required.",
     ],
     "reviewer": [
-        "The decision covers the exact candidate, contracts, failure paths and approved acceptance criteria.",
-        "passed has no unresolved defects; needs_rework includes at least one immutable actionable finding.",
+        "The Tracker task contains the acknowledged comment and its receipt identifies this assignment.",
+        "The report records the comment ID, approved handoff and exact candidate identity.",
     ],
     "tester": [
         "Results identify actual candidate/environment and executed, failed and untested acceptance cases.",
@@ -158,7 +154,7 @@ ROLE_CHECKS = {
 ROLE_EVIDENCE = {
     "architect": ["Architecture decisions, dataflow, ordered plan, criterion coverage and rollback references."],
     "developer": ["Exact candidate SHA, diff/files and test outputs; rework finding/change/verification matrix."],
-    "reviewer": ["Independent review of exact SHA and passed decision or frozen actionable findings."],
+    "reviewer": ["Tracker comment ID, accepted Developer candidate identity and acknowledgment report receipt."],
     "tester": ["Acceptance matrix with candidate/environment/results and passed decision or frozen defects."],
     "devops": ["Exact artifact provenance, deployment receipt/target, health results and deployed acceptance."],
 }
@@ -396,7 +392,8 @@ def load_single_task_professions() -> list[dict[str, Any]]:
                 contents = [
                     opening,
                     ("Role work on one task", ACTIONS[(role, mode_key)] + [
-                        AUTONOMOUS_BUSINESS_DECISIONS if role == "architect" else CRITICAL_BUSINESS_REVIEW, REPORT],
+                        *([AUTONOMOUS_BUSINESS_DECISIONS] if role == "architect" else
+                          [] if role == "reviewer" else [CRITICAL_BUSINESS_REVIEW]), REPORT],
                      ROLE_CHECKS[role] + [
                          "Unresolved blockers remain explicit; no additional Tracker tasks were created."],
                      ROLE_EVIDENCE[role]),

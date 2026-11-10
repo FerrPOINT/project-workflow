@@ -201,13 +201,9 @@ FORGE_IMAGE_BUILD = (
 ROLE_IMAGE_BUILD = {
     "developer": FORGE_IMAGE_BUILD
     + (
-        "In Developer initial AND rework, author the real application Dockerfile and typed build recipe "
-        "only in the approved writable checkout/branch, then freeze their actual candidate commit SHA. "
-        "Use the current assignment UUID as the original task pipeline key for that frozen candidate; "
-        "do not spend it on a "
-        "preliminary base-SHA build and later change the original intent/body to another commit. Retain "
-        "the server-produced descriptor artifact ID/raw SHA, exact pipeline/job/attempt and original "
-        "workspace receipt in sealed changes/checks. Build success is not Review, Testing or deployment. "
+        "For the approved OCI task pipeline, build once from the final pushed candidate and seal the "
+        "descriptor artifact ID and raw SHA, exact pipeline/job/attempt and original task-workspace receipt "
+        "in changes/checks. Review and Testing must retain this provenance for DevOps. "
     ),
     "devops": FORGE_IMAGE_BUILD
     + (
@@ -234,23 +230,27 @@ ROLE_SOURCE_EVIDENCE = {
         "implementation checks as future work, not as a completed implementation or build proof. "
     ),
     "developer": (
-        "In Developer initial AND rework sealed changes/checks retain the actual candidate commit SHA, "
-        "approved repository/branch/base coordinates, real build pipeline ID, original pipeline/workspace "
-        "operation keys and actual workspace receipt reference/hash or exact receipt bytes with their SHA. "
-        "Record actual artifact/check provenance; a local filename or guessed Forge URL is not a receipt. "
-        "Developer CANNOT embed its own acceptedDeveloperResultId: Tracker allocates that accepted result "
-        "only AFTER native terminal and Fleet scheduler Complete. Do not invent the UUID, wait for your own "
-        "future accepted result/transition inside the active run, or make it a precondition of sealing "
-        "changes/checks or final Workflow completion. Publish current artifacts, complete Workflow, submit "
-        "the real proposal with the supplied key and finish the native run using the existing final instructions. "
+        "For initial and rework use the candidate ref in Tracker source_binding. When it specifies "
+        "development_workspace_id, confirm the card and Fleet-prepared checkout before editing. After pushing, "
+        "select the published commit "
+        "with cicd-cli dev-workspace prepare using the Fleet workspace root and the profile repository key. "
+        "Run only published check recipes required by the workspace profile and task. Save each operation ID "
+        "before waiting and read the original operation if the outcome is unknown. Save the actual operation "
+        "receipts for Fleet to verify. Open or read back the candidate PR using the configured Forge identity. "
+        "Seal the exact remote SHA, PR and successful check operation IDs and receipts in changes/checks. "
+        "Fleet owns session closure. For an assignment using the approved task pipeline, seal the exact "
+        "remote SHA, successful PipelineDetail, original task-workspace receipt and the OCI descriptor "
+        "provenance required by the delivery policy. The accepted Developer result is allocated after native "
+        "terminal and Tracker completion. Finish the run after the typed proposal readback without waiting "
+        "for that future result. "
     ),
     "reviewer": (
         "Reviewer obtains actual acceptedDeveloperResultId from this assignment's supplied previous_result_id "
         "AFTER Developer Complete. Read task-tracker sdlc result read --task <task-uuid> --result "
         "<accepted-developer-result-uuid>; require source=delivery, matching task/cycle, role=developer and "
-        "exact candidate commit_sha, then verify the sealed changes/checks and their build/workspace "
+        "exact candidate commit_sha, then read the sealed changes/checks and their workspace "
         "provenance. Embed that verified Developer result ID, candidate SHA, approved source coordinates and "
-        "actual pipeline/workspace receipt references in the Reviewer's own sealed report. Do not amend "
+        "actual pipeline/workspace receipt references in the Reviewer's own sealed acknowledgment report. Do not amend "
         "Developer artifacts to insert a future ID or wait for your own future accepted Reviewer result. "
     ),
     "tester": (
@@ -407,6 +407,16 @@ def context_instruction(role: str) -> str:
             "or successful download alone is not proof. Missing required source access or mismatched "
             "identity is a technical blocker, not permission to broaden rights or borrow credentials. "
         )
+    if role == "developer":
+        return common + artifact_instruction(role) + (
+            "Follow the approved task pipeline procedure below only when the assignment has no "
+            "development_workspace_id and explicitly uses the task pipeline. Confirm the authorized checkout "
+            "and candidate ref before editing. Never use this procedure to replace a missing or failed "
+            "assigned development workspace. A delivery policy requiring OCI task-pipeline provenance "
+            "needs that exact provenance before handoff. "
+        ) + SOURCE_CONTEXT + FORGE_TASK_WORKSPACE + ROLE_IMAGE_BUILD[role]
+    if role in {"reviewer", "tester"}:
+        return common + artifact_instruction(role)
     return common + SOURCE_CONTEXT + FORGE_TASK_WORKSPACE + ROLE_IMAGE_BUILD.get(role, "") + artifact_instruction(role)
 
 
@@ -524,7 +534,8 @@ PM_CONFIRMATION_EVIDENCE = [
 
 def completion_instruction(role: str) -> str:
     comment = (
-        "AFTER accepted Workflow complete=true, publish an ordinary final Tracker comment with "
+        "AFTER accepted Workflow complete=true, read back the required stage comment if the assigned phase "
+        "already published it. Otherwise publish an ordinary final Tracker comment with "
         "task-tracker sdlc discussion publish --task <task-uuid> --from-file - and JSON on stdin: "
         "fence={assignment_id,execution_id,agent_id,assignment_version} from fresh context.assignment, "
         "body and a stable idempotency_key. Include result, checks, evidence, limitations and intended "
@@ -620,6 +631,12 @@ def terminal_instruction(role: str) -> str:
             "substitute. Report the actual architecture, ordered implementation plan, coverage and "
             "verification of its saved content. Technical result metadata remains separate from the "
             "substantive report. Tracker proposal and handoff are subsequent actions after acceptance. "
+        )
+    if role == "reviewer":
+        return common + (
+            "Prepare the typed Reviewer result with verdict approved and the verified acknowledgment report. "
+            "The report records the existing Tracker comment ID, exact candidate and Testing / Ready handoff. "
+            "An acknowledgment does not certify independent code review or acceptance testing. "
         )
     return common + (
         f"Prepare {RESULTS[role]} from verified saved role artifacts and the exact assigned candidate. "

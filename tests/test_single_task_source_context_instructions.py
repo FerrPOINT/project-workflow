@@ -13,7 +13,7 @@ MODES = [
     ("analyst", "analysis"), ("architect", "decomposition"), ("developer", "initial"),
     ("developer", "rework"), ("reviewer", "delivery"), ("tester", "delivery"), ("devops", "delivery"),
 ]
-WORKSPACE_MODES = [pair for pair in MODES if pair[0] not in {"analyst", "architect"}]
+WORKSPACE_MODES = [("devops", "delivery")]
 TRIGGER = (
     "cicd-cli pipeline run --project <approved-forge-project-uuid> --git-ref <exact-source-sha> "
     "--idempotency-key <assignment-uuid> --task-intent -"
@@ -146,16 +146,20 @@ def test_typed_image_build_is_role_scoped_and_server_capability_is_separate(gene
 
 
 @pytest.mark.parametrize("mode", ["initial", "rework"])
-def test_developer_freezes_actual_candidate_before_original_typed_build(generated, mode):
+def test_developer_uses_the_assigned_workspace_and_checks_the_remote_candidate(generated, mode):
     catalog, _ = generated
-    context = mode_for(catalog, "developer", mode)["phases"][0]["instructions"][1]["description"]
-    for required in (
-        "Developer initial AND rework", "approved writable checkout/branch",
-        "freeze their actual candidate commit SHA", "original task pipeline key for that frozen candidate",
-        "do not spend it on a preliminary base-SHA build", "server-produced descriptor artifact ID/raw SHA",
-        "exact pipeline/job/attempt and original workspace receipt", "not Review, Testing or deployment",
-    ):
-        assert required in context
+    phases = mode_for(catalog, "developer", mode)["phases"]
+    context, work, final = map(instruction_text, phases)
+    assert "checkout prepared by Fleet" in work
+    assert "assigned candidate ref" in work and "verify the remote SHA" in work
+    for required in ("Tracker source_binding", "cicd-cli dev-workspace prepare",
+                     "published check recipes", "read the original operation", "Fleet owns session closure"):
+        assert required in context and required in final
+    assert "When it specifies development_workspace_id" in context
+    assert "explicitly uses the task pipeline" in context
+    assert "Never use this procedure to replace a missing or failed assigned development workspace" in context
+    assert TRIGGER in context and "descriptor artifact ID and raw SHA" in context
+    assert "original task-workspace receipt and the OCI descriptor provenance" in final
 
 
 def test_devops_uses_accepted_descriptor_not_preloaded_or_new_build_substitute(generated):
@@ -208,11 +212,8 @@ def test_developer_seals_current_build_evidence_without_own_future_result_id(gen
     for phase in (selected["phases"][0], selected["phases"][-1]):
         assert source in " ".join(i["description"] for i in phase["instructions"])
     for required in (
-        "initial AND rework", "actual candidate commit SHA", "real build pipeline ID",
-        "original pipeline/workspace operation keys", "actual workspace receipt",
-        "Developer CANNOT embed its own acceptedDeveloperResultId", "only AFTER native terminal",
-        "Fleet scheduler Complete", "Do not invent the UUID", "future accepted result/transition",
-        "or make it a precondition of sealing changes/checks or final Workflow completion",
+        "For initial and rework", "exact remote SHA", "check operation IDs and receipts",
+        "allocated after native terminal", "without waiting for that future result",
     ):
         assert required in source
     terminal = instruction_text(selected["phases"][-1])
@@ -228,7 +229,7 @@ def test_reviewer_first_reads_actual_developer_result_then_seals_verified_proven
     for required in (
         "supplied previous_result_id AFTER Developer Complete", "task-tracker sdlc result read",
         "source=delivery", "matching task/cycle", "role=developer", "exact candidate commit_sha",
-        "Embed that verified Developer result ID", "Reviewer's own sealed report",
+        "Embed that verified Developer result ID", "Reviewer's own sealed acknowledgment report",
         "Do not amend Developer artifacts", "wait for your own future accepted Reviewer result",
     ):
         assert required in source
