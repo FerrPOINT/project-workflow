@@ -9,6 +9,11 @@ Tracker/Fleet source integration уже реализована; source qualifica
 
 Каталог определяет `role_key`, точные идентификаторы профессии и Workflow и
 профиль запуска для [комплекта агента Fleet](https://github.com/FerrPOINT/fleet-control/blob/main/docs/AGENT_DEFAULTS.md#комплект-агента).
+В ответе установки `required_tools` сопоставляет `role_key` и обязательные
+инструменты. Tracker и Workflow добавляются для каждой профессии.
+Дополнительные инструменты для новых и существующих профессий задаёт
+`PROFESSION_TOOL_REQUIREMENTS` в `project_workflow/domain/single_task_profile.py`.
+Base готовит зависимости по ответу установки.
 Список дефолтных агентов берётся из установленного каталога; семь профессий —
 состав версии 1. Учётку, секреты, ключ AI Hub и экземпляр подготавливает шаг
 установки платформы. Workflow публикует и подтверждает привязку.

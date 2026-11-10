@@ -443,7 +443,7 @@ def test_catalog_adds_profession_without_replacing_installed_ids(database, monke
     extra = deepcopy(next(item for item in extended["workflows"] if item["role_key"] == "analyst"))
     extra.pop("previous_baseline_manifest_sha256", None)
     extra["role_key"] = "researcher"
-    extra["required_tools"] = ["wiki"]
+    monkeypatch.setitem(catalog.PROFESSION_TOOL_REQUIREMENTS, "researcher", ("wiki",))
     extra["key"] = "single-task-v1:researcher"
     extra["namespace"].update(name="single-task-researcher", cli_command="workflow-single-task-researcher",
                               launch_profile="single-task-v1-researcher")
