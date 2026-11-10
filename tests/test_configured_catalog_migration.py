@@ -77,14 +77,14 @@ def assert_populated_catalog_upgrade_preserves_history(engine, monkeypatch, pred
         with SAUnitOfWork(engine) as uow:
             current = catalog.observe_installation(uow)
             assert current.instruction_manifest_sha256 == (
-                "852e0647ad8645c9c6280b21c1595b9efa6ff87754d07df8dcc92bcb04f76381"
+                "d035a0ddb06436714b76e40bc8cb68084203011f53dd52436732367690940e85"
             )
             analyst = next(b for b in current.bindings if b.role_key == "analyst")
             assert len(analyst.modes[0].phase_ids) == 12
             from project_workflow.application.catalog_publication import read_revision
 
             workflow = uow.workflows.get_by_id(int(analyst.workflow_id))
-            assert workflow.active_catalog_version == 4
+            assert workflow.active_catalog_version == 5
             assert len(read_revision(uow, workflow, 1)["modes"][0]["phases"]) == 3
             assert len(read_revision(uow, workflow, 2)["modes"][0]["phases"]) == 12
         with engine.connect() as connection:
@@ -92,7 +92,7 @@ def assert_populated_catalog_upgrade_preserves_history(engine, monkeypatch, pred
                 assert connection.execute(sa.text(f"SELECT * FROM {name}")).mappings().all() == rows
             after_phases = connection.execute(sa.text("SELECT id,code,mode_id FROM phases ORDER BY id")).all()
             assert after_phases[:len(phases)] == phases
-            assert len(after_phases) == len(phases) + 24 + 33
+            assert len(after_phases) == len(phases) + 24 + 33 + 33
             new_modes = connection.execute(sa.text(
                 "SELECT id FROM workflow_modes"
             )).scalars().all()
@@ -111,7 +111,7 @@ def assert_populated_catalog_upgrade_preserves_history(engine, monkeypatch, pred
                     "SELECT id,phase_id FROM phase_evidence_requirements ORDER BY id"
                 )).all()[:len(evidence)] == evidence
             assert (
-                "0031_explicit_stage_start"
+                "0032_current_source_baseline"
                 == connection.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one()
             )
     finally:

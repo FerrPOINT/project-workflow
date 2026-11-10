@@ -1,6 +1,36 @@
 # Changelog
 
-## Unreleased — Advisor V19 Installed, Analyst Acceptance Pending
+## Unreleased - Advisor V19 Installed, Three-Agent Acceptance Pending
+
+### Current Delivery Checkpoint (2026-11-09)
+
+- The agreed acceptance proceeds autonomously without further operator questions.
+  PM business clarification and exact owner consent remain part of the scenario;
+  Analyst/Architect resolve choices independently and record their rationale.
+
+- Registered0032 appends the current seven-role source baseline through the existing
+  publisher. Saved publications, task/execution pins and history are unchanged;
+  arbitrary active custom instructions require explicit canonical cutover first.
+  A latest-shipping-default regression detects a missing future source transition.
+- Native qualification is composite:4845 unique passing cases plus75 subtests,
+  coverage94.1202%;199 unique PostgreSQL cases and mypy178 pass. PostgreSQL has
+  zero skips, including actual CLI/HTTP and a separate empty application-clock DB.
+  The earlier failed full run remains failed evidence. Fifteen native skipped
+  opt-in/platform/browser cases are not silently counted as passes.
+- Prior36/36 retain semantic applicability; Responses/no-cap are evidenced
+  separately by controls and SDLC40/41. Migration0032 changes neither model boundary.
+- Workflow8d853aff and Trackeraf1771e9 are installed by normal joint Build/Apply.
+  Registered0032 preserved39 tasks,220 history rows,40 assignments and160 events;
+  seven source receipts were appended without changing old publications. PM/AN
+  business publications are restored, and all three new configurations validated.
+  PM activation is pending: a verified native ACK was not saved before Fleet's
+  synthetic60-second human scope cancelled the request. The expired operation
+  remains held; its readback is not new authority. SDK source correction is
+  qualified, but Fleet delivery and two fresh three-agent chains remain open.
+  Advisor v19, its model/settings and original Hermes are unchanged.
+- Former-executor history409 after stage handoff is the existing current-assignment
+  boundary, not demonstrated history loss. Authorized service readers retain
+  archive access; their credentials are not granted to the former executor.
 
 ### Current Live Checkpoint (2026-11-08)
 

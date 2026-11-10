@@ -23,7 +23,6 @@ from tests import test_single_task_installation as installation
 
 PREVIOUS_FIRST_STEP = "e502e0e1bed9f4a16e08423a4ac1f0162e5ef6b006d9a9a7540137ac0ec5c08f"
 FIRST_STEP_RELEASE = "852e0647ad8645c9c6280b21c1595b9efa6ff87754d07df8dcc92bcb04f76381"
-AUTONOMOUS_RELEASE = "920379c0c86455148e6fae35e2007037595c2d1cc82116c392c575c4625ffd28"
 
 
 def test_first_step_profile_changes_only_opening_worker_description():
@@ -45,9 +44,9 @@ def test_first_step_profile_changes_only_opening_worker_description():
     assert expected == current
 
 
-def test_published_autonomous_profile_preserves_phase_contracts_and_other_roles():
+def test_current_autonomous_profile_preserves_phase_contracts_and_other_roles():
     previous, _ = catalog.load_profile(FIRST_STEP_RELEASE)
-    current, _ = catalog.load_profile(AUTONOMOUS_RELEASE)
+    current, _ = catalog.load_profile()
     assert len(previous["workflows"]) == len(current["workflows"])
     for old_workflow, new_workflow in zip(previous["workflows"], current["workflows"], strict=True):
         role = old_workflow["role_key"]

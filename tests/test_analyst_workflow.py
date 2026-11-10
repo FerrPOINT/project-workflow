@@ -173,6 +173,9 @@ def test_enrolled_analyst_continues_original_three_phases_after_structural_upgra
                 importlib.import_module(
                     "project_workflow.infrastructure.db.migrations.versions.0031_explicit_stage_start"
                 ).upgrade()
+                importlib.import_module(
+                    "project_workflow.infrastructure.db.migrations.versions.0032_current_source_baseline"
+                ).upgrade()
         assert enroll(context) == original
         assert step(context).json() == before
         assert step(context, **command).json() == accepted

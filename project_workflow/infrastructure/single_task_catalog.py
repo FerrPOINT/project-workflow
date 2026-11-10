@@ -290,12 +290,14 @@ ANALYST_PHASES = [
     ),
     (
         "Initial specification",
-        "Assemble ONE coherent analysis.md: approved PM revision/hash and pinned source commit; objective "
+        "Assemble ONE coherent analysis.md: approved PM document/revision and reviewed source versions; objective "
         "and scope; glossary/domain/process; actors/rights, scenarios, rules, data/integrations; supported "
         "quality constraints, dependencies and risks; acceptance and coverage; source register with versions "
         "or access dates, relevant excerpts and stable references; hypotheses, assumptions, unread material "
         "and search limitations. Remove duplication and ambiguity. The document describes the subject, "
-        "not CLI/Workflow logs or its own future receipt. An incomplete analysis must state that status "
+        "not CLI/Workflow logs or its own future receipt. Keep exact source commit coordinates, technical "
+        "hashes and Tracker authority binding in existing command metadata and readbacks, not in this "
+        "business document or Workflow report. An incomplete analysis must state that status "
         "and its mandatory gaps explicitly; it is still worth preserving in the same task.",
         ["One coherent initial specification faithfully reflects the approved scope and actual research.",
          "Sources, conclusions, assumptions, limitations and mandatory gaps are explicit; "

@@ -1,7 +1,7 @@
 {
   "instruction_overlay": {
     "path": "project_workflow/infrastructure/single_task_delivery_instructions.py",
-    "sha256": "5a79f93787e9d62611dec266a07155446bda7304702c5bdad14e4241ab9e9cd4"
+    "sha256": "81d350fb978e990bff2d48b33742628a4c4376ee50bd6b11eb026c21284e14c2"
   },
   "instruction_profile": "single-task-v1",
   "instruction_source": {
@@ -12,7 +12,7 @@
       "sha256": "d6d18f98b55f14210a3f0e12404074705495d535aa8ba29ae449624b845668c9"
     },
     "path": "project_workflow/infrastructure/single_task_catalog.py",
-    "sha256": "48dda1d4e05ab79ee05e4d1aa005fe08a725bfc460e2f82d3dd93a776fe7af6e"
+    "sha256": "f91f5dce582f5fa485dd0059701d968533b2394aca856e790e8f94a2bee0822a"
   },
   "inventory": {
     "modes": 8,
@@ -34,7 +34,7 @@
       "namespace_cli_command": "workflow-single-task-analyst",
       "namespace_name": "single-task-analyst",
       "profile": "single-task-v1-analyst",
-      "role_instructions_sha256": "a0115d4977483eed1602514af8c9573af8ea0b95620a3cb6c4918f116318ef03",
+      "role_instructions_sha256": "ea31bd2cfd06c994a4a1259659dba5fc9f60224cf5df854b22e4ad72044be02d",
       "workflow_key": "single-task-v1:analyst"
     },
     "architect": {
@@ -47,7 +47,7 @@
       "namespace_cli_command": "workflow-single-task-architect",
       "namespace_name": "single-task-architect",
       "profile": "single-task-v1-architect",
-      "role_instructions_sha256": "07ef93ec8b4420d0d012a761a33a04ad5139015a0f267562d1f6b6f3a019aff6",
+      "role_instructions_sha256": "4940c849cd70cd177fc2ce3f4b27585c9a7332d62c24265e91bf66e39edd31d1",
       "workflow_key": "single-task-v1:architect"
     },
     "developer": {
@@ -128,7 +128,7 @@
   "workflow_catalog": {
     "artifact": "project_workflow/references/single_task_catalog_v1.json",
     "hash_encoding": "utf-8-lf-no-bom-with-final-newline",
-    "sha256": "96f4cdc1ae5c214ed692d4f45f7a55ee56ad5981c9de370850f90b9fdf7637b4",
+    "sha256": "a0390b7ae6556432f47beda3ede356eff11d72d45422678b1549cf08cd77540b",
     "version": 1
   }
 }

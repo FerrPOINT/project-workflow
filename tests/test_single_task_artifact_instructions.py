@@ -152,7 +152,8 @@ def test_architect_seals_exact_structured_plan_before_report_and_proposes_only_a
                      "Unknown save acceptance requires original-key operation readback",
                      "403, unavailable API, missing source, hash mismatch or stale fence",
                      "not permission to fall back to an attachment", "Never overwrite history",
-                     "keep technical receipts in command metadata", "PRECOMMIT ASSESSMENT ONLY",
+                     "Keep source metadata, section IDs and technical receipts in existing save/read/proposal metadata",
+                     "PRECOMMIT ASSESSMENT ONLY",
                      "own future terminal receipt", "not a future Developer candidate"):
         assert required in final
     assert final.index("decomposition save --task") < final.index("decomposition operation --task")
@@ -167,7 +168,38 @@ def test_architect_seals_exact_structured_plan_before_report_and_proposes_only_a
         assert required in after
 
 
-def test_delivery_defaults_keep_other_roles_and_phase_identity(generated):
+def test_architect_business_report_uses_complete_saved_projection_not_receipt_envelope(generated):
+    catalog, _ = generated
+    final = phase_text(mode_for(catalog, "architect", "decomposition")["phases"][-1])
+    for required in (
+        "extract the business fields directly from the verified saved content",
+        "the full overview and ordered sections containing title, "
+        "description, criteria and requirements, copied verbatim from that readback",
+        "business document as result.artifacts[].content, with actual verification facts reported separately",
+        "do not summarize or retype its strings or copy the API envelope",
+        "Write the plan's overview and section business fields without raw service hashes or UUIDs",
+        "Record planned implementation checks as future work, not as a completed implementation or build proof",
+    ):
+        assert required in final
+
+
+def test_analyst_business_document_keeps_provenance_in_existing_metadata(generated):
+    catalog, _ = generated
+    phases = mode_for(catalog, "analyst", "analysis")["phases"]
+    specification = phase_text(phases[10])
+    final = phase_text(phases[11])
+    assert "approved PM document/revision and reviewed source versions" in specification
+    assert "not in this business document or Workflow report" in specification
+    for required in (
+        "approved PM document/revision, reviewed source versions, relevant repository paths",
+        "published document revisions or access dates",
+        "Keep exact source commit coordinates, requirements hashes and Tracker authority binding",
+        "existing command metadata and readbacks, not in the business analysis.md or Workflow report",
+    ):
+        assert required in final
+
+
+def test_defaults_keep_unaffected_roles_and_phase_identity(generated):
     catalog, _ = generated
     old, _ = load_profile("920379c0c86455148e6fae35e2007037595c2d1cc82116c392c575c4625ffd28")
     before = {workflow["role_key"]: workflow for workflow in old["workflows"]}
@@ -175,7 +207,7 @@ def test_delivery_defaults_keep_other_roles_and_phase_identity(generated):
     for workflow in catalog["workflows"]:
         role = workflow["role_key"]
         original = before[role]
-        if role not in {"developer", "reviewer", "tester"}:
+        if role not in {"analyst", "architect", "developer", "reviewer", "tester"}:
             assert workflow == original
             continue
         for current_mode, old_mode in zip(workflow["modes"], original["modes"], strict=True):
