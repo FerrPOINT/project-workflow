@@ -1,7 +1,7 @@
 {
   "instruction_overlay": {
     "path": "project_workflow/infrastructure/single_task_delivery_instructions.py",
-    "sha256": "8aaa73f0a4fb8c791f5e9089c9dcebe5f0c63052362e9f847d664e3ede31957a"
+    "sha256": "c317674d22e9af71ce277355a6513313776ca79db3698e89ca151c1ec290e992"
   },
   "instruction_profile": "single-task-v1",
   "instruction_source": {
@@ -13,7 +13,7 @@
     },
     "path": "project_workflow/infrastructure/single_task_catalog.py",
     "repository": "https://github.com/FerrPOINT/project-workflow.git",
-    "sha256": "9eeb42c6a4499960f51ba405bd87def1b9e251508b0ee0eb8fa1a1c1ab5b2352"
+    "sha256": "d8beec7f59f0f0b12f250174d657d7004107fe1afd059f03f31246ccb2d84917"
   },
   "inventory": {
     "modes": 8,
@@ -64,7 +64,7 @@
       "namespace_cli_command": "workflow-single-task-developer",
       "namespace_name": "single-task-developer",
       "profile": "single-task-v1-developer",
-      "role_instructions_sha256": "4f3fbe7371ef17d0adf8ca783e521c7b8933b4962f9ceff9d977f76248826f12",
+      "role_instructions_sha256": "993fe32379e96864871868c825be4f29beb6d7063243b4dd08a36de05f453f17",
       "workflow_key": "single-task-v1:developer"
     },
     "devops": {
@@ -103,7 +103,7 @@
       "namespace_cli_command": "workflow-single-task-reviewer",
       "namespace_name": "single-task-reviewer",
       "profile": "single-task-v1-reviewer",
-      "role_instructions_sha256": "26f81b5757d1b7cdad5c92dd0f1b05d7a301b9c2cebca95042c170cbe3f1700d",
+      "role_instructions_sha256": "3ed02e163ed996c2df0d7537c95a940941c2d0e7dceeea88fff4018d9895d174",
       "workflow_key": "single-task-v1:reviewer"
     },
     "tester": {
@@ -116,7 +116,7 @@
       "namespace_cli_command": "workflow-single-task-tester",
       "namespace_name": "single-task-tester",
       "profile": "single-task-v1-tester",
-      "role_instructions_sha256": "f1729902b3654dedc8e28945aad3f27180c5d2332463d2a122540e5e2a319879",
+      "role_instructions_sha256": "97ac6fa24d5e00f5312738bbf852c39309b09809366d72501e17a24bdc34163b",
       "workflow_key": "single-task-v1:tester"
     }
   },
@@ -129,7 +129,7 @@
   "workflow_catalog": {
     "artifact": "project_workflow/references/single_task_catalog_v1.json",
     "hash_encoding": "utf-8-lf-no-bom-with-final-newline",
-    "sha256": "7de17343320acb9ed840d45e09694893a2b1bd958c39e1ada713bf20b1752ed6",
+    "sha256": "fce7be33dd1331f8f2dfeabe0f6d68997635624fac87294e7f7244b2b5a9c172",
     "version": 1
   }
 }
