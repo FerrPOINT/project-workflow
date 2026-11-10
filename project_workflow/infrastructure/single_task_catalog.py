@@ -82,17 +82,21 @@ ACTIONS = {
         "Save architecture/plan evidence for the Developer initial mode on this task.",
     ],
     ("developer", "initial"): [
-        "Read the approved architecture and repository rules in the checkout prepared by Fleet. "
+        "Read the approved architecture and repository rules in the authorized checkout. For a managed "
+        "workspace, use the checkout prepared by Fleet. "
         "Confirm the assigned branch and SHA, implement the criteria and add focused regression coverage.",
         "Preserve unrelated work. Commit and push only the assigned candidate ref, then verify the remote SHA.",
-        "Run the published workspace checks and open the Forge pull request for the verified candidate. "
-        "Record the PR and successful check operation receipts in Tracker.",
+        "Run the checks prescribed by the assigned Forge procedure. For a managed workspace, open the Forge "
+        "pull request and record it with the check operation receipts in Tracker. For an approved OCI task "
+        "pipeline, retain the original build descriptor and its provenance for DevOps.",
     ],
     ("developer", "rework"): [
-        "Read the immutable findings and match them to the reviewed SHA in the checkout prepared by Fleet.",
+        "Read the immutable findings and match them to the reviewed SHA in the authorized checkout. For a "
+        "managed workspace, use the checkout prepared by Fleet.",
         "Fix accepted findings, add regression coverage and record finding, change and verification. "
         "Commit and push only the assigned candidate ref, then verify the remote SHA.",
-        "Run the published workspace checks and verify the pull request for the new candidate. Successful "
+        "Run the checks prescribed by the assigned Forge procedure. For a managed workspace, verify the pull "
+        "request for the new candidate. For an approved OCI task pipeline, retain the new descriptor. Successful "
         "Rework always returns to Review / Ready, followed by a fresh Testing run.",
     ],
     ("reviewer", "delivery"): [

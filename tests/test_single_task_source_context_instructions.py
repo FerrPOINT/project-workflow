@@ -120,7 +120,7 @@ def test_first_workspace_uses_actual_task_trigger_and_real_server_allocated_rece
 def test_typed_image_build_is_role_scoped_and_server_capability_is_separate(generated, role, mode):
     catalog, _ = generated
     context = mode_for(catalog, role, mode)["phases"][0]["instructions"][1]["description"]
-    if role != "devops":
+    if role not in {"developer", "devops"}:
         assert instructions.FORGE_IMAGE_BUILD not in context
         return
     assert instructions.FORGE_IMAGE_BUILD in context
@@ -155,7 +155,11 @@ def test_developer_uses_the_assigned_workspace_and_checks_the_remote_candidate(g
     for required in ("Tracker source_binding", "cicd-cli dev-workspace prepare",
                      "published check recipes", "read the original operation", "Fleet owns session closure"):
         assert required in context and required in final
-    assert TRIGGER not in context and instructions.FORGE_IMAGE_BUILD not in context
+    assert "When it specifies development_workspace_id" in context
+    assert "explicitly uses the task pipeline" in context
+    assert "Never use this procedure to replace a missing or failed assigned development workspace" in context
+    assert TRIGGER in context and "descriptor artifact ID and raw SHA" in context
+    assert "original task-workspace receipt and the OCI descriptor provenance" in final
 
 
 def test_devops_uses_accepted_descriptor_not_preloaded_or_new_build_substitute(generated):
