@@ -8,6 +8,9 @@ import pytest
 from pydantic import ValidationError
 from sqlalchemy import select
 
+from project_workflow.application.catalog_publication import publish_packaged_catalog, read_revision, save_draft
+from project_workflow.domain.catalog_publication import CatalogDraft
+from project_workflow.domain.exceptions import ConflictError
 from project_workflow.domain.single_task_profile import (
     CATALOG_MANIFESTS,
     MANIFEST_SHA256,
@@ -23,6 +26,7 @@ from tests import test_single_task_installation as installation
 
 PREVIOUS_FIRST_STEP = "e502e0e1bed9f4a16e08423a4ac1f0162e5ef6b006d9a9a7540137ac0ec5c08f"
 FIRST_STEP_RELEASE = "852e0647ad8645c9c6280b21c1595b9efa6ff87754d07df8dcc92bcb04f76381"
+DEPLOYED_FIRST_STEP_RELEASE = "920379c0c86455148e6fae35e2007037595c2d1cc82116c392c575c4625ffd28"
 
 
 def test_first_step_profile_changes_only_opening_worker_description():
@@ -141,6 +145,53 @@ def install_retained(monkeypatch, manifest=RETAINED_MANIFEST_SHA256):
 def all_rows(uow):
     return {name: [dict(row) for row in uow.session.execute(select(table)).mappings()]
             for name, table in m.Base.metadata.tables.items()}
+
+
+def test_packaged_publication_preserves_task_and_old_phases(monkeypatch):
+    old = install_retained(monkeypatch, DEPLOYED_FIRST_STEP_RELEASE)
+    reviewer = next(binding for binding in old.bindings if binding.role_key == "reviewer")
+    workflow_id = int(reviewer.workflow_id)
+    with SAUnitOfWork() as uow:
+        workflow = uow.workflows.get_by_id(workflow_id)
+        revision = read_revision(uow, workflow, workflow.active_catalog_version, selected=True)
+        mode, = uow.workflows.list_modes(workflow_id, catalog_version=revision["catalog_version"])
+        phase = uow.phases.list(workflow_id, mode_id=mode.id)[0]
+        uow.session.add(m.Task(project_id=int(reviewer.namespace_id), workflow_id=workflow_id,
+                               mode_id=mode.id, task_key="R1-1", current_phase_id=phase.id))
+        uow.session.flush()
+        before = all_rows(uow)
+        with pytest.raises(ConflictError, match="manifest changed"):
+            publish_packaged_catalog(uow, FIRST_STEP_RELEASE)
+        assert all_rows(uow) == before
+
+        selected = publish_packaged_catalog(uow, DEPLOYED_FIRST_STEP_RELEASE)
+        assert selected.instruction_manifest_sha256 == MANIFEST_SHA256
+        assert [(b.namespace_id, b.workflow_id) for b in selected.bindings] == [
+            (b.namespace_id, b.workflow_id) for b in old.bindings
+        ]
+        after = all_rows(uow)
+        assert after["tasks"] == before["tasks"]
+        assert all(row in after["phases"] for row in before["phases"])
+        assert read_revision(uow, workflow, revision["catalog_version"]) == revision
+
+    with SAUnitOfWork() as uow:
+        assert publish_packaged_catalog(uow, DEPLOYED_FIRST_STEP_RELEASE) == selected
+        assert all_rows(uow) == after
+
+
+def test_packaged_publication_keeps_an_operator_draft(monkeypatch):
+    old = install_retained(monkeypatch, DEPLOYED_FIRST_STEP_RELEASE)
+    workflow_id = int(old.bindings[-1].workflow_id)
+    with SAUnitOfWork() as uow:
+        workflow = uow.workflows.get_by_id(workflow_id)
+        active = read_revision(uow, workflow, workflow.active_catalog_version, selected=True)
+        active["modes"][0]["name"] += " (operator draft)"
+        save_draft(uow, workflow_id, CatalogDraft(expected_version=active["catalog_version"],
+                                                 expected_sha256=active["content_sha256"], modes=active["modes"]))
+        before = all_rows(uow)
+        with pytest.raises(ConflictError, match="operator publication or draft"):
+            publish_packaged_catalog(uow, DEPLOYED_FIRST_STEP_RELEASE)
+        assert all_rows(uow) == before
 
 
 @pytest.mark.parametrize("manifest", [key for key, source in CATALOG_MANIFESTS.items()

@@ -26,6 +26,19 @@ Bootstrap печатает typed installation readback после успешно
 Drift, partial install и foreign collisions отклоняются без repair. Ошибка первого
 создания откатывает transaction. Legacy metadata/defaults/task/history не меняются.
 
+Чтобы явно выбрать каталог из установленного образа, оператор указывает SHA-256
+манифеста из текущего installation readback.
+
+```sh
+python -m scripts.init_db --publish-packaged-catalog-from "$INSTALLED_MANIFEST_SHA256"
+```
+
+Команда под блокировкой проверяет исходную редакцию и добавляет базовую публикацию
+для всех ролей в одной транзакции. Операторская публикация или черновик требуют
+отдельного решения. Начатые задачи продолжают использовать прежние mode ID и фазы.
+После публикации прочитайте новые привязки и подготовьте конфигурации Fleet для
+новых назначений. Повтор команды сверяет уже выбранный каталог.
+
 Новые GET зарегистрированы в существующем runtime router:
 
 - `/internal/runtime/profiles/single-task-v1/installation` → `SingleTaskInstallationResponse`.
