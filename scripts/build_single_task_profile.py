@@ -7,6 +7,7 @@ import hashlib
 import json
 from pathlib import Path
 
+from project_workflow.domain.single_task_profile import CATALOG_SHA256, MANIFEST_SHA256
 from project_workflow.infrastructure.single_task_catalog import load_single_task_professions
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -109,10 +110,13 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args()
-    for path, content in zip((CATALOG_PATH, MANIFEST_PATH), render(), strict=True):
+    for path, content, pinned in zip((CATALOG_PATH, MANIFEST_PATH), render(),
+                                     (CATALOG_SHA256, MANIFEST_SHA256), strict=True):
         if args.check:
             if (ROOT / path).read_bytes() != content:
                 raise ValueError(f"Single-task profile differs from its inputs: {path}")
+            if digest(content) != pinned:
+                raise ValueError(f"Single-task profile hash differs from its runtime pin: {path}")
         else:
             (ROOT / path).write_bytes(content)
         print(f"{digest(content)}  {path}")

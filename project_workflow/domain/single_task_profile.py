@@ -8,7 +8,7 @@ from project_workflow.domain.base_admission import Sha256
 from project_workflow.domain.base_binding import DatabaseId
 
 PROFILE = "single-task-v1"
-CATALOG_SHA256 = "dd173abd3986aaf518b56b1cdca7ab3c8469d5f421f07de2bec53744b670ff0e"
+CATALOG_SHA256 = "96f4cdc1ae5c214ed692d4f45f7a55ee56ad5981c9de370850f90b9fdf7637b4"
 MANIFEST_SHA256 = "230d245a4562a25a71d1d167fbfa3deea2276084447046631aade9056252df68"
 RETAINED_CATALOG_SHA256 = "86e6c983b7aa6a2c99da11d1d4b1f1b4563ff913262236903a19bc86bdec2d67"
 RETAINED_MANIFEST_SHA256 = "652a38c0f7bdb48a569aa3fcd5c2e81e153db6e22b5201cfb6ce15c988dd57f3"
