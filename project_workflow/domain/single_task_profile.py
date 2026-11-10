@@ -1,6 +1,6 @@
 """Workflow-owned installed-profile observations, never execution proof."""
 
-from typing import Literal
+from typing import Literal, NamedTuple
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -12,36 +12,44 @@ CATALOG_SHA256 = "5938704057ac8f4505bb48bc9a030300268d074dd073cb6a9eb1f6aa00fe04
 MANIFEST_SHA256 = "5a9bff013f5d0ba039d38a3134dd9225743a7a14a4d1f1a9f402600ad31c3fa4"
 RETAINED_CATALOG_SHA256 = "86e6c983b7aa6a2c99da11d1d4b1f1b4563ff913262236903a19bc86bdec2d67"
 RETAINED_MANIFEST_SHA256 = "652a38c0f7bdb48a569aa3fcd5c2e81e153db6e22b5201cfb6ce15c988dd57f3"
-RETAINED_PROFILE_CATALOGS = {
+
+class CatalogManifest(NamedTuple):
+    catalog_sha256: str
+    execution_protocol: Literal["configured-cli-v1"] | None = None
+
+
+# Earlier revisions predate explicit stage start and are available for readback.
+CATALOG_MANIFESTS = {
+    MANIFEST_SHA256: CatalogManifest(CATALOG_SHA256, "configured-cli-v1"),
     "920379c0c86455148e6fae35e2007037595c2d1cc82116c392c575c4625ffd28":
-        "7de17343320acb9ed840d45e09694893a2b1bd958c39e1ada713bf20b1752ed6",
+        CatalogManifest("7de17343320acb9ed840d45e09694893a2b1bd958c39e1ada713bf20b1752ed6", "configured-cli-v1"),
     "852e0647ad8645c9c6280b21c1595b9efa6ff87754d07df8dcc92bcb04f76381":
-        "554c51e937aa85b5b6a13b3f36965b00180ead8d799f3c0b6d0f109ce962944d",
+        CatalogManifest("554c51e937aa85b5b6a13b3f36965b00180ead8d799f3c0b6d0f109ce962944d", "configured-cli-v1"),
     "e502e0e1bed9f4a16e08423a4ac1f0162e5ef6b006d9a9a7540137ac0ec5c08f":
-        "2e5e8451aefe681c4482ca81dd54df9b8139a6dc458cab87c6c50553e68a74c9",
+        CatalogManifest("2e5e8451aefe681c4482ca81dd54df9b8139a6dc458cab87c6c50553e68a74c9"),
     "2f16635c0f588d1f285393b4ad8c163119b4dba4b9918335c821f295e88a4f64":
-        "9db2e982d93ead86a16c0b88785cbb9a5e1306e74cd56dc929ab7f7d1342f605",
+        CatalogManifest("9db2e982d93ead86a16c0b88785cbb9a5e1306e74cd56dc929ab7f7d1342f605"),
     "7aa0e6c758e2c31cd1dd69ce30826aecaf565e25e4f5fcedcdf9215fcddd1075":
-        "976f1272340189178fcab2b778ceead46f6f965be8150281e7b80afe31cb0afe",
+        CatalogManifest("976f1272340189178fcab2b778ceead46f6f965be8150281e7b80afe31cb0afe"),
     "62762bf58f337d9e063226aef58ea6c89cdfb2e87159056f1a6b2b6c4d1ddf3a":
-        "43d4293fae89e9aac1cc61aef78d46c421010e308e92a34dc966045e2c369ef5",
+        CatalogManifest("43d4293fae89e9aac1cc61aef78d46c421010e308e92a34dc966045e2c369ef5"),
     "9384121a0c1bc9c869a25fcdf11cab4064a0491ebcf329a6310229874ab835d0":
-        "6a1decb0b088eabc34951a0f4892fab7ea0b7b25906af5c3f2855b68b85446cb",
+        CatalogManifest("6a1decb0b088eabc34951a0f4892fab7ea0b7b25906af5c3f2855b68b85446cb"),
     "ab182b9bc6f7182c6250ba20cc322749f6fbae28ddc183765fbd888a658900e6":
-        "1ebab36fd92e0feb319c772b65f4e8f09132cf56fdce4f6a4887024ef0e2236a",
+        CatalogManifest("1ebab36fd92e0feb319c772b65f4e8f09132cf56fdce4f6a4887024ef0e2236a"),
     "d76ecbb632b1ceebf33bf78e8e0dedaec278538227d653aa9fd3c998e19ea694":
-        "fda4dea9bc138e2cfe8531c11dae12cd0fa8ee9e31811cecb71b76142681be3b",
+        CatalogManifest("fda4dea9bc138e2cfe8531c11dae12cd0fa8ee9e31811cecb71b76142681be3b"),
     "332cfd4fb3419d5765008e196cffb508540462ddd89b798ab4e89379ac5b1796":
-        "233528769c0d64d7397734cd4c8ba17cf9e2306b41328eb7ddbcc93250c0f2a8",
+        CatalogManifest("233528769c0d64d7397734cd4c8ba17cf9e2306b41328eb7ddbcc93250c0f2a8"),
     "e0cde0c044fe1a38b6fa0f387cc30e0da6e89dedb35b89a893263fd7d2558a40":
-        "7bc022089b08b246fbb04fb03fa374940cc4a6c0a023bc1e310e260e4f04f67e",
+        CatalogManifest("7bc022089b08b246fbb04fb03fa374940cc4a6c0a023bc1e310e260e4f04f67e"),
     "1535516545520eb5ea489cf1583cfaebc458e5729a94762751515841078671c3":
-        "15e96fdd491d4901ba9080bcca8044fe676dbf40c4d89eb7ed75112dc974921f",
-    RETAINED_MANIFEST_SHA256: RETAINED_CATALOG_SHA256,
+        CatalogManifest("15e96fdd491d4901ba9080bcca8044fe676dbf40c4d89eb7ed75112dc974921f"),
+    RETAINED_MANIFEST_SHA256: CatalogManifest(RETAINED_CATALOG_SHA256),
     "19d3228270bc76959f91a06f3b946a39b4509b14a2c29b62acc8762dd5cc3fe2":
-        "91b34be1fb3057476954d4947d86bae117c3eafd6abfe8d0b46333d38678c6fb",
+        CatalogManifest("91b34be1fb3057476954d4947d86bae117c3eafd6abfe8d0b46333d38678c6fb"),
 }
-SUPPORTED_MANIFESTS = (MANIFEST_SHA256, *RETAINED_PROFILE_CATALOGS)
+SUPPORTED_MANIFESTS = tuple(CATALOG_MANIFESTS)
 ROLE_MODES = {
     "project_manager": {"draft": ["business"]},
     "analyst": {"analysis": ["business"]},

@@ -10,6 +10,7 @@ from sqlalchemy import func, select
 from project_workflow import config
 from project_workflow.application import configured_cli
 from project_workflow.application import state as app_state
+from project_workflow.domain.single_task_profile import CATALOG_MANIFESTS, MANIFEST_SHA256
 from project_workflow.infrastructure.db import models as m
 from project_workflow.infrastructure.db.session import ensure_migrated, get_engine
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
@@ -330,3 +331,63 @@ def test_provider_http_failure_and_ignored_limit_preserve_phase_in_postgres(conf
         first, second = (json.loads(e.evaluation_snapshot)["diagnostics"]["attempts"][0]["provider"] for e in entries)
         assert first["http_status"] == 500 and first["outcome"] == "http"
         assert second["http_status"] == 200 and second["outcome"] == "limit_exceeded"
+
+
+@pytest.mark.parametrize("previous", [
+    digest for digest, source in CATALOG_MANIFESTS.items()
+    if digest != MANIFEST_SHA256 and source.execution_protocol == "configured-cli-v1"
+])
+def test_catalog_upgrade_keeps_published_assignments_and_editor(pg_url, monkeypatch, previous):
+    from contextlib import closing
+    from copy import deepcopy
+    from types import SimpleNamespace
+
+    from project_workflow.application import catalog_publication as editor
+    from project_workflow.domain.catalog_publication import CatalogDraft, CatalogPublish
+    from project_workflow.infrastructure.db import single_task_catalog as catalog
+
+    def save_and_publish(uow, workflow_id, title, *, publish):
+        base = editor.read_active(uow, workflow_id)
+        modes = deepcopy(base["modes"])
+        modes[0]["phases"][0]["name"] = title
+        cas = {"expected_version": base["catalog_version"], "expected_sha256": base["content_sha256"]}
+        draft = editor.save_draft(uow, workflow_id, CatalogDraft(**cas, modes=modes))
+        if not publish:
+            return draft
+        command = CatalogPublish(**cas, draft_sha256=draft["content_sha256"], operation_key=title)
+        published = editor.publish(uow, workflow_id, draft["catalog_version"], command, publisher_subject="admin")
+        replay = editor.publish(uow, workflow_id, draft["catalog_version"], command, publisher_subject="admin")
+        assert replay == published
+        return published
+
+    load = catalog.load_profile
+    request = SimpleNamespace(param=("developer", "initial"))
+    with closing(configured.__wrapped__(pg_url, monkeypatch, request)) as fixture:
+        with monkeypatch.context() as old:
+            old.setattr(catalog, "load_profile", lambda digest=previous: load(digest))
+            context = next(fixture)
+            enrolled = protocol.enroll(context)
+            original_step = protocol.step(context).json()
+            with SAUnitOfWork() as uow:
+                original = catalog.observe_installation(uow)
+                active = save_and_publish(uow, enrolled["workflow_id"], "operator-before-upgrade", publish=True)
+                draft = save_and_publish(uow, enrolled["workflow_id"], "pending-before-upgrade", publish=False)
+        with SAUnitOfWork() as uow:
+            assert catalog.ensure_single_task_catalog(uow) == original
+            assert original.instruction_manifest_sha256 == previous
+            assert editor.read_active(uow, enrolled["workflow_id"])["catalog_version"] == active["catalog_version"]
+            assert editor.read_pending_draft(uow, enrolled["workflow_id"]) == draft
+            published = save_and_publish(uow, enrolled["workflow_id"], "operator-after-upgrade", publish=True)
+
+        client, request = context
+        task_id = str(uuid4())
+        new_request = {**request, "task": "SDLC-902", "operation_key": "enroll-902",
+                       "assignment_ref": str(uuid4()), "tracker_execution_id": str(uuid4()),
+                       "business_task_ref": task_id, "tracker_task_id": task_id}
+        next_run = protocol.enroll((client, new_request))
+        assert next_run["mode_id"] != enrolled["mode_id"]
+        with SAUnitOfWork() as uow:
+            assert uow.workflows.get_mode(next_run["mode_id"], enrolled["workflow_id"]).catalog_version == published[
+                "catalog_version"
+            ]
+        assert protocol.step(context).json() == original_step

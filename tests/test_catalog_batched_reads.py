@@ -3,9 +3,12 @@
 from collections import Counter
 
 import pytest
-from sqlalchemy import event
+from sqlalchemy import event, select
 from sqlalchemy.sql import Select
 
+from project_workflow.application import catalog_publication
+from project_workflow.domain.exceptions import ConflictError
+from project_workflow.domain.single_task_profile import RETAINED_MANIFEST_SHA256
 from project_workflow.infrastructure.db import models as m
 from project_workflow.infrastructure.db import single_task_catalog as catalog
 from project_workflow.infrastructure.db.managed_catalog import (
@@ -124,3 +127,58 @@ def test_batched_catalog_sees_committed_drift_in_next_uow(installed):
     with SAUnitOfWork() as reader:
         with pytest.raises(ValueError):
             catalog.observe_installation(reader)
+
+
+def test_observe_reads_only_the_manifest_recorded_for_the_installation(installed, monkeypatch):
+    uow, original = installed
+    load = catalog.load_profile
+    loaded = []
+
+    def record(digest):
+        loaded.append(digest)
+        assert digest == original.instruction_manifest_sha256
+        return load(digest)
+
+    monkeypatch.setattr(catalog, "load_profile", record)
+    assert catalog.observe_installation(uow) == original
+    assert loaded == [original.instruction_manifest_sha256]
+
+
+@pytest.mark.parametrize(("drift", "message"), [
+    ("missing", "Missing sealed baseline receipt"),
+    ("different", "Sealed baseline manifest differs"),
+    ("unknown", "Unsupported single-task profile manifest"),
+    ("content", "Sealed baseline receipt changed"),
+])
+def test_observe_rejects_the_bad_role_without_searching_other_manifests(installed, monkeypatch, drift, message):
+    uow, original = installed
+    developer = next(binding for binding in original.bindings if binding.role_key == "developer")
+    receipt = uow.session.scalar(select(m.WorkflowCatalogPublication).where(
+        m.WorkflowCatalogPublication.workflow_id == int(developer.workflow_id)))
+    assert receipt is not None
+    if drift == "missing":
+        uow.session.delete(receipt)
+    elif drift == "content":
+        receipt.content = "[]"
+    else:
+        if drift == "unknown":
+            digest = "0" * 64
+        else:
+            digest = (catalog.MANIFEST_SHA256 if original.instruction_manifest_sha256 == RETAINED_MANIFEST_SHA256
+                      else RETAINED_MANIFEST_SHA256)
+        receipt.operation_key = f"{catalog_publication.BASELINE_OPERATION}{receipt.workflow_id}:{digest}"
+    uow.session.flush()
+
+    load = catalog.load_profile
+    loaded = []
+
+    def record(digest):
+        loaded.append(digest)
+        assert digest == original.instruction_manifest_sha256
+        return load(digest)
+
+    monkeypatch.setattr(catalog, "load_profile", record)
+    error = ConflictError if drift == "content" else ValueError
+    with pytest.raises(error, match=f"single-task-v1:developer: {message}"):
+        catalog.observe_installation(uow)
+    assert loaded == ([original.instruction_manifest_sha256] if drift == "content" else [])

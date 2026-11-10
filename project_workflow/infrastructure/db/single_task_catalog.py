@@ -6,19 +6,19 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
-from sqlalchemy import event, func, inspect, select
-from sqlalchemy.engine import Connection
+from sqlalchemy import event, func, select
+from sqlalchemy.engine import Connection, Row
 from sqlalchemy.sql import Delete, Insert, Select, Update, visitors
 from sqlalchemy.sql.elements import TextClause
 
 from project_workflow import config
+from project_workflow.domain.exceptions import ConflictError
 from project_workflow.domain.namespace import legacy_code_from_cli_command
 from project_workflow.domain.project_theme import MANAGED_PROFESSION_THEMES
 from project_workflow.domain.single_task_profile import (
-    CATALOG_SHA256,
+    CATALOG_MANIFESTS,
     MANIFEST_SHA256,
     PROFILE,
-    RETAINED_PROFILE_CATALOGS,
     ROLE_MODES,
     SUPPORTED_MANIFESTS,
     SingleTaskInstallation,
@@ -31,7 +31,6 @@ from project_workflow.infrastructure.db.managed_catalog import (
     _ArchivedWorkflowDefinition,
     _assert_existing_workflow,
     _namespace_has_identity,
-    _persist_mode,
 )
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 
@@ -93,9 +92,9 @@ def runtime_catalog_read(uow: SAUnitOfWork):
 def load_profile(manifest_sha256: str = MANIFEST_SHA256) -> tuple[dict, dict]:
     if manifest_sha256 not in SUPPORTED_MANIFESTS:
         raise ValueError("Unsupported single-task profile manifest")
-    retained = manifest_sha256 in RETAINED_PROFILE_CATALOGS
+    retained = manifest_sha256 != MANIFEST_SHA256
     root = REFERENCES / "retained" / manifest_sha256 if retained else REFERENCES
-    catalog_sha256 = RETAINED_PROFILE_CATALOGS[manifest_sha256] if retained else CATALOG_SHA256
+    catalog_sha256 = CATALOG_MANIFESTS[manifest_sha256].catalog_sha256
     values = []
     for filename, expected in (("single_task_catalog_v1.json", catalog_sha256),
                                ("single_task_manifest_v1.json", manifest_sha256)):
@@ -125,9 +124,8 @@ def load_profile(manifest_sha256: str = MANIFEST_SHA256) -> tuple[dict, dict]:
 
 
 def _manifest_digest(manifest: dict) -> str:
-    return {CATALOG_SHA256: MANIFEST_SHA256,
-            **{digest: key for key, digest in RETAINED_PROFILE_CATALOGS.items()}}[
-                manifest["workflow_catalog"]["sha256"]]
+    return next(digest for digest, source in CATALOG_MANIFESTS.items()
+                if source.catalog_sha256 == manifest["workflow_catalog"]["sha256"])
 
 
 def observe_installation(uow: SAUnitOfWork) -> SingleTaskInstallation:
@@ -142,32 +140,48 @@ def observe_installation(uow: SAUnitOfWork) -> SingleTaskInstallation:
             return scope.installation.model_copy(deep=True)
     uow.lock_catalog_state(shared=True)
     uow.refresh()
-    # Match a complete sealed family, never stamp old rows with the current hash.
+    from project_workflow.application.catalog_publication import _baseline_manifest, _baseline_receipt
+
     # Published source baselines and operator publications share one monotonic pointer.
-    connection = uow.session.connection()
-    schema = config.get_settings().DB_SCHEMA if connection.dialect.name == "postgresql" else None
-    if inspect(connection).has_table("workflow_catalog_publications", schema=schema):
-        pointers = uow.session.execute(select(m.Workflow.id, m.Workflow.active_catalog_version,
-            func.max(m.WorkflowCatalogPublication.catalog_version)).join(
-                m.WorkflowCatalogPublication, m.WorkflowCatalogPublication.workflow_id == m.Workflow.id
-            ).where(m.Workflow.key.startswith(PROFILE + ":")).group_by(
-                m.Workflow.id, m.Workflow.active_catalog_version)).all()
-        if any(active != latest for _, active, latest in pointers):
-            raise ValueError("Active publication pointer changed outside publication")
-    elif any(w.get("previous_baseline_manifest_sha256") for w in load_profile()[0]["workflows"]):
-        raise ValueError("Current sealed baselines require the publication ledger")
-    failures: list[ValueError] = []
-    for digest in SUPPORTED_MANIFESTS:
-        catalog, manifest = load_profile(digest)
-        try:
-            result = _observe_profile(uow, catalog, manifest)
-            if scope is not None:
-                scope.transaction = (session.get_transaction(), session.get_nested_transaction())
-                scope.installation = result.model_copy(deep=True)
-            return result
-        except ValueError as exc:
-            failures.append(exc)
-    raise failures[0]
+    pointers = session.execute(select(m.Workflow.key, m.Workflow.active_catalog_version,
+        func.max(m.WorkflowCatalogPublication.catalog_version)).join(
+            m.WorkflowCatalogPublication, m.WorkflowCatalogPublication.workflow_id == m.Workflow.id
+        ).where(m.Workflow.key.startswith(PROFILE + ":")).group_by(
+            m.Workflow.id, m.Workflow.key, m.Workflow.active_catalog_version)).all()
+    for key, active, latest in pointers:
+        if active != latest:
+            raise ValueError(f"{key}: Active publication pointer changed outside publication")
+
+    workflows = {workflow.key: workflow for workflow in uow.workflows.list()}
+    receipts = {}
+    selected_manifest = None
+    for role in ROLE_MODES:
+        key = f"{PROFILE}:{role}"
+        workflow = workflows.get(key)
+        if workflow is None:
+            raise ValueError(f"{key}: Single-task installed workflow missing")
+        receipt = _baseline_receipt(uow, workflow)
+        if receipt is None:
+            raise ValueError(f"{key}: Missing sealed baseline receipt")
+        digest = _baseline_manifest(receipt)
+        if digest not in SUPPORTED_MANIFESTS:
+            raise ValueError(f"{key}: Unsupported single-task profile manifest {digest!r}")
+        if selected_manifest is not None and selected_manifest != digest:
+            raise ValueError(f"{key}: Sealed baseline manifest differs from the installed catalog family")
+        selected_manifest = digest
+        receipts[key] = receipt
+
+    assert selected_manifest is not None
+    try:
+        catalog, manifest = load_profile(selected_manifest)
+    except (OSError, ValueError) as exc:
+        roles = ", ".join(ROLE_MODES)
+        raise ValueError(f"{PROFILE} ({roles}): Cannot load sealed manifest {selected_manifest}: {exc}") from exc
+    result = _observe_profile(uow, catalog, manifest, receipts=receipts)
+    if scope is not None:
+        scope.transaction = (session.get_transaction(), session.get_nested_transaction())
+        scope.installation = result.model_copy(deep=True)
+    return result
 
 
 def selected_required_skills(uow: SAUnitOfWork, binding: SingleTaskNamespaceBinding) -> list[str]:
@@ -186,7 +200,10 @@ def selected_required_skills(uow: SAUnitOfWork, binding: SingleTaskNamespaceBind
                    for instruction in phase["instructions"] for skill in instruction["skills"]})
 
 
-def _observe_profile(uow: SAUnitOfWork, catalog: dict, manifest: dict) -> SingleTaskInstallation:
+def _observe_profile(
+    uow: SAUnitOfWork, catalog: dict, manifest: dict,
+    *, receipts: dict[str, Row] | None = None,
+) -> SingleTaskInstallation:
     catalog_sha256 = manifest["workflow_catalog"]["sha256"]
     manifest_sha256 = _manifest_digest(manifest)
     installed_workflows = {workflow.key: workflow for workflow in uow.workflows.list()}
@@ -205,27 +222,47 @@ def _observe_profile(uow: SAUnitOfWork, catalog: dict, manifest: dict) -> Single
         if (workflow is None or workflow.id is None
             or workflow.name != config.MANAGED_NAMESPACE_WORKFLOW_NAME
             or workflow.description != definition["description"]):
-            raise ValueError("Single-task installed workflow missing or divergent")
-        from project_workflow.application.catalog_publication import sealed_baseline
-
-        baseline, baseline_version = (
-            sealed_baseline(uow, workflow) if workflow.active_catalog_version > 1 else ({}, 1)
+            raise ValueError(f"{definition['key']}: Single-task installed workflow missing or divergent")
+        from project_workflow.application.catalog_publication import (
+            _read_revision,
+            _validate_baseline_receipt,
+            read_revision,
+            sealed_baseline,
         )
-        if workflow.active_catalog_version < baseline_version:
-            raise ValueError("Active instruction revision precedes its sealed baseline")
-        if baseline_version > 1 and baseline["modes"] != definition["modes"]:
-            raise ValueError("Sealed baseline source differs from the requested catalog")
-        expected = _ArchivedWorkflowDefinition(
-            key=definition["key"], name=definition["name"], description=definition["description"], role_key=role,
-            modes=[ManagedMode.model_validate(mode) for mode in definition["modes"]],
-        )
-        _assert_existing_workflow(uow, workflow, expected, catalog_version=baseline_version)
-        if workflow.active_catalog_version > baseline_version:
-            # Baseline provenance is immutable. Text publications have their own
-            # receipts; never stamp mutable editor rows with the sealed baseline hash.
-            from project_workflow.application.catalog_publication import read_revision
 
-            read_revision(uow, workflow, workflow.active_catalog_version, selected=True)
+        try:
+            if receipts is not None:
+                receipt = receipts[definition["key"]]
+                _validate_baseline_receipt(receipt, definition)
+                baseline_version = receipt.catalog_version
+            else:
+                # Released migrations explicitly validate historical profiles,
+                # including those created before the publication ledger.
+                baseline, baseline_version = (
+                    sealed_baseline(uow, workflow) if workflow.active_catalog_version > 1 else ({}, 1)
+                )
+                if baseline_version > 1 and baseline["modes"] != definition["modes"]:
+                    raise ValueError("Sealed baseline source differs from the requested catalog")
+            if workflow.active_catalog_version < baseline_version:
+                raise ValueError("Active instruction revision precedes its sealed baseline")
+            expected = _ArchivedWorkflowDefinition(
+                key=definition["key"], name=definition["name"], description=definition["description"], role_key=role,
+                modes=[ManagedMode.model_validate(mode) for mode in definition["modes"]],
+            )
+            _assert_existing_workflow(uow, workflow, expected, catalog_version=baseline_version)
+            if workflow.active_catalog_version > baseline_version:
+                if receipts is None:
+                    read_revision(uow, workflow, workflow.active_catalog_version, selected=True)
+                else:
+                    _read_revision(uow, workflow, workflow.active_catalog_version, definition, baseline_version)
+        except ConflictError as exc:
+            if receipts is None:
+                raise
+            raise ConflictError(f"{definition['key']}: {exc}") from exc
+        except ValueError as exc:
+            if receipts is None:
+                raise
+            raise ValueError(f"{definition['key']}: {exc}") from exc
         namespace = definition["namespace"]
         project = uow.projects.get_by_cli_command(namespace["cli_command"])
         identity = uow.projects.get_persisted_identity(project.id) if project and project.id else None
@@ -238,13 +275,13 @@ def _observe_profile(uow: SAUnitOfWork, catalog: dict, manifest: dict) -> Single
             ) or project is None or project.id is None
             or not uow.workflows.belongs_to_profession(workflow.id, project.id)
             or memberships.get(workflow.id) != 1):
-            raise ValueError("Single-task installed namespace missing or divergent")
+            raise ValueError(f"{definition['key']}: Single-task installed namespace missing or divergent")
         modes = []
         for mode, source_mode in zip(
             uow.workflows.list_modes(workflow.id, catalog_version=baseline_version), definition["modes"], strict=True,
         ):
             if mode.id is None or mode.catalog_version != baseline_version or mode.name != source_mode["name"]:
-                raise ValueError("Single-task installed mode identity mismatch")
+                raise ValueError(f"{definition['key']}: Single-task installed mode identity mismatch")
             modes.append({"mode_id": str(mode.id), "key": mode.key, "execution_scopes": mode.execution_scopes,
                           "phase_ids": [str(p.id) for p in uow.phases.list(workflow.id, mode_id=mode.id)]})
         bindings.append({
@@ -280,14 +317,9 @@ def ensure_single_task_catalog(uow: SAUnitOfWork) -> SingleTaskInstallation:
             "description": definition["description"], "is_default": not has_default and role == "project_manager",
             "create_default_mode": False,
         })
-        if definition.get("previous_baseline_manifest_sha256"):
-            from project_workflow.application.catalog_publication import publish_baseline
+        from project_workflow.application.catalog_publication import publish_baseline
 
-            publish_baseline(uow, uow.workflows.get_by_id(workflow_id), _manifest_digest(manifest))
-        else:
-            for mode in definition["modes"]:
-                _persist_mode(uow, workflow_id=workflow_id, role_key=role,
-                              mode=ManagedMode.model_validate(mode), catalog_version=1)
+        publish_baseline(uow, uow.workflows.get_by_id(workflow_id), _manifest_digest(manifest))
         namespace = definition["namespace"]
         icon, color = MANAGED_PROFESSION_THEMES[role]
         project_id = uow.projects.create({

@@ -8,10 +8,13 @@ from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy import func, insert, select
+from sqlalchemy.engine import Row
 
 from project_workflow.domain.catalog_publication import CatalogDraft, CatalogPublish
+from project_workflow.domain.configured_cli import PROTOCOL
 from project_workflow.domain.exceptions import ConflictError, NotFoundError
 from project_workflow.domain.runtime_assignment import canonical_json, payload_sha256
+from project_workflow.domain.single_task_profile import CATALOG_MANIFESTS
 from project_workflow.infrastructure.db import models as m
 from project_workflow.infrastructure.db.managed_catalog import (
     ManagedMode,
@@ -77,28 +80,41 @@ def _baseline_request(workflow_id: int, version: int, parent: int, manifest: str
             "parent_version": parent, "instruction_manifest_sha256": manifest}
 
 
-def sealed_baseline(uow: SAUnitOfWork, workflow: Any, version: int | None = None) -> tuple[dict, int]:
-    """Resolve immutable source provenance from the existing publication ledger."""
+def _baseline_receipt(
+    uow: SAUnitOfWork, workflow: Any, version: int | None = None,
+) -> Row | None:
     prefix = f"{BASELINE_OPERATION}{workflow.id}:"
-    query = select(m.WorkflowCatalogPublication.catalog_version, m.WorkflowCatalogPublication.parent_version,
-        m.WorkflowCatalogPublication.operation_key, m.WorkflowCatalogPublication.request_sha256,
-        m.WorkflowCatalogPublication.content_sha256, m.WorkflowCatalogPublication.content).where(
+    row = m.WorkflowCatalogPublication
+    query = select(row.workflow_id, row.catalog_version, row.parent_version, row.operation_key,
+                   row.request_sha256, row.content_sha256, row.content).where(
         m.WorkflowCatalogPublication.workflow_id == workflow.id,
         m.WorkflowCatalogPublication.operation_key.startswith(prefix),
     )
     if version is not None:
         query = query.where(m.WorkflowCatalogPublication.catalog_version <= version)
-    receipt = uow.session.execute(query.order_by(m.WorkflowCatalogPublication.catalog_version.desc()).limit(1)).first()
-    if receipt is None:
-        return _initial_definition(workflow.key), 1
-    manifest = receipt.operation_key.removeprefix(prefix)
-    definition = _definition(workflow.key, manifest)
+    return uow.session.execute(query.order_by(row.catalog_version.desc()).limit(1)).first()
+
+
+def _baseline_manifest(receipt: Row) -> str:
+    return receipt.operation_key.removeprefix(f"{BASELINE_OPERATION}{receipt.workflow_id}:")
+
+
+def _validate_baseline_receipt(receipt: Row, definition: dict) -> None:
     modes = _normalize(definition["modes"])
     if (receipt.request_sha256 != payload_sha256(_baseline_request(
-                workflow.id, receipt.catalog_version, receipt.parent_version, manifest))
+                receipt.workflow_id, receipt.catalog_version, receipt.parent_version, _baseline_manifest(receipt)))
             or receipt.content_sha256 != payload_sha256(modes)
             or receipt.content != canonical_json(modes)):
         raise ConflictError("Sealed baseline receipt changed")
+
+
+def sealed_baseline(uow: SAUnitOfWork, workflow: Any, version: int | None = None) -> tuple[dict, int]:
+    """Resolve immutable source provenance from the existing publication ledger."""
+    receipt = _baseline_receipt(uow, workflow, version)
+    if receipt is None:
+        return _initial_definition(workflow.key), 1
+    definition = _definition(workflow.key, _baseline_manifest(receipt))
+    _validate_baseline_receipt(receipt, definition)
     return definition, receipt.catalog_version
 
 
@@ -173,8 +189,11 @@ def _validate_modes(workflow: Any, modes: list[dict], definition: dict) -> None:
                     raise ConflictError("Architect instructions must use the existing synchronous role skills")
 
 
-def _validate_rows(uow: SAUnitOfWork, workflow: Any, version: int, modes: list[dict]) -> None:
-    definition, _ = sealed_baseline(uow, workflow, version)
+def _validate_rows(
+    uow: SAUnitOfWork, workflow: Any, version: int, modes: list[dict], definition: dict | None = None,
+) -> None:
+    if definition is None:
+        definition, _ = sealed_baseline(uow, workflow, version)
     # Readback validates saved content, not a later policy for publishing new content.
     if _mode_identity(modes) != _mode_identity(definition["modes"]):
         raise ConflictError("Published mode identity and scopes changed")
@@ -195,6 +214,12 @@ def read_revision(uow: SAUnitOfWork, workflow: Any, version: int, *, selected: b
         if latest is not None and latest != workflow.active_catalog_version:
             raise ConflictError("Active publication pointer changed outside publication")
     definition, baseline_version = sealed_baseline(uow, workflow, version)
+    return _read_revision(uow, workflow, version, definition, baseline_version)
+
+
+def _read_revision(
+    uow: SAUnitOfWork, workflow: Any, version: int, definition: dict, baseline_version: int,
+) -> dict:
     if version == baseline_version:
         modes = _normalize(definition["modes"])
     else:
@@ -204,7 +229,7 @@ def read_revision(uow: SAUnitOfWork, workflow: Any, version: int, *, selected: b
         modes = _normalize(json.loads(receipt.content))
         if payload_sha256(modes) != receipt.content_sha256:
             raise ConflictError("Publication receipt hash mismatch")
-    _validate_rows(uow, workflow, version, modes)
+    _validate_rows(uow, workflow, version, modes, definition)
     result = {"workflow_id": workflow.id, "catalog_version": version,
               "content_sha256": payload_sha256(modes), "modes": modes}
     if version != baseline_version:
@@ -223,11 +248,11 @@ def _locked(uow: SAUnitOfWork, workflow_id: int) -> Any:
     workflow = uow.workflows.lock(workflow_id)
     if workflow is None:
         raise NotFoundError("Workflow not found")
-    _definition(workflow.key)
     # Validate namespace and selected-source provenance before historical revision reads.
     from project_workflow.infrastructure.db.single_task_catalog import observe_installation
 
-    observe_installation(uow)
+    if not any(int(binding.workflow_id) == workflow_id for binding in observe_installation(uow).bindings):
+        raise ConflictError("Installed single-task workflow required")
     return workflow
 
 
@@ -281,13 +306,25 @@ def read_pending_draft(uow: SAUnitOfWork, workflow_id: int) -> dict | None:
     return read_draft(uow, workflow_id, version) if version is not None else None
 
 
+def _editable_baseline(uow: SAUnitOfWork, workflow: Any) -> dict:
+    receipt = _baseline_receipt(uow, workflow)
+    if receipt is None:
+        raise ConflictError("Missing installed baseline receipt")
+    digest = _baseline_manifest(receipt)
+    source = CATALOG_MANIFESTS.get(digest)
+    if source is None or source.execution_protocol != PROTOCOL:
+        raise ConflictError("Installed catalog does not support configured-cli-v1 publication")
+    definition = _definition(workflow.key, digest)
+    _validate_baseline_receipt(receipt, definition)
+    return definition
+
+
 def save_draft(uow: SAUnitOfWork, workflow_id: int, command: CatalogDraft) -> dict:
     workflow = _locked(uow, workflow_id)
-    if _normalize(sealed_baseline(uow, workflow)[0]["modes"]) != _normalize(_definition(workflow.key)["modes"]):
-        raise ConflictError("Upgrade the sealed catalog baseline before editing instructions")
+    definition = _editable_baseline(uow, workflow)
     _cas(uow, workflow, command.expected_version, command.expected_sha256)
     modes = _normalize(command.modes)
-    _validate_modes(workflow, modes, _definition(workflow.key))
+    _validate_modes(workflow, modes, definition)
     # Reconcile an unknown save result under the same catalog lock. Drafts use
     # existing version rows, not a second journal or a client-supplied identity.
     pending = uow.session.scalars(select(m.WorkflowMode.catalog_version).where(
@@ -302,7 +339,7 @@ def save_draft(uow: SAUnitOfWork, workflow_id: int, command: CatalogDraft) -> di
     assert latest is not None
     version = latest + 1
     for mode in modes:
-        _persist_mode(uow, workflow_id=workflow_id, role_key=_definition(workflow.key)["role_key"],
+        _persist_mode(uow, workflow_id=workflow_id, role_key=definition["role_key"],
                       mode=ManagedMode.model_validate(mode), catalog_version=version)
     _validate_rows(uow, workflow, version, modes)
     uow.commit()
@@ -347,7 +384,7 @@ def publish(uow: SAUnitOfWork, workflow_id: int, draft_version: int, command: Ca
     if draft_version <= workflow.active_catalog_version:
         raise ConflictError("Publication must append a newer revision")
     modes = _draft_modes(uow, workflow_id, draft_version)
-    _validate_modes(workflow, modes, _definition(workflow.key))
+    _validate_modes(workflow, modes, _editable_baseline(uow, workflow))
     _validate_rows(uow, workflow, draft_version, modes)
     digest = payload_sha256(modes)
     if digest != command.draft_sha256:
