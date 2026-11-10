@@ -10,6 +10,8 @@ from project_workflow.application.catalog_publication import (
     read_revision,
     sealed_baseline,
 )
+from project_workflow.domain.configured_cli import PROTOCOL
+from project_workflow.domain.single_task_profile import CATALOG_MANIFESTS
 from project_workflow.infrastructure.db import models as m
 from project_workflow.infrastructure.db.single_task_catalog import (
     _observe_profile,
@@ -35,6 +37,8 @@ def upgrade() -> None:
         installed = observe_installation(uow)
         family = installed.instruction_manifest_sha256
         if family not in (PREVIOUS, TARGET):
+            if CATALOG_MANIFESTS[family].execution_protocol == PROTOCOL:
+                return
             raise ValueError("Current source cutover requires the exact sealed 852 predecessor")
         workflows = []
         for binding in installed.bindings:

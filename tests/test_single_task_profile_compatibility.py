@@ -9,10 +9,10 @@ from pydantic import ValidationError
 from sqlalchemy import select
 
 from project_workflow.domain.single_task_profile import (
+    CATALOG_MANIFESTS,
     MANIFEST_SHA256,
     RETAINED_CATALOG_SHA256,
     RETAINED_MANIFEST_SHA256,
-    RETAINED_PROFILE_CATALOGS,
 )
 from project_workflow.domain.single_task_runtime import SingleTaskContext
 from project_workflow.infrastructure.db import models as m
@@ -67,7 +67,6 @@ def test_current_autonomous_profile_preserves_phase_contracts_and_other_roles():
 def test_previous_first_step_terminal_receipt_replays_without_rebinding(monkeypatch, supervisor_llm):
     from unittest.mock import Mock
 
-    from project_workflow.application import configured_cli
     from project_workflow.infrastructure import configured_cli_tracker
     from project_workflow.infrastructure.llm import OpenAICompatibleClient
     from tests._report_helpers import report_json
@@ -77,8 +76,9 @@ def test_previous_first_step_terminal_receipt_replays_without_rebinding(monkeypa
     try:
         with monkeypatch.context() as old_runtime:
             old_runtime.setattr(catalog, "load_profile", lambda digest=PREVIOUS_FIRST_STEP: reader(digest))
-            old_runtime.setattr(configured_cli, "MANIFEST_SHA256", PREVIOUS_FIRST_STEP)
-            old_runtime.setattr(configured_cli, "CATALOG_SHA256", RETAINED_PROFILE_CATALOGS[PREVIOUS_FIRST_STEP])
+            old_runtime.setitem(CATALOG_MANIFESTS, PREVIOUS_FIRST_STEP,
+                                CATALOG_MANIFESTS[PREVIOUS_FIRST_STEP]._replace(
+                                    execution_protocol="configured-cli-v1"))
             fixture = protocol.configured.__wrapped__(monkeypatch, SimpleNamespace(param=("developer", "initial")))
             context = next(fixture)
             enrolled = protocol.enroll(context)
@@ -143,7 +143,8 @@ def all_rows(uow):
             for name, table in m.Base.metadata.tables.items()}
 
 
-@pytest.mark.parametrize("manifest", list(RETAINED_PROFILE_CATALOGS))
+@pytest.mark.parametrize("manifest", [key for key, source in CATALOG_MANIFESTS.items()
+                                     if source.execution_protocol is None])
 def test_retained_native_profile_is_readable_but_cannot_enroll_new_execution(monkeypatch, manifest):
     original = install_retained(monkeypatch, manifest)
     fixture = protocol.configured.__wrapped__(monkeypatch, SimpleNamespace())
@@ -163,7 +164,7 @@ def test_retained_native_profile_is_readable_but_cannot_enroll_new_execution(mon
 
 
 
-@pytest.mark.parametrize("manifest", [MANIFEST_SHA256, *RETAINED_PROFILE_CATALOGS])
+@pytest.mark.parametrize("manifest", list(CATALOG_MANIFESTS))
 def test_exact_published_and_conditional_contexts_parse_without_relabeling(manifest):
     payload = installation.assignment_payload()
     fields = SingleTaskContext.model_fields
@@ -188,7 +189,7 @@ def test_retained_artifacts_are_the_exact_published_family():
         catalog.load_profile("0" * 64)
 
 
-@pytest.mark.parametrize("manifest", RETAINED_PROFILE_CATALOGS)
+@pytest.mark.parametrize("manifest", [key for key in CATALOG_MANIFESTS if key != MANIFEST_SHA256])
 @pytest.mark.parametrize("filename", ["single_task_catalog_v1.json", "single_task_manifest_v1.json"])
 @pytest.mark.parametrize("mutation", ["extra_lf", "crlf"])
 def test_retained_artifact_tampering_is_not_a_compatibility_fallback(
@@ -224,7 +225,7 @@ def test_pre_start_profile_bootstrap_preserves_rows_and_original_binding_without
         assert catalog.ensure_single_task_catalog(uow) == original
         assert catalog.observe_installation(uow) == original
         assert original.instruction_manifest_sha256 == manifest
-        assert original.workflow_catalog_sha256 == RETAINED_PROFILE_CATALOGS[manifest]
+        assert original.workflow_catalog_sha256 == CATALOG_MANIFESTS[manifest].catalog_sha256
         assert all_rows(uow) == before
 
 
@@ -236,7 +237,7 @@ def test_pre_backlog_profile_is_retained_without_rewriting_existing_instructions
         observed = catalog.ensure_single_task_catalog(uow)
         assert observed == original
         assert observed.instruction_manifest_sha256 == manifest
-        assert observed.workflow_catalog_sha256 == RETAINED_PROFILE_CATALOGS[manifest]
+        assert observed.workflow_catalog_sha256 == CATALOG_MANIFESTS[manifest].catalog_sha256
         assert all_rows(uow) == before
     old, _ = catalog.load_profile(manifest)
     # Compare the two published native families; current configured instructions

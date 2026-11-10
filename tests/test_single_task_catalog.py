@@ -181,11 +181,15 @@ def test_architect_plans_one_task_and_all_modes_prohibit_multitask_flow(professi
 
 
 def test_defects_return_through_review_and_testing_and_deployment_requires_proof(professions):
-    for role in ("reviewer", "tester"):
-        mode = professions[role]["modes"][0]
-        actions = " ".join(i["description"] for i in mode["phases"][1]["instructions"])
-        for required in ("immutable findings", "severity", "reproduction", "expected vs", "Rework / Ready"):
-            assert required in actions
+    reviewer = professions["reviewer"]["modes"][0]["phases"]
+    work = " ".join(i["description"] for i in reviewer[1]["instructions"])
+    assert "reviewer-ack:<assignment_id>" in work and "Проверено" in work
+    assert "approved" in work and "Testing / Ready" in work
+    tester = professions["tester"]["modes"][0]["phases"]
+    actions = " ".join(i["description"] for i in tester[1]["instructions"])
+    for required in ("assigned verification target", "served SHA", "immutable findings", "severity",
+                     "reproduction", "expected vs", "Rework / Ready"):
+        assert required in actions
     rework = professions["developer"]["modes"][1]
     text = " ".join(i["description"] for i in rework["phases"][1]["instructions"])
     assert "always returns to Review / Ready" in text and "fresh Testing run" in text

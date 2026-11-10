@@ -7,12 +7,13 @@ import hashlib
 import json
 from pathlib import Path
 
+from project_workflow.domain.single_task_profile import CATALOG_SHA256, MANIFEST_SHA256
 from project_workflow.infrastructure.single_task_catalog import load_single_task_professions
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE_COMMIT = "SELF"
 SOURCE_PATH = "project_workflow/infrastructure/single_task_catalog.py"
-SOURCE_SHA256 = "77ec59218cbb1447ce230e3e237c4819c6b0a17818a9c852f26a0c42953dc4ae"
+SOURCE_SHA256 = "f91f5dce582f5fa485dd0059701d968533b2394aca856e790e8f94a2bee0822a"
 DONOR_PATH = "project_workflow/references/base_sdlc_catalog_cli_v4.json"
 DONOR_SHA256 = "d6d18f98b55f14210a3f0e12404074705495d535aa8ba29ae449624b845668c9"
 CATALOG_PATH = "project_workflow/references/single_task_catalog_v1.json"
@@ -35,7 +36,6 @@ def render() -> tuple[bytes, bytes]:
         if digest((ROOT / path).read_bytes().replace(b"\r\n", b"\n")) != expected:
             raise ValueError(f"Instruction input differs from declared source commit: {path}")
     source = {
-        "repository": "https://github.com/FerrPOINT/project-workflow.git",
         "commit": SOURCE_COMMIT,
         "commit_meaning": "exact commit containing this catalog; source bytes are checked by sha256",
         "path": SOURCE_PATH,
@@ -110,10 +110,13 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args()
-    for path, content in zip((CATALOG_PATH, MANIFEST_PATH), render(), strict=True):
+    for path, content, pinned in zip((CATALOG_PATH, MANIFEST_PATH), render(),
+                                     (CATALOG_SHA256, MANIFEST_SHA256), strict=True):
         if args.check:
             if (ROOT / path).read_bytes() != content:
                 raise ValueError(f"Single-task profile differs from its inputs: {path}")
+            if digest(content) != pinned:
+                raise ValueError(f"Single-task profile hash differs from its runtime pin: {path}")
         else:
             (ROOT / path).write_bytes(content)
         print(f"{digest(content)}  {path}")

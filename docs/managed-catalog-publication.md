@@ -271,6 +271,13 @@ published content and assigned historical revision are validated independently;
 raw edits, an unsealed active version and pointer rollback fail closed. Legacy
 native families remain read-only and cannot use publication to become configured.
 
+An existing installation resolves its baseline from the latest baseline receipts
+of all seven roles. Execution requires a manifest that supports
+`configured-cli-v1` with an explicit stage start. The running build's default
+manifest is used for first installation. Administrators edit and publish against
+the installed baseline's phase structure. Publishing a different baseline is a
+separate operation through `publish_baseline`.
+
 ## JSON API
 
 All six routes use the existing `require_administrator` dependency, verified

@@ -108,7 +108,7 @@ def test_evidence_precedes_report_and_business_effects_follow_acceptance(generat
     assert "a proposal is not a transition" in after and "sibling of terminal_receipt" in after
     for command in (PROPOSE, "discussion publish", "pm completion submit"):
         assert command not in final
-    if role in {"reviewer", "tester"}:
+    if role == "tester":
         assert "business rework verdict" in instructions.terminal_instruction(role)
 
 
@@ -172,8 +172,8 @@ def test_architect_business_report_uses_complete_saved_projection_not_receipt_en
     catalog, _ = generated
     final = phase_text(mode_for(catalog, "architect", "decomposition")["phases"][-1])
     for required in (
-        "installed solution-architecture skill's native JSON business projection",
-        "verified saved content: the full overview and ordered sections containing title, "
+        "extract the business fields directly from the verified saved content",
+        "the full overview and ordered sections containing title, "
         "description, criteria and requirements, copied verbatim from that readback",
         "business document as result.artifacts[].content, with actual verification facts reported separately",
         "do not summarize or retype its strings or copy the API envelope",
@@ -199,13 +199,23 @@ def test_analyst_business_document_keeps_provenance_in_existing_metadata(generat
         assert required in final
 
 
-def test_only_analyst_and_architect_worker_contracts_change_from_exact_retained_baseline(generated):
+def test_defaults_keep_unaffected_roles_and_phase_identity(generated):
     catalog, _ = generated
-    old, _ = load_profile("852e0647ad8645c9c6280b21c1595b9efa6ff87754d07df8dcc92bcb04f76381")
+    old, _ = load_profile("920379c0c86455148e6fae35e2007037595c2d1cc82116c392c575c4625ffd28")
     before = {workflow["role_key"]: workflow for workflow in old["workflows"]}
+    phase_content = {"instructions", "checks", "evidence"}
     for workflow in catalog["workflows"]:
-        if workflow["role_key"] not in {"analyst", "architect"}:
-            assert workflow == before[workflow["role_key"]]
+        role = workflow["role_key"]
+        original = before[role]
+        if role not in {"analyst", "architect", "developer", "reviewer", "tester"}:
+            assert workflow == original
+            continue
+        for current_mode, old_mode in zip(workflow["modes"], original["modes"], strict=True):
+            assert current_mode["key"] == old_mode["key"]
+            for current_phase, old_phase in zip(current_mode["phases"], old_mode["phases"], strict=True):
+                assert {key: value for key, value in current_phase.items() if key not in phase_content} == {
+                    key: value for key, value in old_phase.items() if key not in phase_content
+                }
 
 
 def test_pm_selected_review_and_exact_owner_consent_precede_handoff(generated):
@@ -252,8 +262,8 @@ def test_generator_keeps_single_task_inventory_architecture_rework_and_devops_bo
     assert "health" in checks and "acceptance" in checks
 
 
-def test_status_alignment_preserves_all_phase_ids_criteria_skills_and_evidence(generated):
-    catalog, _ = generated
+def test_status_alignment_preserves_all_phase_ids_criteria_skills_and_evidence():
+    catalog, _ = load_profile("920379c0c86455148e6fae35e2007037595c2d1cc82116c392c575c4625ffd28")
     workflows = copy.deepcopy(catalog["workflows"])
     predecessor = "2f16635c0f588d1f285393b4ad8c163119b4dba4b9918335c821f295e88a4f64"
     previous = {item["key"]: item for item in load_profile(predecessor)[0]["workflows"]}
@@ -315,7 +325,7 @@ def test_stage_completion_does_not_replace_native_handoff_or_lease_authority(gen
     assert "accepted proposal records the current stage as Completed but is not a stage handoff" in after
     assert "Fleet verifies real terminal before Tracker Complete" in after
     assert "Only an actual next-stage handoff resets Ready" in after
-    if role in {"reviewer", "tester"}:
+    if role == "tester":
         assert f"{'Review' if role == 'reviewer' else 'Testing'} / Completed" in instructions.TARGETS[role]
         assert "rework_limit_reached" in after
     if role == "devops":

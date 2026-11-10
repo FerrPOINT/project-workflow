@@ -8,6 +8,7 @@ import pytest
 from project_workflow import config
 from project_workflow.application import catalog_publication as editor
 from project_workflow.domain.catalog_publication import CatalogDraft, CatalogPublish
+from project_workflow.domain.single_task_profile import CATALOG_SHA256
 from project_workflow.infrastructure.db import single_task_catalog as catalog
 from project_workflow.infrastructure.db.session import (
     database_revisions,
@@ -55,19 +56,35 @@ def ordinary_init(engine, monkeypatch):
             config.get_settings.cache_clear()
 
 
-def test_registered_upgrade_makes_the_retained_source_current(predecessor, monkeypatch):
+def test_registered_upgrade_preserves_the_frozen_cutover_target(predecessor, monkeypatch):
     engine, _ = predecessor
     assert database_revisions(engine) == {PREVIOUS_REVISION}
     ensure_migrated(engine)
     ordinary_init(engine, monkeypatch)
     with SAUnitOfWork(engine) as uow:
         current = catalog.observe_installation(uow)
-        # Compare the shipping defaults, not just the migration's frozen target:
-        # another source update without a registered transition must fail here.
-        assert current.instruction_manifest_sha256 == catalog.MANIFEST_SHA256
-        assert current.workflow_catalog_sha256 == catalog.CATALOG_SHA256
+        assert current.instruction_manifest_sha256 == TARGET
         assert len(current.bindings) == 7 and current.phases == 33
     assert database_revisions(engine) == {migration_head()} == {TARGET_REVISION}
+
+
+@pytest.mark.parametrize("family", [
+    "920379c0c86455148e6fae35e2007037595c2d1cc82116c392c575c4625ffd28",
+    "230d245a4562a25a71d1d167fbfa3deea2276084447046631aade9056252df68",
+])
+def test_registered_upgrade_keeps_other_compatible_installations(database, monkeypatch, family):
+    run_alembic_command("upgrade", database, PREVIOUS_REVISION)
+    reader = catalog.load_profile
+    with monkeypatch.context() as old_runtime:
+        old_runtime.setattr(catalog, "load_profile", lambda digest=None: reader(digest or family))
+        with SAUnitOfWork(database) as uow:
+            original = catalog.ensure_single_task_catalog(uow)
+    before = snapshot(database)
+    ensure_migrated(database)
+    assert database_revisions(database) == {TARGET_REVISION}
+    assert snapshot(database) == {**before, "alembic_version": [{"version_num": TARGET_REVISION}]}
+    with SAUnitOfWork(database) as uow:
+        assert catalog.observe_installation(uow) == original
 
 
 def test_fresh_ordinary_initialization_selects_shipping_source(database, monkeypatch):
@@ -75,7 +92,7 @@ def test_fresh_ordinary_initialization_selects_shipping_source(database, monkeyp
     with SAUnitOfWork(database) as uow:
         installed = catalog.observe_installation(uow)
         assert installed.instruction_manifest_sha256 == catalog.MANIFEST_SHA256
-        assert installed.workflow_catalog_sha256 == catalog.CATALOG_SHA256
+        assert installed.workflow_catalog_sha256 == CATALOG_SHA256
         for binding in installed.bindings:
             assert editor.read_active(uow, int(binding.workflow_id))["catalog_version"] == 2
     assert database_revisions(database) == {TARGET_REVISION}
@@ -138,7 +155,7 @@ def test_cutover_preserves_publications_history_and_pins(predecessor, monkeypatc
     assert len(receipts) == 7
     assert len(after["phases"]) == len(before["phases"]) + 33
     with SAUnitOfWork(engine) as uow:
-        assert catalog.observe_installation(uow).instruction_manifest_sha256 == catalog.MANIFEST_SHA256
+        assert catalog.observe_installation(uow).instruction_manifest_sha256 == TARGET
         old_workflows = {row["id"]: row for row in before["workflows"]}
         for receipt in receipts:
             old = old_workflows[receipt["workflow_id"]]
