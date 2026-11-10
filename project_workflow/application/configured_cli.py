@@ -39,7 +39,7 @@ PM_CONTINUATION = (
 
 def _catalog(uow: SAUnitOfWork, namespace_id: int, *, workflow_key: str | None = None,
              workflow_id: int | None = None, mode_key: str | None = None,
-             execution: bool = False) -> tuple[Any, Any, Any]:
+             execution: bool = False, role_key: str | None = None) -> tuple[Any, Any, Any]:
     uow.lock_catalog_state(shared=True)
     project = uow.projects.get_by_id(namespace_id)
     if project is None:
@@ -64,7 +64,7 @@ def _catalog(uow: SAUnitOfWork, namespace_id: int, *, workflow_key: str | None =
         if CATALOG_MANIFESTS[installed.instruction_manifest_sha256].execution_protocol != PROTOCOL:
             raise ConflictError("Installed catalog does not support configured-cli-v1 execution")
         if not any(int(b.namespace_id) == namespace_id and int(b.workflow_id) == workflow.id
-                   for b in installed.bindings):
+                   and (role_key is None or b.role_key == role_key) for b in installed.bindings):
             raise ConflictError("Installed profession/workflow required")
     return project, workflow, mode
 

@@ -14,12 +14,13 @@ from sqlalchemy.sql.elements import TextClause
 from project_workflow import config
 from project_workflow.domain.exceptions import ConflictError
 from project_workflow.domain.namespace import legacy_code_from_cli_command
-from project_workflow.domain.project_theme import MANAGED_PROFESSION_THEMES
+from project_workflow.domain.project_theme import DEFAULT_PROJECT_COLOR, DEFAULT_PROJECT_ICON, MANAGED_PROFESSION_THEMES
 from project_workflow.domain.single_task_profile import (
     CATALOG_MANIFESTS,
     MANIFEST_SHA256,
     PROFILE,
     ROLE_MODES,
+    valid_profession_key,
     SUPPORTED_MANIFESTS,
     SingleTaskInstallation,
     SingleTaskNamespaceBinding,
@@ -112,11 +113,16 @@ def load_profile(manifest_sha256: str = MANIFEST_SHA256) -> tuple[dict, dict]:
         or catalog["catalog_version"] != 1 or manifest["profile_version"] != 1 or manifest["proposal"] is not False
         or manifest["workflow_catalog"]["sha256"] != catalog_sha256):
         raise ValueError("Single-task profile generation mismatch")
-    if [w["role_key"] for w in catalog["workflows"]] != list(ROLE_MODES):
+    roles = [w["role_key"] for w in catalog["workflows"]]
+    if (len(set(roles)) != len(roles) or not set(ROLE_MODES) <= set(roles)
+            or set(manifest["roles"]) != set(roles) or not all(map(valid_profession_key, roles))):
         raise ValueError("Single-task role inventory mismatch")
     for workflow in catalog["workflows"]:
         role = workflow["role_key"]
-        if {m["key"]: m["execution_scopes"] for m in workflow["modes"]} != ROLE_MODES[role]:
+        modes = {m["key"]: m["execution_scopes"] for m in workflow["modes"]}
+        if (not modes or len(modes) != len(workflow["modes"])
+                or role in ROLE_MODES and modes != ROLE_MODES[role]
+                or any(scopes not in (["business"], ["delivery"]) for scopes in modes.values())):
             raise ValueError("Single-task mode/scope inventory mismatch")
         for mode in workflow["modes"]:
             ManagedMode.model_validate(mode)
@@ -129,7 +135,7 @@ def _manifest_digest(manifest: dict) -> str:
 
 
 def observe_installation(uow: SAUnitOfWork) -> SingleTaskInstallation:
-    """Validate all seven persisted professions before returning any binding."""
+    """Validate the persisted profession inventory before returning any binding."""
     session = uow.session
     scope = session.info.get(_RUNTIME_READ)
     transaction = (session.get_transaction(), session.get_nested_transaction())
@@ -267,7 +273,7 @@ def _observe_profile(
         namespace = definition["namespace"]
         project = uow.projects.get_by_cli_command(namespace["cli_command"])
         identity = uow.projects.get_persisted_identity(project.id) if project and project.id else None
-        icon, color = MANAGED_PROFESSION_THEMES[role]
+        icon, color = MANAGED_PROFESSION_THEMES.get(role, (DEFAULT_PROJECT_ICON, DEFAULT_PROJECT_COLOR))
         if (identity is None or identity.get("launch_profile") != namespace["launch_profile"]
             or not _namespace_has_identity(
                 identity, workflow_id=workflow.id, code=legacy_code_from_cli_command(namespace["cli_command"]),
@@ -304,14 +310,27 @@ def ensure_single_task_catalog(uow: SAUnitOfWork) -> SingleTaskInstallation:
     uow.lock_catalog_state()
     catalog, manifest = load_profile()
     existing = {workflow.key for workflow in uow.workflows.list()}
+    pending = catalog["workflows"]
     if any(is_single_task_key(key) for key in existing):
-        return observe_installation(uow)  # A partial install/drift must fail, not silently repair.
-    for definition in catalog["workflows"]:
+        installed = observe_installation(uow)
+        if installed.instruction_manifest_sha256 == _manifest_digest(manifest):
+            return installed
+        previous, previous_manifest = load_profile(installed.instruction_manifest_sha256)
+        current_by_key = {w["key"]: w for w in catalog["workflows"]}
+        for definition in previous["workflows"]:
+            role = definition["role_key"]
+            if (current_by_key.get(definition["key"]) != definition
+                    or manifest["roles"].get(role) != previous_manifest["roles"][role]):
+                raise ValueError("Existing professions must be unchanged for an additive installation")
+        pending = [w for w in catalog["workflows"] if w["key"] not in existing]
+        if not pending:
+            return installed
+    for definition in pending:
         command = definition["namespace"]["cli_command"]
         if uow.projects.get_by_cli_command(command) or uow.projects.get_by_code(legacy_code_from_cli_command(command)):
             raise ValueError("Single-task namespace identity is already owned")
     has_default = uow.workflows.get_default() is not None
-    for definition in catalog["workflows"]:
+    for definition in pending:
         role = definition["role_key"]
         workflow_id = uow.workflows.create({
             "key": definition["key"], "name": config.MANAGED_NAMESPACE_WORKFLOW_NAME,
@@ -322,7 +341,7 @@ def ensure_single_task_catalog(uow: SAUnitOfWork) -> SingleTaskInstallation:
 
         publish_baseline(uow, uow.workflows.get_by_id(workflow_id), _manifest_digest(manifest))
         namespace = definition["namespace"]
-        icon, color = MANAGED_PROFESSION_THEMES[role]
+        icon, color = MANAGED_PROFESSION_THEMES.get(role, (DEFAULT_PROJECT_ICON, DEFAULT_PROJECT_COLOR))
         project_id = uow.projects.create({
             "workflow_id": workflow_id, "code": legacy_code_from_cli_command(namespace["cli_command"]),
             "name": namespace["name"], "description": definition["description"],

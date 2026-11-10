@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from project_workflow.domain.base_admission import Sha256
 from project_workflow.domain.namespace_ownership import UUIDRef
 from project_workflow.domain.runtime_assignment import FleetAgentRef, payload_sha256
-from project_workflow.domain.single_task_profile import ROLE_MODES
+from project_workflow.domain.single_task_profile import ROLE_MODES, valid_profession_key
 from project_workflow.domain.single_task_runtime import WorkflowArtifactReceipt
 
 PROTOCOL: Literal["configured-cli-v1"] = "configured-cli-v1"
@@ -43,7 +43,8 @@ class ConfiguredAssignment(BaseModel):
             raise ValueError("Exactly one workflow reference required")
         if self.business_task_ref != self.tracker_task_id:
             raise ValueError("business_task_ref must be the canonical Tracker task UUID")
-        if (self.role_key not in ROLE_MODES or self.mode_key not in ROLE_MODES[self.role_key]
+        if (not valid_profession_key(self.role_key)
+                or (self.role_key in ROLE_MODES and self.mode_key not in ROLE_MODES[self.role_key])
                 or (self.workflow_key is not None and self.workflow_key.startswith("single-task-v1:")
                     and self.workflow_key != f"single-task-v1:{self.role_key}")):
             raise ValueError("Workflow, profession and mode must match the installed catalog")
