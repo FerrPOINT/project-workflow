@@ -11,8 +11,10 @@ from sqlalchemy import func, insert, select
 from sqlalchemy.engine import Row
 
 from project_workflow.domain.catalog_publication import CatalogDraft, CatalogPublish
+from project_workflow.domain.configured_cli import PROTOCOL
 from project_workflow.domain.exceptions import ConflictError, NotFoundError
 from project_workflow.domain.runtime_assignment import canonical_json, payload_sha256
+from project_workflow.domain.single_task_profile import CATALOG_MANIFESTS
 from project_workflow.infrastructure.db import models as m
 from project_workflow.infrastructure.db.managed_catalog import (
     ManagedMode,
@@ -246,11 +248,11 @@ def _locked(uow: SAUnitOfWork, workflow_id: int) -> Any:
     workflow = uow.workflows.lock(workflow_id)
     if workflow is None:
         raise NotFoundError("Workflow not found")
-    _definition(workflow.key)
     # Validate namespace and selected-source provenance before historical revision reads.
     from project_workflow.infrastructure.db.single_task_catalog import observe_installation
 
-    observe_installation(uow)
+    if not any(int(binding.workflow_id) == workflow_id for binding in observe_installation(uow).bindings):
+        raise ConflictError("Installed single-task workflow required")
     return workflow
 
 
@@ -304,13 +306,25 @@ def read_pending_draft(uow: SAUnitOfWork, workflow_id: int) -> dict | None:
     return read_draft(uow, workflow_id, version) if version is not None else None
 
 
+def _editable_baseline(uow: SAUnitOfWork, workflow: Any) -> dict:
+    receipt = _baseline_receipt(uow, workflow)
+    if receipt is None:
+        raise ConflictError("Missing installed baseline receipt")
+    digest = _baseline_manifest(receipt)
+    source = CATALOG_MANIFESTS.get(digest)
+    if source is None or source.execution_protocol != PROTOCOL:
+        raise ConflictError("Installed catalog does not support configured-cli-v1 publication")
+    definition = _definition(workflow.key, digest)
+    _validate_baseline_receipt(receipt, definition)
+    return definition
+
+
 def save_draft(uow: SAUnitOfWork, workflow_id: int, command: CatalogDraft) -> dict:
     workflow = _locked(uow, workflow_id)
-    if _normalize(sealed_baseline(uow, workflow)[0]["modes"]) != _normalize(_definition(workflow.key)["modes"]):
-        raise ConflictError("Upgrade the sealed catalog baseline before editing instructions")
+    definition = _editable_baseline(uow, workflow)
     _cas(uow, workflow, command.expected_version, command.expected_sha256)
     modes = _normalize(command.modes)
-    _validate_modes(workflow, modes, _definition(workflow.key))
+    _validate_modes(workflow, modes, definition)
     # Reconcile an unknown save result under the same catalog lock. Drafts use
     # existing version rows, not a second journal or a client-supplied identity.
     pending = uow.session.scalars(select(m.WorkflowMode.catalog_version).where(
@@ -325,7 +339,7 @@ def save_draft(uow: SAUnitOfWork, workflow_id: int, command: CatalogDraft) -> di
     assert latest is not None
     version = latest + 1
     for mode in modes:
-        _persist_mode(uow, workflow_id=workflow_id, role_key=_definition(workflow.key)["role_key"],
+        _persist_mode(uow, workflow_id=workflow_id, role_key=definition["role_key"],
                       mode=ManagedMode.model_validate(mode), catalog_version=version)
     _validate_rows(uow, workflow, version, modes)
     uow.commit()
@@ -370,7 +384,7 @@ def publish(uow: SAUnitOfWork, workflow_id: int, draft_version: int, command: Ca
     if draft_version <= workflow.active_catalog_version:
         raise ConflictError("Publication must append a newer revision")
     modes = _draft_modes(uow, workflow_id, draft_version)
-    _validate_modes(workflow, modes, _definition(workflow.key))
+    _validate_modes(workflow, modes, _editable_baseline(uow, workflow))
     _validate_rows(uow, workflow, draft_version, modes)
     digest = payload_sha256(modes)
     if digest != command.draft_sha256:

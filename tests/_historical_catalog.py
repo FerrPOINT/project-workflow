@@ -24,5 +24,6 @@ def historical_catalog(digest):
         patch.object(catalog, "load_profile", lambda manifest=digest: load(manifest)),
         patch.object(catalog, "observe_installation", lambda uow: catalog._observe_profile(uow, *profile)),
         patch.object(editor, "publish_baseline", seed_baseline),
+        patch.object(editor, "_editable_baseline", lambda uow, workflow: editor.sealed_baseline(uow, workflow)[0]),
     ):
         yield

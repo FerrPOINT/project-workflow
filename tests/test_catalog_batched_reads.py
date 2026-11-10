@@ -140,6 +140,7 @@ def test_observe_reads_only_the_manifest_recorded_for_the_installation(installed
         return load(digest)
 
     monkeypatch.setattr(catalog, "load_profile", record)
+    monkeypatch.setattr(catalog, "_manifest_digest", lambda _: pytest.fail("Use the manifest ID from the ledger"))
     assert catalog.observe_installation(uow) == original
     assert loaded == [original.instruction_manifest_sha256]
 
