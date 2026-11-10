@@ -117,6 +117,7 @@ class SingleTaskInstallation(_Observation):
     modes: int = Field(ge=1)
     phases: int = Field(ge=1)
     bindings: list[SingleTaskNamespaceBinding] = Field(min_length=1)
+    required_tools: dict[str, list[str]]
     runtime_ready: Literal[False] = False
     live_activation_allowed: Literal[False] = False
 
@@ -129,6 +130,7 @@ class SingleTaskInstallation(_Observation):
             or len({binding.role_key for binding in self.bindings}) != size
             or len({binding.namespace_id for binding in self.bindings}) != size
             or len({binding.workflow_id for binding in self.bindings}) != size
+            or set(self.required_tools) != {binding.role_key for binding in self.bindings}
             or self.modes != sum(len(binding.modes) for binding in self.bindings)
             or self.phases != sum(len(mode.phase_ids) for binding in self.bindings for mode in binding.modes)
         ):

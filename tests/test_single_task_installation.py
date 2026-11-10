@@ -178,6 +178,9 @@ def test_existing_router_authorizes_readback_and_rejects_drift(database, monkeyp
         assert response.status_code == 200, response.text
         assert response.headers["Cache-Control"] == "no-store"
         assert response.json()["installation"] == installation.model_dump(mode="json", by_alias=True)
+        tools = response.json()["installation"]["required_tools"]
+        assert tools["project_manager"] == ["tracker", "workflow"]
+        assert tools["analyst"] == ["tracker", "workflow", "forge", "wiki", "searxng", "tavily"]
         binding = installation.bindings[0]
         binding_path = "/internal/runtime/profiles/single-task-v1/namespace-bindings/"
         response = client.get(binding_path + binding.namespace_id, headers=headers)
@@ -468,6 +471,7 @@ def test_catalog_adds_profession_without_replacing_installed_ids(database, monke
     extra = deepcopy(next(item for item in extended["workflows"] if item["role_key"] == "analyst"))
     extra.pop("previous_baseline_manifest_sha256", None)
     extra["role_key"] = "researcher"
+    extra["required_tools"] = ["wiki"]
     extra["key"] = "single-task-v1:researcher"
     extra["namespace"].update(name="single-task-researcher", cli_command="workflow-single-task-researcher",
                               launch_profile="single-task-v1-researcher")
@@ -493,5 +497,6 @@ def test_catalog_adds_profession_without_replacing_installed_ids(database, monke
     new_ids = {binding.role_key: (binding.namespace_id, binding.workflow_id) for binding in result.bindings}
     assert len(new_ids) == len(retained_ids) + 1 and "researcher" in new_ids
     assert {role: new_ids[role] for role in retained_ids} == retained_ids
+    assert result.required_tools["researcher"] == ["tracker", "workflow", "wiki"]
     with SAUnitOfWork(database) as uow:
         assert ensure_single_task_catalog(uow) == result

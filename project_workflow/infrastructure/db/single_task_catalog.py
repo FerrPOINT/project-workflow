@@ -299,9 +299,20 @@ def _observe_profile(
             "profile": identity["launch_profile"], "modes": modes,
             "role_instructions_sha256": manifest["roles"][role]["role_instructions_sha256"],
         })
+    extra_tools = {
+        "analyst": ("forge", "wiki", "searxng", "tavily"),
+        "developer": ("forge",),
+        "devops": ("forge",),
+    }
     return SingleTaskInstallation.model_validate({
         "schema": "single-task-sdlc/installation/v1", "instruction_manifest_sha256": manifest_sha256,
         "workflow_catalog_sha256": catalog_sha256, "bindings": bindings, **manifest["inventory"],
+        "required_tools": {
+            definition["role_key"]: list(dict.fromkeys(("tracker", "workflow", *definition.get(
+                "required_tools", extra_tools.get(definition["role_key"], ()),
+            ))))
+            for definition in catalog["workflows"]
+        },
     })
 
 
