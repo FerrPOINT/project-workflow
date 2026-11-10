@@ -18,6 +18,7 @@ from project_workflow.domain.project_theme import DEFAULT_PROJECT_COLOR, DEFAULT
 from project_workflow.domain.single_task_profile import (
     CATALOG_MANIFESTS,
     MANIFEST_SHA256,
+    PROFESSION_TOOL_REQUIREMENTS,
     PROFILE,
     ROLE_MODES,
     valid_profession_key,
@@ -299,19 +300,12 @@ def _observe_profile(
             "profile": identity["launch_profile"], "modes": modes,
             "role_instructions_sha256": manifest["roles"][role]["role_instructions_sha256"],
         })
-    extra_tools = {
-        "analyst": ("forge", "wiki", "searxng", "tavily"),
-        "developer": ("forge",),
-        "devops": ("forge",),
-    }
     return SingleTaskInstallation.model_validate({
         "schema": "single-task-sdlc/installation/v1", "instruction_manifest_sha256": manifest_sha256,
         "workflow_catalog_sha256": catalog_sha256, "bindings": bindings, **manifest["inventory"],
         "required_tools": {
-            definition["role_key"]: list(dict.fromkeys(("tracker", "workflow", *definition.get(
-                "required_tools", extra_tools.get(definition["role_key"], ()),
-            ))))
-            for definition in catalog["workflows"]
+            row["role_key"]: ["tracker", "workflow", *PROFESSION_TOOL_REQUIREMENTS.get(row["role_key"], ())]
+            for row in bindings
         },
     })
 

@@ -10,6 +10,11 @@ from project_workflow.domain.base_admission import Sha256
 from project_workflow.domain.base_binding import DatabaseId
 
 PROFILE = "single-task-v1"
+PROFESSION_TOOL_REQUIREMENTS = {
+    "analyst": ("forge", "wiki", "searxng", "tavily"),
+    "developer": ("forge",),
+    "devops": ("forge",),
+}
 CATALOG_SHA256 = "a0390b7ae6556432f47beda3ede356eff11d72d45422678b1549cf08cd77540b"
 MANIFEST_SHA256 = "a6d82abf1c7d3965b452e29783bd7a1adc093bcf9f460aa36f4060bf78eba70a"
 RETAINED_CATALOG_SHA256 = "86e6c983b7aa6a2c99da11d1d4b1f1b4563ff913262236903a19bc86bdec2d67"
