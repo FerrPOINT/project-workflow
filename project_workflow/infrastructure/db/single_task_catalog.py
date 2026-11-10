@@ -177,7 +177,7 @@ def observe_installation(uow: SAUnitOfWork) -> SingleTaskInstallation:
     except (OSError, ValueError) as exc:
         roles = ", ".join(ROLE_MODES)
         raise ValueError(f"{PROFILE} ({roles}): Cannot load sealed manifest {selected_manifest}: {exc}") from exc
-    result = _observe_profile(uow, catalog, manifest, receipts=receipts)
+    result = _observe_profile(uow, catalog, manifest, receipts=receipts, manifest_sha256=selected_manifest)
     if scope is not None:
         scope.transaction = (session.get_transaction(), session.get_nested_transaction())
         scope.installation = result.model_copy(deep=True)
@@ -202,10 +202,11 @@ def selected_required_skills(uow: SAUnitOfWork, binding: SingleTaskNamespaceBind
 
 def _observe_profile(
     uow: SAUnitOfWork, catalog: dict, manifest: dict,
-    *, receipts: dict[str, Row] | None = None,
+    *, receipts: dict[str, Row] | None = None, manifest_sha256: str | None = None,
 ) -> SingleTaskInstallation:
     catalog_sha256 = manifest["workflow_catalog"]["sha256"]
-    manifest_sha256 = _manifest_digest(manifest)
+    if manifest_sha256 is None:
+        manifest_sha256 = _manifest_digest(manifest)
     installed_workflows = {workflow.key: workflow for workflow in uow.workflows.list()}
     if {key for key in installed_workflows if is_single_task_key(key)} != {w["key"] for w in catalog["workflows"]}:
         raise ValueError("Single-task installed workflow inventory mismatch")
