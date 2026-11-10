@@ -7,6 +7,12 @@ Tracker/Fleet source integration уже реализована; source qualifica
 разрешением установки/активации на стенде. Exact source и оставшаяся live-граница:
 [Single-Task Instruction Audit](single-task-instruction-audit.md).
 
+Каталог определяет `role_key`, точные идентификаторы профессии и Workflow и
+профиль запуска для [комплекта агента Fleet](https://github.com/FerrPOINT/fleet-control/blob/main/docs/AGENT_DEFAULTS.md#комплект-агента).
+Список дефолтных агентов берётся из установленного каталога; семь профессий —
+состав версии 1. Учётку, секреты, ключ AI Hub и экземпляр подготавливает шаг
+установки платформы. Workflow публикует и подтверждает привязку.
+
 Bounded profile-aware execution и typed PM packet реализованы отдельно:
 [Single-Task Runtime Packet](single-task-runtime.md). Ниже ограничения прежнего
 source-installer пакета отмечены как исторические; live activation по-прежнему запрещена.

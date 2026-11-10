@@ -427,3 +427,43 @@ def test_profile_assignment_shape_omits_decomposition_and_enforces_task_root():
     legacy = {k: v for k, v in payload.items() if not k.startswith("instruction_")}
     with pytest.raises(ValidationError):
         RuntimeAssignmentRequest.model_validate(legacy)
+
+def test_catalog_adds_profession_without_replacing_installed_ids(database, monkeypatch):
+    from project_workflow.infrastructure.db import single_task_catalog as catalog
+
+    with SAUnitOfWork(database) as uow:
+        original = ensure_single_task_catalog(uow)
+        uow.commit()
+
+    previous_catalog, previous_manifest = catalog.load_profile()
+    extended, manifest = deepcopy(previous_catalog), deepcopy(previous_manifest)
+    extra = deepcopy(next(item for item in extended["workflows"] if item["role_key"] == "analyst"))
+    extra.pop("previous_baseline_manifest_sha256", None)
+    extra["role_key"] = "researcher"
+    extra["key"] = "single-task-v1:researcher"
+    extra["namespace"].update(name="single-task-researcher", cli_command="workflow-single-task-researcher",
+                              launch_profile="single-task-v1-researcher")
+    extended["workflows"].append(extra)
+    manifest["roles"]["researcher"] = deepcopy(manifest["roles"]["analyst"])
+    manifest["workflow_catalog"]["sha256"] = "b" * 64
+    for key in ("namespaces", "workflows"):
+        manifest["inventory"][key] += 1
+    manifest["inventory"]["modes"] += len(extra["modes"])
+    manifest["inventory"]["phases"] += sum(len(mode["phases"]) for mode in extra["modes"])
+
+    next_digest = "a" * 64
+    monkeypatch.setattr(catalog, "SUPPORTED_MANIFESTS", (next_digest, MANIFEST_SHA256))
+    monkeypatch.setattr(catalog, "load_profile", lambda digest=next_digest:
+                        (extended, manifest) if digest == next_digest else (previous_catalog, previous_manifest))
+    monkeypatch.setattr(catalog, "_manifest_digest", lambda source:
+                        next_digest if source is manifest else MANIFEST_SHA256)
+
+    with SAUnitOfWork(database) as uow:
+        result = ensure_single_task_catalog(uow)
+        uow.commit()
+    retained_ids = {binding.role_key: (binding.namespace_id, binding.workflow_id) for binding in original.bindings}
+    new_ids = {binding.role_key: (binding.namespace_id, binding.workflow_id) for binding in result.bindings}
+    assert len(new_ids) == len(retained_ids) + 1 and "researcher" in new_ids
+    assert {role: new_ids[role] for role in retained_ids} == retained_ids
+    with SAUnitOfWork(database) as uow:
+        assert ensure_single_task_catalog(uow) == result

@@ -121,6 +121,24 @@ def test_enrollment_requires_one_canonical_workflow_reference(configured, refere
     assert client.post("/internal/runtime/assign", headers=WRITER, json={**request, **reference}).status_code == 422
 
 
+def test_retired_hermes_workflow_cannot_accept_new_assignment(configured):
+    client, assignment = configured
+    with SAUnitOfWork() as uow:
+        retired = uow.workflows.create({"name": "Historical Hermes", "key": "hermes-sdlc:project_manager"})
+        uow.workflows.assign_profession(retired, assignment["namespace_id"])
+        mode = uow.workflows.create_mode({"workflow_id": retired, "key": assignment["mode_key"],
+                                          "name": "Retained mode", "mode_order": 2})
+        uow.phases.create({"workflow_id": retired, "mode_id": mode, "code": "RETAINED-01",
+                           "name": "Retained phase", "phase_order": 1})
+        uow.commit()
+    request = {key: value for key, value in assignment.items() if key != "workflow_key"}
+    response = client.post("/internal/runtime/assign", headers=WRITER, json={**request, "workflow_id": retired})
+    assert response.status_code == 409
+    assert response.json()["error_code"] == "configured-cli-409"
+    with SAUnitOfWork() as uow:
+        assert uow.session.scalar(select(func.count()).select_from(m.TaskRuntimeAssignment)) == 0
+
+
 def test_numeric_workflow_selection_rejects_another_profession(configured):
     client, assignment = configured
     with SAUnitOfWork() as uow:

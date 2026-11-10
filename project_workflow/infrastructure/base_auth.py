@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 from project_workflow import config
 from project_workflow.domain.namespace_ownership import canonical_uuid
-from project_workflow.domain.runtime_assignment import MANAGED_ROLE_MODE_SCOPES
+from project_workflow.domain.single_task_profile import valid_profession_key
 from project_workflow.infrastructure import namespace_auth
 from project_workflow.infrastructure.platform_namespace import is_personal_token
 
@@ -31,7 +31,7 @@ def registered_subjects() -> dict[str, str]:
         subjects = json.loads(raw, object_pairs_hook=namespace_auth.unique_object)
         if not isinstance(subjects, dict) or not subjects or any(
             not isinstance(subject, str) or canonical_uuid(subject) != subject
-            or not isinstance(role, str) or role not in {*MANAGED_ROLE_MODE_SCOPES, "catalog"}
+            or not isinstance(role, str) or (role != "catalog" and not valid_profession_key(role))
             for subject, role in subjects.items()
         ):
             raise ValueError("Invalid reader registry")

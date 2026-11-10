@@ -39,7 +39,7 @@ PM_CONTINUATION = (
 
 def _catalog(uow: SAUnitOfWork, namespace_id: int, *, workflow_key: str | None = None,
              workflow_id: int | None = None, mode_key: str | None = None,
-             execution: bool = False) -> tuple[Any, Any, Any]:
+             execution: bool = False, role_key: str | None = None) -> tuple[Any, Any, Any]:
     uow.lock_catalog_state(shared=True)
     project = uow.projects.get_by_id(namespace_id)
     if project is None:
@@ -54,6 +54,8 @@ def _catalog(uow: SAUnitOfWork, namespace_id: int, *, workflow_key: str | None =
     if (workflow is None or workflow.id is None or workflow.key is None
             or execution and not uow.workflows.belongs_to_profession(workflow.id, namespace_id)):
         raise ConflictError("Profession workflow changed during admission")
+    if execution and workflow.key.startswith("hermes-sdlc:"):
+        raise ConflictError("Historical Hermes workflows are read only")
     mode = uow.workflows.get_mode_by_key(workflow.id, mode_key) if mode_key is not None else None
     if mode_key is not None and mode is None:
         raise ConflictError("Installed profession mode required")
@@ -64,7 +66,7 @@ def _catalog(uow: SAUnitOfWork, namespace_id: int, *, workflow_key: str | None =
             raise ConflictError(
                 "Current configured instruction catalog required; retained native profiles are read only")
         if not any(int(b.namespace_id) == namespace_id and int(b.workflow_id) == workflow.id
-                   for b in installed.bindings):
+                   and (role_key is None or b.role_key == role_key) for b in installed.bindings):
             raise ConflictError("Installed profession/workflow required")
         from project_workflow.application.catalog_publication import read_revision
 
@@ -164,7 +166,7 @@ def enroll(uow: SAUnitOfWork, request: ConfiguredAssignment) -> dict[str, Any]:
     _require_valid_key(request.task)
     project, workflow, mode = _catalog(uow, request.namespace_id,
                                      workflow_key=request.workflow_key, workflow_id=request.workflow_id,
-                                     mode_key=request.mode_key, execution=True)
+                                     mode_key=request.mode_key, execution=True, role_key=request.role_key)
     request_data = request.model_dump(mode="json", exclude_none=True)
     saved = uow.session.scalar(select(m.TaskRuntimeAssignment).where(
         m.TaskRuntimeAssignment.operation_key == request.operation_key,

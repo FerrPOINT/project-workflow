@@ -2,7 +2,9 @@
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+import re
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from project_workflow.domain.base_admission import Sha256
 from project_workflow.domain.base_binding import DatabaseId
@@ -50,6 +52,10 @@ def is_single_task_key(key: str | None) -> bool:
     return isinstance(key, str) and key.startswith(PROFILE + ":")
 
 
+def valid_profession_key(value: str) -> bool:
+    return value not in {"catalog", "installation", "dev_ops"} and re.fullmatch(r"[a-z][a-z0-9_]{1,31}", value) is not None
+
+
 class _Observation(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
 
@@ -86,13 +92,28 @@ class SingleTaskInstallation(_Observation):
     instruction_manifest_sha256: Sha256
     workflow_catalog_version: Literal[1] = 1
     workflow_catalog_sha256: Sha256
-    namespaces: Literal[7] = 7
-    workflows: Literal[7] = 7
-    modes: Literal[8] = 8
+    namespaces: int = Field(ge=1)
+    workflows: int = Field(ge=1)
+    modes: int = Field(ge=1)
     phases: int = Field(ge=1)
-    bindings: list[SingleTaskNamespaceBinding] = Field(min_length=7, max_length=7)
+    bindings: list[SingleTaskNamespaceBinding] = Field(min_length=1)
     runtime_ready: Literal[False] = False
     live_activation_allowed: Literal[False] = False
+
+    @model_validator(mode="after")
+    def validate_inventory(self) -> "SingleTaskInstallation":
+        size = len(self.bindings)
+        if (
+            self.namespaces != size
+            or self.workflows != size
+            or len({binding.role_key for binding in self.bindings}) != size
+            or len({binding.namespace_id for binding in self.bindings}) != size
+            or len({binding.workflow_id for binding in self.bindings}) != size
+            or self.modes != sum(len(binding.modes) for binding in self.bindings)
+            or self.phases != sum(len(mode.phase_ids) for binding in self.bindings for mode in binding.modes)
+        ):
+            raise ValueError("Single-task installation inventory differs from its bindings")
+        return self
 
 
 class SingleTaskInstallationResponse(_Observation):
