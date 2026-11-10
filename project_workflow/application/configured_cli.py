@@ -21,7 +21,7 @@ from project_workflow.domain.configured_cli import (
 )
 from project_workflow.domain.exceptions import ConflictError, NotFoundError
 from project_workflow.domain.runtime_assignment import MANAGED_WORKFLOW_KEYS, canonical_json, payload_sha256
-from project_workflow.domain.single_task_profile import CATALOG_SHA256, MANIFEST_SHA256
+from project_workflow.domain.single_task_profile import CATALOG_MANIFESTS
 from project_workflow.infrastructure import configured_cli_tracker, namespace_auth
 from project_workflow.infrastructure.db import models as m
 from project_workflow.infrastructure.db.single_task_catalog import observe_installation
@@ -61,16 +61,11 @@ def _catalog(uow: SAUnitOfWork, namespace_id: int, *, workflow_key: str | None =
         raise ConflictError("Installed profession mode required")
     if execution and workflow.key.startswith("single-task-v1:"):
         installed = observe_installation(uow)
-        if execution and (installed.instruction_manifest_sha256 != MANIFEST_SHA256
-                          or installed.workflow_catalog_sha256 != CATALOG_SHA256):
-            raise ConflictError(
-                "Current configured instruction catalog required; retained native profiles are read only")
+        if CATALOG_MANIFESTS[installed.instruction_manifest_sha256].execution_protocol != PROTOCOL:
+            raise ConflictError("Installed catalog does not support configured-cli-v1 execution")
         if not any(int(b.namespace_id) == namespace_id and int(b.workflow_id) == workflow.id
                    for b in installed.bindings):
             raise ConflictError("Installed profession/workflow required")
-        from project_workflow.application.catalog_publication import read_revision
-
-        read_revision(uow, workflow, workflow.active_catalog_version, selected=True)
     return project, workflow, mode
 
 
@@ -153,6 +148,8 @@ def enroll(uow: SAUnitOfWork, request: ConfiguredAssignment) -> dict[str, Any]:
     project, workflow, mode = _catalog(uow, request.namespace_id,
                                      workflow_key=request.workflow_key, workflow_id=request.workflow_id,
                                      mode_key=request.mode_key, execution=True)
+    if workflow.key.startswith("single-task-v1:") and workflow.key != f"single-task-v1:{request.role_key}":
+        raise ConflictError("Assigned mode and profession do not match")
     configured_cli_tracker.assignment(request_data, purpose="initial_read")
     phases = list(uow.phases.list(workflow.id, mode_id=mode.id))
     if not phases:

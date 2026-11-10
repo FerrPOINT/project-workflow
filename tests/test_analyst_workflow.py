@@ -98,7 +98,7 @@ def test_enrolled_analyst_continues_original_three_phases_after_structural_upgra
     from alembic.migration import MigrationContext
     from alembic.operations import Operations
 
-    from project_workflow.application import configured_cli
+    from project_workflow.domain.single_task_profile import CATALOG_MANIFESTS
     from project_workflow.infrastructure.db import single_task_catalog as catalog
     from project_workflow.infrastructure.db.session import get_engine
     from tests import test_configured_cli as protocol
@@ -112,8 +112,8 @@ def test_enrolled_analyst_continues_original_three_phases_after_structural_upgra
             reader = catalog.load_profile
             old_runtime.setattr(catalog, "load_profile",
                                 lambda digest=None: reader(digest) if digest else (old_catalog, old_manifest))
-            old_runtime.setattr(configured_cli, "MANIFEST_SHA256", previous)
-            old_runtime.setattr(configured_cli, "CATALOG_SHA256", old_manifest["workflow_catalog"]["sha256"])
+            old_runtime.setitem(CATALOG_MANIFESTS, previous,
+                                CATALOG_MANIFESTS[previous]._replace(execution_protocol="configured-cli-v1"))
             fixture = protocol.configured.__wrapped__(monkeypatch, SimpleNamespace(param=("analyst", "analysis")))
             context = next(fixture)
             if customized:
@@ -124,10 +124,11 @@ def test_enrolled_analyst_continues_original_three_phases_after_structural_upgra
                     project = uow.projects.get_by_id(context[1]["namespace_id"])
                     base = editor.read_active(uow, project.workflow_id)
                     base["modes"][0]["phases"][0]["instructions"][0]["description"] += " Operator clarification."
+                    expected_version = base["catalog_version"]
                     saved = editor.save_draft(uow, project.workflow_id, CatalogDraft(
-                        expected_version=1, expected_sha256=base["content_sha256"], modes=base["modes"]))
+                        expected_version=expected_version, expected_sha256=base["content_sha256"], modes=base["modes"]))
                     editor.publish(uow, project.workflow_id, saved["catalog_version"], CatalogPublish(
-                        expected_version=1, expected_sha256=base["content_sha256"],
+                        expected_version=expected_version, expected_sha256=base["content_sha256"],
                         draft_sha256=saved["content_sha256"], operation_key="operator-before-upgrade"),
                         publisher_subject="qa-administrator")
             original = enroll(context)

@@ -58,9 +58,9 @@ def test_unchanged_operator_revision_survives_migration_and_remains_discoverable
             assert editor.read_pending_draft(uow, workflow_id)["catalog_version"] == 2
         new_modes = deepcopy(active["modes"])
         new_modes[0]["name"] += " next edit"
-        with pytest.raises(ConflictError, match="Upgrade the sealed catalog baseline"):
-            editor.save_draft(uow, workflow_id, CatalogDraft(
-                expected_version=active["catalog_version"], expected_sha256=active["content_sha256"], modes=new_modes))
+        next_draft = editor.save_draft(uow, workflow_id, CatalogDraft(
+            expected_version=active["catalog_version"], expected_sha256=active["content_sha256"], modes=new_modes))
+        assert next_draft["catalog_version"] == active["catalog_version"] + 1 == 6
         assert editor.read_active(uow, workflow_id) == active
 
 
