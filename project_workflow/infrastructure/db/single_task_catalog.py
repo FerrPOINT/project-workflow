@@ -159,31 +159,40 @@ def observe_installation(uow: SAUnitOfWork) -> SingleTaskInstallation:
         if active != latest:
             raise ValueError(f"{key}: Active publication pointer changed outside publication")
 
-    workflows = {workflow.key: workflow for workflow in uow.workflows.list()}
+    workflows = {workflow.key: workflow for workflow in uow.workflows.list() if is_single_task_key(workflow.key)}
     receipts = {}
-    selected_manifest = None
-    for role in ROLE_MODES:
-        key = f"{PROFILE}:{role}"
-        workflow = workflows.get(key)
-        if workflow is None:
-            raise ValueError(f"{key}: Single-task installed workflow missing")
+    catalogs = {}
+    provenance = {}
+    for key, workflow in workflows.items():
         receipt = _baseline_receipt(uow, workflow)
         if receipt is None:
             raise ValueError(f"{key}: Missing sealed baseline receipt")
         digest = _baseline_manifest(receipt)
         if digest not in SUPPORTED_MANIFESTS:
             raise ValueError(f"{key}: Unsupported single-task profile manifest {digest!r}")
-        if selected_manifest is not None and selected_manifest != digest:
-            raise ValueError(f"{key}: Sealed baseline manifest differs from the installed catalog family")
-        selected_manifest = digest
+        if digest not in catalogs:
+            try:
+                catalog, manifest = load_profile(digest)
+            except (OSError, ValueError) as exc:
+                raise ValueError(f"{key}: Cannot load sealed manifest {digest}: {exc}") from exc
+            definitions = {item["key"]: item for item in catalog["workflows"]}
+            catalogs[digest] = catalog, manifest, definitions
         receipts[key] = receipt
+        provenance[key] = digest
 
-    assert selected_manifest is not None
-    try:
-        catalog, manifest = load_profile(selected_manifest)
-    except (OSError, ValueError) as exc:
-        roles = ", ".join(ROLE_MODES)
-        raise ValueError(f"{PROFILE} ({roles}): Cannot load sealed manifest {selected_manifest}: {exc}") from exc
+    # An additive install seals only the new profession. Its manifest must
+    # account for the complete inventory and keep all retained definitions.
+    matches = [digest for digest, (_, _, definitions) in catalogs.items() if definitions.keys() == workflows.keys()]
+    if len(matches) != 1:
+        raise ValueError("Single-task installed workflow inventory mismatch")
+    selected_manifest, = matches
+    catalog, manifest, definitions = catalogs[selected_manifest]
+    for key, definition in definitions.items():
+        _, origin_manifest, origin_definitions = catalogs[provenance[key]]
+        role = definition["role_key"]
+        if (origin_definitions.get(key) != definition
+                or origin_manifest["roles"].get(role) != manifest["roles"][role]):
+            raise ValueError(f"{key}: Sealed baseline manifest differs from the installed catalog family")
     result = _observe_profile(uow, catalog, manifest, receipts=receipts, manifest_sha256=selected_manifest)
     if scope is not None:
         scope.transaction = (session.get_transaction(), session.get_nested_transaction())
