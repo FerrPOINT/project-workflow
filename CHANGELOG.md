@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-11-10: Линейный Default Workflow
+
+- Каждая роль первой фазой явно выполняет Start/InProgress; последняя включает
+  принятие итогового Workflow отчёта, сводку и агентское завершение Tracker/Completed.
+  Приложение отвечает за следующую стадию и Ready; complete=false продолжает фазы.
+- Reviewer выполняет полноценное ревью всех PR и сохраняет замечания; approved
+  и rework передаются Tester. Tester сохраняет passed/rework и передаёт DevOps.
+  Автоматический Rework отключён, после DevOps цепочка заканчивается.
+- Обновлены source-derived catalog/manifest, сохранена прежняя immutable family
+  для readback. IDs/коды фаз и режимы прежних назначений не меняются.
+  Исходники и проверки не означают активацию в работающем стенде.
+
 ## Unreleased - Advisor V19 Installed, Three-Agent Acceptance Pending
 
 ### Current Delivery Checkpoint (2026-11-09)

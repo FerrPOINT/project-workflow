@@ -70,6 +70,8 @@ def test_identity_donor_and_legacy_modes_are_preserved_and_not_aliased(professio
             expected_skills |= {"wiki-operator", "forge-operator"}
         if original["role_key"] == "architect":
             expected_skills |= {"forge-operator"}
+        if original["role_key"] == "reviewer":
+            expected_skills |= {"forge-operator", "exact-code-review"}
         assert set(current["skill_allowlist"]) == expected_skills
         original_modes = {m["key"]: m for m in original["modes"]}
         for mode in current["modes"]:
@@ -180,16 +182,19 @@ def test_architect_plans_one_task_and_all_modes_prohibit_multitask_flow(professi
         assert mode["key"] not in {"integration", "integration_rework"}
 
 
-def test_defects_return_through_review_and_testing_and_deployment_requires_proof(professions):
+def test_review_and_testing_preserve_findings_and_continue_without_rework(professions):
     reviewer = professions["reviewer"]["modes"][0]["phases"]
     work = " ".join(i["description"] for i in reviewer[1]["instructions"])
-    assert "reviewer-ack:<assignment_id>" in work and "Проверено" in work
-    assert "approved" in work and "Testing / Ready" in work
+    for required in ("ALL linked PRs", "full diff", "pr comment", "operation_id",
+                     "deleted lines", "reread the entire PR set", "approved|rework", "Testing / Ready"):
+        assert required in work
+    assert "reviewer-ack:" not in work and "Проверено" not in work
     tester = professions["tester"]["modes"][0]["phases"]
     actions = " ".join(i["description"] for i in tester[1]["instructions"])
     for required in ("assigned verification target", "served SHA", "immutable findings", "severity",
-                     "reproduction", "expected vs", "Rework / Ready"):
+                     "reproduction", "expected vs", "Deployment / Ready", "Both verdicts"):
         assert required in actions
+    assert "Rework / Ready" not in actions
     rework = professions["developer"]["modes"][1]
     text = " ".join(i["description"] for i in rework["phases"][1]["instructions"])
     assert "always returns to Review / Ready" in text and "fresh Testing run" in text
