@@ -6,6 +6,7 @@ import sqlalchemy as sa
 from project_workflow.infrastructure.db import single_task_catalog as catalog
 from project_workflow.infrastructure.db.session import ensure_migrated, run_alembic_command
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
+from tests._historical_catalog import historical_catalog
 
 
 @pytest.fixture(params=[
@@ -32,10 +33,7 @@ def assert_populated_catalog_upgrade_preserves_history(engine, monkeypatch, pred
     try:
         revision, previous = predecessor
         run_alembic_command("upgrade", engine, revision)
-        old = catalog.load_profile(previous)
-        reader = catalog.load_profile
-        with monkeypatch.context() as patch:
-            patch.setattr(catalog, "load_profile", lambda digest=None: reader(digest) if digest else old)
+        with historical_catalog(previous):
             with SAUnitOfWork(engine) as uow:
                 installed = catalog.ensure_single_task_catalog(uow)
                 binding = next(b for b in installed.bindings if b.role_key == role)
@@ -78,7 +76,9 @@ def assert_populated_catalog_upgrade_preserves_history(engine, monkeypatch, pred
         ensure_migrated(engine)
         with SAUnitOfWork(engine) as uow:
             current = catalog.observe_installation(uow)
-            assert current.instruction_manifest_sha256 == catalog.MANIFEST_SHA256
+            assert current.instruction_manifest_sha256 == (
+                "852e0647ad8645c9c6280b21c1595b9efa6ff87754d07df8dcc92bcb04f76381"
+            )
             analyst = next(b for b in current.bindings if b.role_key == "analyst")
             assert len(analyst.modes[0].phase_ids) == 12
             from project_workflow.application.catalog_publication import read_revision
@@ -135,10 +135,7 @@ def test_upgrade_refuses_customized_catalog_without_changing_data_or_ledger(tmp_
     try:
         revision, previous = predecessor
         run_alembic_command("upgrade", engine, revision)
-        old = catalog.load_profile(previous)
-        reader = catalog.load_profile
-        with monkeypatch.context() as patch:
-            patch.setattr(catalog, "load_profile", lambda digest=None: reader(digest) if digest else old)
+        with historical_catalog(previous):
             with SAUnitOfWork(engine) as uow:
                 installed = catalog.ensure_single_task_catalog(uow)
                 phase = int(installed.bindings[0].modes[0].phase_ids[0])
@@ -183,10 +180,7 @@ def test_structural_upgrade_preserves_operator_publications_and_drafts(tmp_path,
     engine = sa.create_engine(f"sqlite:///{tmp_path / 'publications.db'}")
     try:
         run_alembic_command("upgrade", engine, "0028_analyst_read_sources")
-        old = catalog.load_profile("62762bf58f337d9e063226aef58ea6c89cdfb2e87159056f1a6b2b6c4d1ddf3a")
-        reader = catalog.load_profile
-        with monkeypatch.context() as patch:
-            patch.setattr(catalog, "load_profile", lambda digest=None: reader(digest) if digest else old)
+        with historical_catalog("62762bf58f337d9e063226aef58ea6c89cdfb2e87159056f1a6b2b6c4d1ddf3a"):
             with SAUnitOfWork(engine) as uow:
                 installed = catalog.ensure_single_task_catalog(uow)
                 workflow_id = int(next(b for b in installed.bindings if b.role_key == role).workflow_id)
@@ -211,7 +205,8 @@ def test_structural_upgrade_preserves_operator_publications_and_drafts(tmp_path,
             with pytest.raises(ValueError, match="Explicit Start cutover publication required"):
                 ensure_migrated(engine)
             assert snapshot() == before
-            with SAUnitOfWork(engine) as uow:
+            with historical_catalog("62762bf58f337d9e063226aef58ea6c89cdfb2e87159056f1a6b2b6c4d1ddf3a"), \
+                    SAUnitOfWork(engine) as uow:
                 assert editor.read_operation(uow, workflow_id, "retained-publication") == saved
                 assert editor.read_active(uow, workflow_id)["catalog_version"] == saved["catalog_version"]
             return

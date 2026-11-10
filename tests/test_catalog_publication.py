@@ -13,6 +13,7 @@ from sqlalchemy import func, select
 from project_workflow.domain.single_task_profile import ROLE_MODES
 from project_workflow.infrastructure.db import models as m
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
+from tests._historical_catalog import historical_catalog
 from tests._human_access_helpers import human_identity, human_token
 from tests._report_helpers import report_json
 from tests.test_configured_cli import WRITER, enroll, step
@@ -106,15 +107,12 @@ def operator_publication_count(uow):
         ~m.WorkflowCatalogPublication.operation_key.startswith("@catalog-baseline:")))
 
 
-def seed_pre_publication_catalog(uow):
-    from unittest.mock import patch
-
+@pytest.fixture
+def seed_pre_publication_catalog():
     from project_workflow.infrastructure.db import single_task_catalog as catalog
 
-    reader = catalog.load_profile
-    old = reader("62762bf58f337d9e063226aef58ea6c89cdfb2e87159056f1a6b2b6c4d1ddf3a")
-    with patch.object(catalog, "load_profile", lambda digest=None: reader(digest) if digest else old):
-        return catalog.ensure_single_task_catalog(uow)
+    with historical_catalog("62762bf58f337d9e063226aef58ea6c89cdfb2e87159056f1a6b2b6c4d1ddf3a"):
+        yield catalog.ensure_single_task_catalog
 
 
 @pytest.fixture(autouse=True)
@@ -558,7 +556,9 @@ def test_published_pm_phase_read_matches_selected_snapshot_without_effects(confi
         assert operator_publication_count(uow) == before
 
 
-def test_publication_migration_is_additive_on_synthetic_filled_history(tmp_path, monkeypatch):
+def test_publication_migration_is_additive_on_synthetic_filled_history(
+    tmp_path, monkeypatch, seed_pre_publication_catalog,
+):
     from sqlalchemy import create_engine, text
 
     from project_workflow.application import catalog_publication
@@ -609,7 +609,9 @@ def test_publication_migration_is_additive_on_synthetic_filled_history(tmp_path,
         engine.dispose()
 
 
-def test_author_upgrade_preserves_pre_audit_publication_without_invented_identity(tmp_path, monkeypatch):
+def test_author_upgrade_preserves_pre_audit_publication_without_invented_identity(
+    tmp_path, monkeypatch, seed_pre_publication_catalog,
+):
     from sqlalchemy import create_engine, text
 
     from project_workflow.application import catalog_publication
