@@ -35,7 +35,6 @@ def render() -> tuple[bytes, bytes]:
         if digest((ROOT / path).read_bytes().replace(b"\r\n", b"\n")) != expected:
             raise ValueError(f"Instruction input differs from declared source commit: {path}")
     source = {
-        "repository": "https://github.com/FerrPOINT/project-workflow.git",
         "commit": SOURCE_COMMIT,
         "commit_meaning": "exact commit containing this catalog; source bytes are checked by sha256",
         "path": SOURCE_PATH,
