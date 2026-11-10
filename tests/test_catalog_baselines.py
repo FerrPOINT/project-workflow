@@ -13,6 +13,7 @@ from project_workflow.infrastructure.db import models as m
 from project_workflow.infrastructure.db import single_task_catalog as catalog
 from project_workflow.infrastructure.db.session import ensure_migrated, run_alembic_command
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
+from tests._historical_catalog import historical_catalog
 
 PREVIOUS = "62762bf58f337d9e063226aef58ea6c89cdfb2e87159056f1a6b2b6c4d1ddf3a"
 
@@ -27,10 +28,7 @@ def database(tmp_path):
 @pytest.mark.parametrize("publish", [False, True])
 def test_unchanged_operator_revision_survives_migration_and_remains_discoverable(database, monkeypatch, publish):
     run_alembic_command("upgrade", database, "0028_analyst_read_sources")
-    reader = catalog.load_profile
-    old = reader(PREVIOUS)
-    with monkeypatch.context() as patch:
-        patch.setattr(catalog, "load_profile", lambda digest=None: reader(digest) if digest else old)
+    with historical_catalog(PREVIOUS):
         with SAUnitOfWork(database) as uow:
             installed = catalog.ensure_single_task_catalog(uow)
             workflow_id = int(next(b for b in installed.bindings if b.role_key == "analyst").workflow_id)
@@ -60,9 +58,10 @@ def test_unchanged_operator_revision_survives_migration_and_remains_discoverable
             assert editor.read_pending_draft(uow, workflow_id)["catalog_version"] == 2
         new_modes = deepcopy(active["modes"])
         new_modes[0]["name"] += " next edit"
-        next_draft = editor.save_draft(uow, workflow_id, CatalogDraft(
-            expected_version=active["catalog_version"], expected_sha256=active["content_sha256"], modes=new_modes))
-        assert next_draft["catalog_version"] == active["catalog_version"] + 1 == 6
+        with pytest.raises(ConflictError, match="Upgrade the sealed catalog baseline"):
+            editor.save_draft(uow, workflow_id, CatalogDraft(
+                expected_version=active["catalog_version"], expected_sha256=active["content_sha256"], modes=new_modes))
+        assert editor.read_active(uow, workflow_id) == active
 
 
 @pytest.mark.parametrize("rollback", [1, 2])
@@ -144,10 +143,7 @@ def test_replaying_a_source_baseline_never_resets_a_newer_operator_publication(d
 @pytest.mark.parametrize("drift", [False, True])
 def test_already_applied_0029_is_sealed_without_rewriting_its_modes(database, monkeypatch, drift):
     run_alembic_command("upgrade", database, "0028_analyst_read_sources")
-    reader = catalog.load_profile
-    old = reader(PREVIOUS)
-    with monkeypatch.context() as patch:
-        patch.setattr(catalog, "load_profile", lambda digest=None: reader(digest) if digest else old)
+    with historical_catalog(PREVIOUS):
         with SAUnitOfWork(database) as uow:
             installed = catalog.ensure_single_task_catalog(uow)
             workflow_id = int(next(b for b in installed.bindings if b.role_key == "analyst").workflow_id)
