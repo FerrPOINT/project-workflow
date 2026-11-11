@@ -1,7 +1,7 @@
 {
   "instruction_overlay": {
     "path": "project_workflow/infrastructure/single_task_delivery_instructions.py",
-    "sha256": "81d350fb978e990bff2d48b33742628a4c4376ee50bd6b11eb026c21284e14c2"
+    "sha256": "2f47064ff341abc9358d830fb21c44f38c3e754fa0e0373bdba5441384e9a703"
   },
   "instruction_profile": "single-task-v1",
   "instruction_source": {
@@ -12,7 +12,7 @@
       "sha256": "d6d18f98b55f14210a3f0e12404074705495d535aa8ba29ae449624b845668c9"
     },
     "path": "project_workflow/infrastructure/single_task_catalog.py",
-    "sha256": "f91f5dce582f5fa485dd0059701d968533b2394aca856e790e8f94a2bee0822a"
+    "sha256": "a9845c249adf620c3c860c1628d35e906010a3aa9da0642b54b65802aa7e668e"
   },
   "inventory": {
     "modes": 8,
@@ -34,7 +34,7 @@
       "namespace_cli_command": "workflow-single-task-analyst",
       "namespace_name": "single-task-analyst",
       "profile": "single-task-v1-analyst",
-      "role_instructions_sha256": "ea31bd2cfd06c994a4a1259659dba5fc9f60224cf5df854b22e4ad72044be02d",
+      "role_instructions_sha256": "c399e9661c058896e134068f6c45e3b0d38c8616eb5d14ee80f7c223d7635479",
       "workflow_key": "single-task-v1:analyst"
     },
     "architect": {
@@ -47,7 +47,7 @@
       "namespace_cli_command": "workflow-single-task-architect",
       "namespace_name": "single-task-architect",
       "profile": "single-task-v1-architect",
-      "role_instructions_sha256": "4940c849cd70cd177fc2ce3f4b27585c9a7332d62c24265e91bf66e39edd31d1",
+      "role_instructions_sha256": "cc2298aa43882b1330705d57dd4879693a0f27812a87734b6a9b8df504171662",
       "workflow_key": "single-task-v1:architect"
     },
     "developer": {
@@ -63,7 +63,7 @@
       "namespace_cli_command": "workflow-single-task-developer",
       "namespace_name": "single-task-developer",
       "profile": "single-task-v1-developer",
-      "role_instructions_sha256": "3cd064febdfecfafa42195e94e559b45c23f1a2df6366170140fa44c996c73d6",
+      "role_instructions_sha256": "e66a3207df168d2cb0c5264fd203c19e5260082acad385cec15558c6c7844c2b",
       "workflow_key": "single-task-v1:developer"
     },
     "devops": {
@@ -76,7 +76,7 @@
       "namespace_cli_command": "workflow-single-task-devops",
       "namespace_name": "single-task-devops",
       "profile": "single-task-v1-devops",
-      "role_instructions_sha256": "4e39195e5718f12a450705e28294bab8146a8d7a08122773c39c9ffd578cd70e",
+      "role_instructions_sha256": "bb5775756a960f2b8dbff0dfdbd2e57bc54e475c35e04c0236a8371a3e101553",
       "workflow_key": "single-task-v1:devops"
     },
     "project_manager": {
@@ -89,7 +89,7 @@
       "namespace_cli_command": "workflow-single-task-project-manager",
       "namespace_name": "single-task-project-manager",
       "profile": "single-task-v1-project-manager",
-      "role_instructions_sha256": "b1eafbbba80e1dcaf8b4a195a61ed8f6a9583f00222f993bc0571d7f49bb5422",
+      "role_instructions_sha256": "0c45bcc54bf7bbad98c417aa74c8e5dc18d9c5973e9437e43e194aace748708c",
       "workflow_key": "single-task-v1:project_manager"
     },
     "reviewer": {
@@ -102,7 +102,7 @@
       "namespace_cli_command": "workflow-single-task-reviewer",
       "namespace_name": "single-task-reviewer",
       "profile": "single-task-v1-reviewer",
-      "role_instructions_sha256": "3ed02e163ed996c2df0d7537c95a940941c2d0e7dceeea88fff4018d9895d174",
+      "role_instructions_sha256": "75fcc2b0d0d46cd14b13ef383d0aec21f44c1a677846ef6cd87f4b3141c3e308",
       "workflow_key": "single-task-v1:reviewer"
     },
     "tester": {
@@ -115,7 +115,7 @@
       "namespace_cli_command": "workflow-single-task-tester",
       "namespace_name": "single-task-tester",
       "profile": "single-task-v1-tester",
-      "role_instructions_sha256": "97ac6fa24d5e00f5312738bbf852c39309b09809366d72501e17a24bdc34163b",
+      "role_instructions_sha256": "99e24b7a32cd9b278e9333bcf1e8f5e080bda161203b34635c95dc6ca57583d7",
       "workflow_key": "single-task-v1:tester"
     }
   },
@@ -128,7 +128,7 @@
   "workflow_catalog": {
     "artifact": "project_workflow/references/single_task_catalog_v1.json",
     "hash_encoding": "utf-8-lf-no-bom-with-final-newline",
-    "sha256": "a0390b7ae6556432f47beda3ede356eff11d72d45422678b1549cf08cd77540b",
+    "sha256": "dd5970c3ca44614282e46050fbfaadb25dae4264f97dce9479ab672814aea855",
     "version": 1
   }
 }
