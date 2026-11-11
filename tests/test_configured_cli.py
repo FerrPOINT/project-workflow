@@ -509,6 +509,7 @@ def test_first_phase_validates_actual_response_without_copying_it_into_report(co
     assert "two execution IDs are intentionally separate and are not required to be equal" in instructions
     assert "Actual task/assignment/agent mismatches remain blockers" in instructions
     contract = result["phase_contract"]
+    assert "instructions" not in contract
     assert contract["required_checks"] == [
         "The returned Workflow step is admitted in the assigned namespace.",
         "The one Tracker task, current stage/status and input references match.",

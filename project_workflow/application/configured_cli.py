@@ -358,8 +358,14 @@ def step(uow: SAUnitOfWork, command: ConfiguredStep, authorization: str | None) 
         instructions = engine.format_current_phase_instructions()
         if payload["request"]["role_key"] == "project_manager" and task.status != "done":
             instructions += "\n\n" + PM_CONTINUATION
+        # The formatted instructions already contain the phase and parallel steps.
+        contract = engine.get_phase_contract()
+        if contract is not None:
+            contract.pop("instructions", None)
+            for group in contract.get("group_details") or []:
+                group.pop("instructions", None)
         result = {**cursor(uow, task, payload), "instructions": instructions,
-                  "phase_contract": engine.get_phase_contract(), "complete": task.status == "done"}
+                  "phase_contract": contract, "complete": task.status == "done"}
         if final_pm and task.status != "done":
             result["report_parameters"] = ["--requirements-revision", "--requirements-sha256"]
         if task.status == "done":
