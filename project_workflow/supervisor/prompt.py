@@ -235,8 +235,9 @@ def format_current_phase_instructions(
         instructions = f"Текущий шаг: {target_phase.name}\n\n{_format_contract(contract, human_only=True)}"
     if contract.get("skills"):
         instructions = (
-            "Before doing this phase, read the installed files for phase_contract.skills through the terminal, "
-            "using your executor's configured skills directory. A missing required skill is a configuration error: "
+            "Use the installed skills listed in phase_contract.skills before doing this phase. "
+            "Reuse skills already loaded in this run. Read any missing from your executor's skill reader "
+            "(skill_view in Hermes). A missing required skill is a configuration error: "
             "do not substitute another name or install skills during the conversation.\n\n"
         ) + instructions
     return instructions + PHASE_REPORT_INSTRUCTIONS + "\n"

@@ -92,7 +92,8 @@ def test_worker_instruction_change_preserves_actual_engine_advisor_http_body(con
         before = step(fixture).json()["result"]
         worker_instructions.append(before["instructions"])
         assert worker_text in before["instructions"]
-        assert "read the installed files for phase_contract.skills" in before["instructions"]
+        assert "installed skills listed in phase_contract.skills" in before["instructions"]
+        assert "Reuse skills already loaded in this run" in before["instructions"]
         assert len(captured) == index
         submitted = step(fixture, report=raw, operation_key="same-business-report", expected_version=before["version"])
         assert submitted.status_code == 200, submitted.text
