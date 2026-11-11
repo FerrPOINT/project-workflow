@@ -329,6 +329,9 @@ def ensure_single_task_catalog(uow: SAUnitOfWork) -> SingleTaskInstallation:
         installed = observe_installation(uow)
         if installed.instruction_manifest_sha256 == _manifest_digest(manifest):
             return installed
+        pending = [w for w in catalog["workflows"] if w["key"] not in existing]
+        if not pending:
+            return installed
         previous, previous_manifest = load_profile(installed.instruction_manifest_sha256)
         current_by_key = {w["key"]: w for w in catalog["workflows"]}
         for definition in previous["workflows"]:
@@ -336,9 +339,6 @@ def ensure_single_task_catalog(uow: SAUnitOfWork) -> SingleTaskInstallation:
             if (current_by_key.get(definition["key"]) != definition
                     or manifest["roles"].get(role) != previous_manifest["roles"][role]):
                 raise ValueError("Existing professions must be unchanged for an additive installation")
-        pending = [w for w in catalog["workflows"] if w["key"] not in existing]
-        if not pending:
-            return installed
     for definition in pending:
         command = definition["namespace"]["cli_command"]
         if uow.projects.get_by_cli_command(command) or uow.projects.get_by_code(legacy_code_from_cli_command(command)):

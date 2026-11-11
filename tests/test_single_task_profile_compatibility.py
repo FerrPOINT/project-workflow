@@ -48,9 +48,9 @@ def test_first_step_profile_changes_only_opening_worker_description():
     assert expected == current
 
 
-def test_current_autonomous_profile_preserves_phase_contracts_and_other_roles():
+def test_autonomous_design_release_preserves_phase_contracts_and_other_roles():
     previous, _ = catalog.load_profile(FIRST_STEP_RELEASE)
-    current, _ = catalog.load_profile()
+    current, _ = catalog.load_profile(DEPLOYED_FIRST_STEP_RELEASE)
     assert len(previous["workflows"]) == len(current["workflows"])
     for old_workflow, new_workflow in zip(previous["workflows"], current["workflows"], strict=True):
         role = old_workflow["role_key"]
