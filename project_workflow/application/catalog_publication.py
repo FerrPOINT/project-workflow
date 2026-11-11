@@ -40,7 +40,7 @@ def publish_packaged_catalog(uow: SAUnitOfWork, expected_manifest: str) -> Singl
 
     workflows = [uow.workflows.get_by_id(int(binding.workflow_id)) for binding in installed.bindings]
     for workflow in workflows:
-        if workflow is None:
+        if workflow is None or workflow.id is None:
             raise ConflictError("Installed workflow changed before packaged publication")
         _, baseline = sealed_baseline(uow, workflow)
         if workflow.active_catalog_version != baseline or read_pending_draft(uow, workflow.id) is not None:

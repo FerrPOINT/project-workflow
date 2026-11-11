@@ -8,8 +8,13 @@ import pytest
 from pydantic import ValidationError
 from sqlalchemy import select
 
-from project_workflow.application.catalog_publication import publish_packaged_catalog, read_revision, save_draft
-from project_workflow.domain.catalog_publication import CatalogDraft
+from project_workflow.application.catalog_publication import (
+    publish,
+    publish_packaged_catalog,
+    read_revision,
+    save_draft,
+)
+from project_workflow.domain.catalog_publication import CatalogDraft, CatalogPublish
 from project_workflow.domain.exceptions import ConflictError
 from project_workflow.domain.single_task_profile import (
     CATALOG_MANIFESTS,
@@ -191,6 +196,39 @@ def test_packaged_publication_keeps_an_operator_draft(monkeypatch):
         before = all_rows(uow)
         with pytest.raises(ConflictError, match="operator publication or draft"):
             publish_packaged_catalog(uow, DEPLOYED_FIRST_STEP_RELEASE)
+        assert all_rows(uow) == before
+
+
+@pytest.mark.parametrize("published", [False, True], ids=["draft", "custom-publication"])
+def test_packaged_publication_current_family_keeps_operator_changes(monkeypatch, published):
+    installed = install_retained(monkeypatch, MANIFEST_SHA256)
+    workflow_id = int(installed.bindings[-1].workflow_id)
+    with SAUnitOfWork() as uow:
+        workflow = uow.workflows.get_by_id(workflow_id)
+        assert workflow is not None
+        active = read_revision(uow, workflow, workflow.active_catalog_version, selected=True)
+        active["modes"][0]["name"] += " (operator change)"
+        draft = save_draft(uow, workflow_id, CatalogDraft(
+            expected_version=active["catalog_version"], expected_sha256=active["content_sha256"], modes=active["modes"],
+        ))
+        if published:
+            publish(uow, workflow_id, draft["catalog_version"], CatalogPublish(
+                expected_version=active["catalog_version"], expected_sha256=active["content_sha256"],
+                draft_sha256=draft["content_sha256"], operation_key="publish-operator-change",
+            ), publisher_subject="catalog-test-admin")
+        assert catalog.observe_installation(uow).instruction_manifest_sha256 == MANIFEST_SHA256
+        before = all_rows(uow)
+        for expected_manifest in (MANIFEST_SHA256, DEPLOYED_FIRST_STEP_RELEASE):
+            assert publish_packaged_catalog(uow, expected_manifest) == installed
+            assert all_rows(uow) == before
+
+
+@pytest.mark.parametrize("expected_manifest", [MANIFEST_SHA256, DEPLOYED_FIRST_STEP_RELEASE])
+def test_packaged_publication_clean_current_family_is_unchanged(monkeypatch, expected_manifest):
+    installed = install_retained(monkeypatch, MANIFEST_SHA256)
+    with SAUnitOfWork() as uow:
+        before = all_rows(uow)
+        assert publish_packaged_catalog(uow, expected_manifest) == installed
         assert all_rows(uow) == before
 
 
