@@ -151,8 +151,8 @@ def test_configured_step_bounds_full_validations_per_runtime_uow(
     def sql(*_args):
         queries.append(1)
 
-    def observed(uow, *args):
-        result = validate(uow, *args)
+    def observed(uow, *args, **kwargs):
+        result = validate(uow, *args, **kwargs)
         validations.append((uow.session, uow.session.get_transaction(), uow.session.get_nested_transaction()))
         assert validations[-1][1] is not None
         return result
