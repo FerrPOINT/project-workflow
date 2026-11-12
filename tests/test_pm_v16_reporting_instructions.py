@@ -62,7 +62,7 @@ def test_render_changes_only_reporting_descriptions_and_preserves_historical_sou
         phases[index]["instructions"][position]["description"] = old
     assert current == original  # Includes roles, phases, criteria, counts, skills and command instructions.
     skill = render_skill()
-    historical_header = before[paths[1]].decode("utf-8").split("## Reports and stdin", 1)[0]
+    historical_header = paths[1].read_text(encoding="utf-8").split("## Reports and stdin", 1)[0]
     assert skill.startswith(historical_header + "## Reports and stdin\n\n")
     assert {path: path.read_bytes() for path in paths} == before
 
