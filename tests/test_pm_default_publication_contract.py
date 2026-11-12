@@ -21,9 +21,18 @@ from tests._report_helpers import report_json
 from tests.test_catalog_publication import active, operator_publication_count, publication
 from tests.test_catalog_publication import verified_catalog_administrator as verified_catalog_administrator
 from tests.test_configured_cli import MACHINE, enroll, step
-from tests.test_configured_cli import configured as configured
+from tests.test_configured_cli import configured as current_configured
+from tests.test_single_task_profile_compatibility import install_retained
 
 EXPORTS = Path(__file__).resolve().parents[1] / "docs/evidence"
+PUBLICATION_MANIFEST = "d035a0ddb06436714b76e40bc8cb68084203011f53dd52436732367690940e85"
+
+
+@pytest.fixture
+def configured(monkeypatch, request):
+    """Exercise the dated three-phase publication with its sealed configured family."""
+    install_retained(monkeypatch, PUBLICATION_MANIFEST)
+    yield from current_configured.__wrapped__(monkeypatch, request)
 
 
 @pytest.fixture

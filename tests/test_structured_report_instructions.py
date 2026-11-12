@@ -2,6 +2,7 @@
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -10,9 +11,18 @@ from project_workflow.application import catalog_publication
 from project_workflow.domain.phase_report import PHASE_REPORT_INSTRUCTIONS
 from tests.test_catalog_publication import active
 from tests.test_catalog_publication import verified_catalog_administrator as verified_catalog_administrator
-from tests.test_configured_cli import configured as configured
+from tests.test_configured_cli import configured as current_configured
 from tests.test_configured_cli import enroll
-from tests.test_pm_default_publication_contract import _cli_read, _publish, _workflow_id
+from tests.test_pm_default_publication_contract import PUBLICATION_MANIFEST, _cli_read, _publish, _workflow_id
+from tests.test_single_task_profile_compatibility import install_retained
+
+
+@pytest.fixture
+def configured(monkeypatch, request):
+    selection = getattr(request, "param", ("project_manager", "draft"))
+    if len(selection) == 3:
+        install_retained(monkeypatch, selection[2])
+    yield from current_configured.__wrapped__(monkeypatch, SimpleNamespace(param=selection[:2]))
 
 
 def test_pm_publication_changes_only_reporting_text_and_preserves_historical_input():
@@ -65,9 +75,12 @@ def test_configured_cli_returns_canonical_format_for_each_profession(configured,
     expected_skills = ["project-workflow-executor", "tracker-operator"]
     if configured[1]["role_key"] == "architect":
         expected_skills.append("forge-operator")
+    elif configured[1]["role_key"] == "reviewer":
+        expected_skills.extend(["forge-operator", "exact-code-review"])
     assert actual["phase_contract"]["skills"] == expected_skills
 
 
+@pytest.mark.parametrize("configured", [("project_manager", "draft", PUBLICATION_MANIFEST)], indirect=True)
 def test_published_pm_instructions_keep_one_canonical_format_in_actual_cli_output(configured, monkeypatch):
     client, assignment = configured
     _publish(client, active(client, _workflow_id(assignment)), render()["modes"])

@@ -16,13 +16,14 @@ from project_workflow.infrastructure.db.single_task_catalog import load_profile
 from tests.test_single_task_artifact_instructions import ANALYSIS_UPLOAD, DOWNLOAD, LIST, PROPOSE, phase_text
 
 PUBLICATIONS = Path(__file__).resolve().parents[1] / "project_workflow/references/publications"
+PUBLICATION_MANIFEST = "852e0647ad8645c9c6280b21c1595b9efa6ff87754d07df8dcc92bcb04f76381"
 
 
 @pytest.fixture(params=("project_manager", "analyst"))
 def publication(request):
     role = request.param
     payload = json.loads((PUBLICATIONS / f"{role}_business_report.json").read_text(encoding="utf-8"))
-    catalog, _ = load_profile()
+    catalog, _ = load_profile(PUBLICATION_MANIFEST)
     baseline = next(workflow for workflow in catalog["workflows"] if workflow["role_key"] == role)
     return role, payload, baseline
 

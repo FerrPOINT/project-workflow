@@ -19,8 +19,14 @@ from tests._report_helpers import report_json
 from tests.test_catalog_publication import active, publication
 from tests.test_catalog_publication import verified_catalog_administrator as verified_catalog_administrator
 from tests.test_configured_cli import MACHINE, enroll, step
-from tests.test_configured_cli import configured as configured
-from tests.test_pm_default_publication_contract import _cli_read, _publish, _save, _workflow_id
+from tests.test_pm_default_publication_contract import (
+    PUBLICATION_MANIFEST,
+    _cli_read,
+    _publish,
+    _save,
+    _workflow_id,
+)
+from tests.test_pm_default_publication_contract import configured as configured
 from tests.test_pm_verified_confirmation_context import tracker_confirmation
 
 pytestmark = pytest.mark.unit
@@ -63,7 +69,9 @@ def test_proposal_uses_existing_normalization_and_draft_schema_without_an_embedd
 def test_published_structure_roles_scopes_skills_and_counts_are_unchanged(business):
     modes = catalog_publication._normalize(business["modes"])
     assert payload_sha256(catalog_publication._structure(modes)) == BASE_STRUCTURE_SHA256
-    installed = catalog_publication._normalize(catalog_publication._definition(business["workflow_key"])["modes"])
+    installed = catalog_publication._normalize(
+        catalog_publication._definition(business["workflow_key"], PUBLICATION_MANIFEST)["modes"]
+    )
     assert catalog_publication._structure(modes) == catalog_publication._structure(installed)
     assert len(modes) == 1
     mode = modes[0]
@@ -79,7 +87,7 @@ def test_published_structure_roles_scopes_skills_and_counts_are_unchanged(busine
 
 
 def test_other_roles_and_sealed_profile_are_not_replaced(business):
-    catalog, manifest = load_profile()
+    catalog, manifest = load_profile(PUBLICATION_MANIFEST)
     original = deepcopy(catalog)
     others = [w for w in catalog["workflows"] if w["role_key"] != business["role_key"]]
     assert len(others) == 6
@@ -98,7 +106,7 @@ def test_other_roles_and_sealed_profile_are_not_replaced(business):
     pm["modes"] = catalog_publication._normalize(business["modes"])
     assert [w for w in proposed["workflows"] if w["role_key"] != business["role_key"]] == others
     assert catalog == original
-    assert load_profile() == (original, manifest)
+    assert load_profile(PUBLICATION_MANIFEST) == (original, manifest)
 
 
 @pytest.mark.parametrize("phase_index", range(3))
