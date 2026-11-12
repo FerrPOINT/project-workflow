@@ -2,7 +2,7 @@
 
 ## Текущая UI-поставка
 
-UI закреплён на `d4dd9977f0ff9af34f84bfa083e45a34a4fdde75` ([pin](../.base-ui-revision)). SDK и skills pins независимы и этим обновлением не меняются. SSR macros, JS, CSS и fingerprint идентичны прежнему UI pin; штатный exporter проверяет их без перезаписи. React-форма брендинга и offline search входят в UI-пакет, но не добавляются в SSR runtime Workflow.
+UI закреплён на `a6d08995f47353ea049731436bb9ac80b2044fc7` ([pin](../.base-ui-revision)). SDK и skills pins независимы и этим обновлением не меняются. SSR platform-ssr.js и fingerprint обновлены штатным exporter: исходный срок доступа, отзыв приватного DOM, остановка autosave и BFCache. CSS и macros сохранены. React-форма брендинга и offline search входят в UI-пакет, но не добавляются в SSR runtime Workflow.
 
 Датированные разделы ниже описывают историю квалификаций. Текущий pin сам по себе не подтверждает установку или authenticated-приёмку.
 

@@ -3,8 +3,9 @@
 {% set active_namespace = theme_namespace if theme_namespace is defined else none %}
 {% set active_namespace_id = active_namespace.id if active_namespace else none %}
 {% set sidebar_scope_suffix = '?project_scope=all' if request is defined and request.query_params.get('project_scope') == 'all' else '' %}
+{% set access_window = project_access_window() %}
 <!DOCTYPE html>
-<html lang="ru" data-theme="dark" data-theme-storage-key="workflow-theme">
+<html lang="ru" data-pdlc-access-pending data-theme="dark" data-theme-storage-key="workflow-theme">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -14,6 +15,7 @@
 <script>{% include "base/theme-preference.js" %}
 document.documentElement.dataset.theme=window.PdlcThemePreference.read("workflow-theme");</script>
 <style>
+html[data-pdlc-access-pending] body{visibility:hidden}
 :root{
   --bg:#111217;--panel:#17181d;--surface:#202126;--surface-hover:#27282e;--surface-active:#2d2e35;
   --text:#f7f8f8;--text-secondary:#d0d6e0;--text-muted:#969ba5;--text-dim:#a1a6af;
@@ -625,6 +627,14 @@ function pluralizeRu(n, one, few, many){
 {% include "base/platform-bridge.js" %}
 {% include "base/platform-ssr.js" %}
 installServerProduct({connectPlatformProduct, platformNavigate, platformReload, transportNamespaceLocation, createDraftTracker}, {
+  admission: {
+    initial: {{ access_window|tojson }},
+    load: async signal => {
+      const response = await fetch({{ (ui_base_path() + '/api/v1/space-admission')|tojson }}, {signal, cache: 'no-store', redirect: 'error', headers: {'Accept': 'application/json'}});
+      if (!response.ok) throw new Error('Access confirmation unavailable');
+      return response.json();
+    }
+  },
   serviceKey: 'project-workflow', portalOrigin: {{ platform_origin|default('')|tojson }},
   logoutUrl: {{ platform_logout_url|default('')|tojson }},
   error: {{ (message if status_code is defined and status_code >= 400 else none)|tojson }},

@@ -40,6 +40,7 @@ from sqlalchemy.pool import NullPool
 
 from project_workflow.config import get_settings
 
+from . import project_admission  # noqa: F401 -- registers request-scoped ORM guards
 from .models import Base
 
 logger = logging.getLogger(__name__)
