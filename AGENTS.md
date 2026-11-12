@@ -83,6 +83,9 @@
 
 ## Обязательные проверки
 
+GitHub Actions не используются: workflows удалены, проверки запускаются
+локально штатными целями. Не восстанавливать hosted workflows.
+
 Канонический локальный gate и expected output описаны в
 `docs/quality-gate.md`; цели `Makefile` и `scripts/quality.ps1` повторяют эти
 команды через `uv`, `constraints.txt` и текущий marker contract.
