@@ -14,7 +14,7 @@ from project_workflow.domain.catalog_publication import CatalogDraft, CatalogPub
 from project_workflow.domain.configured_cli import PROTOCOL
 from project_workflow.domain.exceptions import ConflictError, NotFoundError
 from project_workflow.domain.runtime_assignment import canonical_json, payload_sha256
-from project_workflow.domain.single_task_profile import CATALOG_MANIFESTS
+from project_workflow.domain.single_task_profile import CATALOG_MANIFESTS, MANIFEST_SHA256, SingleTaskInstallation
 from project_workflow.infrastructure.db import models as m
 from project_workflow.infrastructure.db.managed_catalog import (
     ManagedMode,
@@ -23,6 +23,36 @@ from project_workflow.infrastructure.db.managed_catalog import (
     _persist_mode,
 )
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
+
+
+def publish_packaged_catalog(uow: SAUnitOfWork, expected_manifest: str) -> SingleTaskInstallation:
+    """Append the packaged baseline atomically, retaining every prior mode and execution."""
+    from project_workflow.infrastructure.db.single_task_catalog import observe_installation
+
+    if expected_manifest not in CATALOG_MANIFESTS:
+        raise ValueError("Unsupported installed catalog manifest")
+    uow.lock_catalog_state()
+    installed = observe_installation(uow)
+    if installed.instruction_manifest_sha256 == MANIFEST_SHA256:
+        return installed
+    if installed.instruction_manifest_sha256 != expected_manifest:
+        raise ConflictError("Installed catalog manifest changed before packaged publication")
+
+    workflows = [uow.workflows.get_by_id(int(binding.workflow_id)) for binding in installed.bindings]
+    for workflow in workflows:
+        if workflow is None or workflow.id is None:
+            raise ConflictError("Installed workflow changed before packaged publication")
+        _, baseline = sealed_baseline(uow, workflow)
+        if workflow.active_catalog_version != baseline or read_pending_draft(uow, workflow.id) is not None:
+            raise ConflictError(f"Resolve the operator publication or draft before replacing {workflow.key}")
+
+    for workflow in workflows:
+        publish_baseline(uow, workflow, MANIFEST_SHA256)
+    uow.session.flush()
+    selected = observe_installation(uow)
+    if selected.instruction_manifest_sha256 != MANIFEST_SHA256:
+        raise ConflictError("Packaged catalog publication did not select the requested manifest")
+    return selected
 
 
 def _normalize(modes: list[dict]) -> list[dict]:

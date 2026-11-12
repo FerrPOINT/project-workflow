@@ -8,6 +8,14 @@ import pytest
 from pydantic import ValidationError
 from sqlalchemy import select
 
+from project_workflow.application.catalog_publication import (
+    publish,
+    publish_packaged_catalog,
+    read_revision,
+    save_draft,
+)
+from project_workflow.domain.catalog_publication import CatalogDraft, CatalogPublish
+from project_workflow.domain.exceptions import ConflictError
 from project_workflow.domain.single_task_profile import (
     CATALOG_MANIFESTS,
     MANIFEST_SHA256,
@@ -23,6 +31,7 @@ from tests import test_single_task_installation as installation
 
 PREVIOUS_FIRST_STEP = "e502e0e1bed9f4a16e08423a4ac1f0162e5ef6b006d9a9a7540137ac0ec5c08f"
 FIRST_STEP_RELEASE = "852e0647ad8645c9c6280b21c1595b9efa6ff87754d07df8dcc92bcb04f76381"
+DEPLOYED_FIRST_STEP_RELEASE = "920379c0c86455148e6fae35e2007037595c2d1cc82116c392c575c4625ffd28"
 
 
 def test_first_step_profile_changes_only_opening_worker_description():
@@ -142,6 +151,119 @@ def all_rows(uow):
             for name, table in m.Base.metadata.tables.items()}
 
 
+def test_packaged_publication_preserves_task_and_old_phases(monkeypatch):
+    old = install_retained(monkeypatch, DEPLOYED_FIRST_STEP_RELEASE)
+    reviewer = next(binding for binding in old.bindings if binding.role_key == "reviewer")
+    workflow_id = int(reviewer.workflow_id)
+    with SAUnitOfWork() as uow:
+        workflow = uow.workflows.get_by_id(workflow_id)
+        revision = read_revision(uow, workflow, workflow.active_catalog_version, selected=True)
+        mode, = uow.workflows.list_modes(workflow_id, catalog_version=revision["catalog_version"])
+        phase = uow.phases.list(workflow_id, mode_id=mode.id)[0]
+        uow.session.add(m.Task(project_id=int(reviewer.namespace_id), workflow_id=workflow_id,
+                               mode_id=mode.id, task_key="R1-1", current_phase_id=phase.id))
+        uow.session.flush()
+        before = all_rows(uow)
+        with pytest.raises(ConflictError, match="manifest changed"):
+            publish_packaged_catalog(uow, FIRST_STEP_RELEASE)
+        assert all_rows(uow) == before
+
+        selected = publish_packaged_catalog(uow, DEPLOYED_FIRST_STEP_RELEASE)
+        assert selected.instruction_manifest_sha256 == MANIFEST_SHA256
+        assert [(b.namespace_id, b.workflow_id) for b in selected.bindings] == [
+            (b.namespace_id, b.workflow_id) for b in old.bindings
+        ]
+        after = all_rows(uow)
+        assert after["tasks"] == before["tasks"]
+        assert all(row in after["phases"] for row in before["phases"])
+        assert read_revision(uow, workflow, revision["catalog_version"]) == revision
+
+    with SAUnitOfWork() as uow:
+        assert publish_packaged_catalog(uow, DEPLOYED_FIRST_STEP_RELEASE) == selected
+        assert all_rows(uow) == after
+
+
+def test_packaged_publication_keeps_an_operator_draft(monkeypatch):
+    old = install_retained(monkeypatch, DEPLOYED_FIRST_STEP_RELEASE)
+    workflow_id = int(old.bindings[-1].workflow_id)
+    with SAUnitOfWork() as uow:
+        workflow = uow.workflows.get_by_id(workflow_id)
+        active = read_revision(uow, workflow, workflow.active_catalog_version, selected=True)
+        active["modes"][0]["name"] += " (operator draft)"
+        save_draft(uow, workflow_id, CatalogDraft(expected_version=active["catalog_version"],
+                                                 expected_sha256=active["content_sha256"], modes=active["modes"]))
+        before = all_rows(uow)
+        with pytest.raises(ConflictError, match="operator publication or draft"):
+            publish_packaged_catalog(uow, DEPLOYED_FIRST_STEP_RELEASE)
+        assert all_rows(uow) == before
+
+
+def test_packaged_publication_keeps_the_enrolled_agent_execution(monkeypatch, supervisor_llm):
+    from tests._report_helpers import report_json
+
+    reader = catalog.load_profile
+    fixture = None
+    try:
+        with monkeypatch.context() as old_runtime:
+            old_runtime.setattr(catalog, "load_profile", lambda digest=DEPLOYED_FIRST_STEP_RELEASE: reader(digest))
+            fixture = protocol.configured.__wrapped__(monkeypatch, SimpleNamespace(param=("developer", "initial")))
+            context = next(fixture)
+            enrolled = protocol.enroll(context)
+            before = protocol.step(context).json()
+        with SAUnitOfWork() as uow:
+            selected = publish_packaged_catalog(uow, DEPLOYED_FIRST_STEP_RELEASE)
+            assert selected.instruction_manifest_sha256 == MANIFEST_SHA256
+        assert protocol.step(context).json() == before
+        supervisor_llm("PASS")
+        command = {"report": report_json("Verified work after packaged catalog publication"),
+                   "operation_key": "retained-agent-step", "expected_version": 1}
+        response = protocol.step(context, **command)
+        assert response.status_code == 200, response.text
+        assert response.json()["result"]["execution_ref"] == enrolled["execution_ref"]
+        assert protocol.step(context, **command).json() == response.json()
+        with SAUnitOfWork() as uow:
+            task = uow.tasks.get_by_key(context[1]["task"], project_id=context[1]["namespace_id"])
+            assert task.mode_id == enrolled["mode_id"]
+            assert uow.workflows.get_mode(task.mode_id).catalog_version < (
+                uow.workflows.get_by_id(task.workflow_id).active_catalog_version)
+    finally:
+        if fixture is not None:
+            fixture.close()
+
+
+@pytest.mark.parametrize("published", [False, True], ids=["draft", "custom-publication"])
+def test_packaged_publication_current_family_keeps_operator_changes(monkeypatch, published):
+    installed = install_retained(monkeypatch, MANIFEST_SHA256)
+    workflow_id = int(installed.bindings[-1].workflow_id)
+    with SAUnitOfWork() as uow:
+        workflow = uow.workflows.get_by_id(workflow_id)
+        assert workflow is not None
+        active = read_revision(uow, workflow, workflow.active_catalog_version, selected=True)
+        active["modes"][0]["name"] += " (operator change)"
+        draft = save_draft(uow, workflow_id, CatalogDraft(
+            expected_version=active["catalog_version"], expected_sha256=active["content_sha256"], modes=active["modes"],
+        ))
+        if published:
+            publish(uow, workflow_id, draft["catalog_version"], CatalogPublish(
+                expected_version=active["catalog_version"], expected_sha256=active["content_sha256"],
+                draft_sha256=draft["content_sha256"], operation_key="publish-operator-change",
+            ), publisher_subject="catalog-test-admin")
+        assert catalog.observe_installation(uow).instruction_manifest_sha256 == MANIFEST_SHA256
+        before = all_rows(uow)
+        for expected_manifest in (MANIFEST_SHA256, DEPLOYED_FIRST_STEP_RELEASE):
+            assert publish_packaged_catalog(uow, expected_manifest) == installed
+            assert all_rows(uow) == before
+
+
+@pytest.mark.parametrize("expected_manifest", [MANIFEST_SHA256, DEPLOYED_FIRST_STEP_RELEASE])
+def test_packaged_publication_clean_current_family_is_unchanged(monkeypatch, expected_manifest):
+    installed = install_retained(monkeypatch, MANIFEST_SHA256)
+    with SAUnitOfWork() as uow:
+        before = all_rows(uow)
+        assert publish_packaged_catalog(uow, expected_manifest) == installed
+        assert all_rows(uow) == before
+
+
 @pytest.mark.parametrize("manifest", [key for key, source in CATALOG_MANIFESTS.items()
                                      if source.execution_protocol is None])
 def test_retained_native_profile_is_readable_but_cannot_enroll_new_execution(monkeypatch, manifest):
@@ -152,6 +274,13 @@ def test_retained_native_profile_is_readable_but_cannot_enroll_new_execution(mon
         with SAUnitOfWork() as uow:
             before = all_rows(uow)
             assert catalog.observe_installation(uow) == original
+            workflow = uow.workflows.get_by_id(int(original.bindings[-1].workflow_id))
+            active = read_revision(uow, workflow, workflow.active_catalog_version, selected=True)
+            with pytest.raises(ConflictError, match="does not support configured-cli-v1 publication"):
+                save_draft(uow, workflow.id, CatalogDraft(
+                    expected_version=active["catalog_version"], expected_sha256=active["content_sha256"],
+                    modes=active["modes"]))
+            assert all_rows(uow) == before
         response = client.post("/internal/runtime/assign", headers=protocol.WRITER, json=request)
         assert response.status_code == 409, response.text
         with SAUnitOfWork() as uow:

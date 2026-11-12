@@ -26,6 +26,31 @@ Bootstrap печатает typed installation readback после успешно
 Drift, partial install и foreign collisions отклоняются без repair. Ошибка первого
 создания откатывает transaction. Legacy metadata/defaults/task/history не меняются.
 
+Чтобы явно выбрать каталог из установленного образа, оператор указывает SHA-256
+манифеста из текущего installation readback.
+
+```sh
+python -m scripts.init_db --publish-packaged-catalog-from "$INSTALLED_MANIFEST_SHA256"
+```
+
+Команда под блокировкой валидирует установленное baseline family. Если его manifest
+уже совпадает с packaged manifest, возвращается installation readback без записи:
+операторские черновики и выбранные публикации сохраняются и не блокируют этот no-op.
+В этой ветке допустим и прежний SHA-256 из поддерживаемых манифестов в аргументе команды.
+
+Только при фактической замене baseline family команда требует точного совпадения
+исходного manifest с аргументом, отклоняет операторскую публикацию или черновик
+и добавляет базовую публикацию для всех ролей в одной транзакции. Для такой замены
+операторские изменения требуют отдельного решения. Начатые задачи продолжают
+использовать прежние mode ID и фазы. После публикации прочитайте новые привязки
+и подготовьте конфигурации Fleet для новых назначений.
+
+Installation manifest и bindings описывают sealed baseline provenance, а не
+обещают, что выбранная операторская редакция совпадает с packaged content.
+Фактические active `catalog_version`, `content_sha256` и `modes` читайте через
+`GET /api/workflows/{workflow_id}/catalog` с существующими правами администратора;
+контракт описан в [Catalog Publication API](managed-catalog-publication.md#json-api).
+
 Новые GET зарегистрированы в существующем runtime router:
 
 - `/internal/runtime/profiles/single-task-v1/installation` → `SingleTaskInstallationResponse`.

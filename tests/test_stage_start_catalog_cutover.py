@@ -16,6 +16,7 @@ from project_workflow.infrastructure.db.session import (
     run_alembic_command,
 )
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
+from tests._historical_catalog import historical_publication_writer
 from tests._report_helpers import report_json
 from tests.test_postgres_integration import pg_url as pg_url
 
@@ -74,7 +75,7 @@ def test_cutover_preserves_populated_history_and_pending_drafts(predecessor, dra
     engine, installed = predecessor
     original_draft = None
     reader = catalog.load_profile
-    with monkeypatch.context() as old_runtime, SAUnitOfWork(engine) as uow:
+    with monkeypatch.context() as old_runtime, historical_publication_writer(), SAUnitOfWork(engine) as uow:
         old_runtime.setattr(catalog, "load_profile", lambda digest=None: reader(digest or PREVIOUS))
         for binding in installed.bindings:
             workflow_id = int(binding.workflow_id)
@@ -163,7 +164,7 @@ def test_active_operator_publication_requires_explicit_cutover_before_any_write(
     engine, installed = predecessor
     binding = next(binding for binding in installed.bindings if binding.role_key == role)
     reader = catalog.load_profile
-    with monkeypatch.context() as old_runtime, SAUnitOfWork(engine) as uow:
+    with monkeypatch.context() as old_runtime, historical_publication_writer(), SAUnitOfWork(engine) as uow:
         old_runtime.setattr(catalog, "load_profile", lambda digest=None: reader(digest or PREVIOUS))
         workflow_id = int(binding.workflow_id)
         active = editor.read_active(uow, workflow_id)
@@ -196,7 +197,7 @@ def test_exact_target_operator_publication_is_sealed_without_overriding_content(
     workflow_id = int(binding.workflow_id)
     target = editor._definition(binding.workflow_key, TARGET_MANIFEST)
     reader = catalog.load_profile
-    with monkeypatch.context() as old_runtime, SAUnitOfWork(engine) as uow:
+    with monkeypatch.context() as old_runtime, historical_publication_writer(), SAUnitOfWork(engine) as uow:
         old_runtime.setattr(catalog, "load_profile", lambda digest=None: reader(digest or PREVIOUS))
         # Old jobs stay on the selected old modes even when the operator publishes
         # the reviewed Start text before the normal registered migration.
@@ -249,12 +250,12 @@ def test_almost_target_publication_is_not_silently_replaced(predecessor, monkeyp
     binding = next(binding for binding in installed.bindings if binding.role_key == "project_manager")
     workflow_id = int(binding.workflow_id)
     manifest = ("e502e0e1bed9f4a16e08423a4ac1f0162e5ef6b006d9a9a7540137ac0ec5c08f"
-                if publication == "previous_first_step" else None)
+                if publication == "previous_first_step" else TARGET_MANIFEST)
     modes = editor._normalize(editor._definition(binding.workflow_key, manifest)["modes"])
     if publication == "operator_text":
         modes[0]["phases"][-1]["instructions"][-1]["description"] += " Keep this deliberate operator text."
     reader = catalog.load_profile
-    with monkeypatch.context() as old_runtime, SAUnitOfWork(engine) as uow:
+    with monkeypatch.context() as old_runtime, historical_publication_writer(), SAUnitOfWork(engine) as uow:
         old_runtime.setattr(catalog, "load_profile", lambda digest=None: reader(digest or PREVIOUS))
         active = editor.read_active(uow, workflow_id)
         draft = editor.save_draft(uow, workflow_id, CatalogDraft(

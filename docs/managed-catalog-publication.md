@@ -34,7 +34,11 @@ credentials, raw evidence or another installation's database.
 All seven professions have canonical phase data and namespace/workflow profiles
 in the [catalog](../project_workflow/references/single_task_catalog_v1.json) and
 [manifest](../project_workflow/references/single_task_manifest_v1.json).
-The following files are portable PM/Analyst text publications over that contract:
+The following versioned PM/Analyst text publications target the catalog family
+`852e0647ad8645c9c6280b21c1595b9efa6ff87754d07df8dcc92bcb04f76381`
+from the Workflow checkpoint above. They do not track the latest packaged
+structure. For another family, prepare the change from its actual active
+revision and review its structure before publication.
 
 | Role | Portable configuration | Canonical modes SHA256 |
 | --- | --- | --- |

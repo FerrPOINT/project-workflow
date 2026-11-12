@@ -17,11 +17,13 @@ from project_workflow.infrastructure.db.session import (
     run_alembic_command,
 )
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
+from tests._historical_catalog import historical_catalog
 from tests._report_helpers import report_json
 from tests.test_postgres_integration import pg_url as pg_url
 
 PREDECESSOR = "0023_catalog_publication_author"
 HEAD = "0030_analyst_baseline_ledger"
+HEAD_PROFILE = "2f16635c0f588d1f285393b4ad8c163119b4dba4b9918335c821f295e88a4f64"
 PROFILE = "e0cde0c044fe1a38b6fa0f387cc30e0da6e89dedb35b89a893263fd7d2558a40"
 TARGETS = (
     "332cfd4fb3419d5765008e196cffb508540462ddd89b798ab4e89379ac5b1796",
@@ -72,8 +74,7 @@ def assert_published_pm_upgrade_preserves_published_content_and_history(engine, 
         run_alembic_command("upgrade", engine, PREDECESSOR)
         reader = catalog.load_profile
         predecessor = reader(PROFILE)
-        with monkeypatch.context() as patch:
-            patch.setattr(catalog, "load_profile", lambda digest=None: reader(digest) if digest else predecessor)
+        with historical_catalog(PROFILE):
             with SAUnitOfWork(engine) as uow:
                 installed = catalog.ensure_single_task_catalog(uow)
                 workflow_id = int(next(b for b in installed.bindings if b.role_key == "project_manager").workflow_id)
@@ -94,7 +95,7 @@ def assert_published_pm_upgrade_preserves_published_content_and_history(engine, 
                     assert published["catalog_version"] == version
                     publications[version] = published
 
-        with SAUnitOfWork(engine) as uow:
+        with historical_catalog(PROFILE), SAUnitOfWork(engine) as uow:
             catalog._observe_profile(uow, *predecessor)
             assert editor.read_active(uow, workflow_id)["catalog_version"] == 13
             active_pm = editor.read_active(uow, workflow_id)
@@ -204,8 +205,8 @@ def assert_published_pm_upgrade_preserves_published_content_and_history(engine, 
             assert receipt["operation_key"] == f"{editor.BASELINE_OPERATION}{analyst_id}:{digest}"
             assert receipt["published_by_subject"] is None and receipt["published_at"] is None
 
-        with SAUnitOfWork(engine) as uow:
-            catalog._observe_profile(uow, *reader("2f16635c0f588d1f285393b4ad8c163119b4dba4b9918335c821f295e88a4f64"))
+        with historical_catalog(HEAD_PROFILE), SAUnitOfWork(engine) as uow:
+            catalog._observe_profile(uow, *reader(HEAD_PROFILE))
             assert editor.read_active(uow, workflow_id) == active_pm
             for version, published in publications.items():
                 assert editor.read_operation(uow, workflow_id, f"published-pm-{version}") == published
@@ -241,8 +242,7 @@ def assert_published_analyst_upgrade_preserves_active_revision_and_history(engin
         run_alembic_command("upgrade", engine, predecessor)
         reader = catalog.load_profile
         original = reader(profile)
-        with monkeypatch.context() as patch:
-            patch.setattr(catalog, "load_profile", lambda digest=None: reader(digest) if digest else original)
+        with historical_catalog(profile):
             with SAUnitOfWork(engine) as uow:
                 installed = catalog.ensure_single_task_catalog(uow)
                 binding = next(b for b in installed.bindings if b.role_key == "analyst")
@@ -261,7 +261,7 @@ def assert_published_analyst_upgrade_preserves_active_revision_and_history(engin
                 ), publisher_subject="verified-test-admin")
                 assert published["catalog_version"] == 2
 
-        with SAUnitOfWork(engine) as uow:
+        with historical_catalog(profile), SAUnitOfWork(engine) as uow:
             catalog._observe_profile(uow, *original)
             active = editor.read_active(uow, workflow_id)
             mode = uow.workflows.list_modes(workflow_id)[0]
@@ -297,7 +297,7 @@ def assert_published_analyst_upgrade_preserves_active_revision_and_history(engin
         for name in content_tables - {"phases"}:
             assert [row for row in after[name] if row["phase_id"] in published_phases] == [
                 row for row in before[name] if row["phase_id"] in published_phases], name
-        with SAUnitOfWork(engine) as uow:
+        with historical_catalog(ANALYST_TARGET_PROFILE), SAUnitOfWork(engine) as uow:
             catalog._observe_profile(uow, *reader(ANALYST_TARGET_PROFILE))
             assert editor.read_active(uow, workflow_id) == active
             assert editor.read_operation(uow, workflow_id, "published-analyst-2") == published
@@ -339,8 +339,8 @@ def assert_published_analyst_upgrade_preserves_active_revision_and_history(engin
             assert receipt["parent_version"] == version - 1
             assert receipt["operation_key"] == f"{editor.BASELINE_OPERATION}{workflow_id}:{digest}"
             assert receipt["published_by_subject"] is None and receipt["published_at"] is None
-        with SAUnitOfWork(engine) as uow:
-            catalog._observe_profile(uow, *reader("2f16635c0f588d1f285393b4ad8c163119b4dba4b9918335c821f295e88a4f64"))
+        with historical_catalog(HEAD_PROFILE), SAUnitOfWork(engine) as uow:
+            catalog._observe_profile(uow, *reader(HEAD_PROFILE))
             assert editor.read_active(uow, workflow_id)["catalog_version"] == 4
             assert editor.read_revision(uow, uow.workflows.get_by_id(workflow_id), 2) == active
             assert editor.read_operation(uow, workflow_id, "published-analyst-2") == published
