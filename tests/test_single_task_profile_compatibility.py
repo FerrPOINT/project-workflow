@@ -198,6 +198,39 @@ def test_packaged_publication_keeps_an_operator_draft(monkeypatch):
         assert all_rows(uow) == before
 
 
+def test_packaged_publication_keeps_the_enrolled_agent_execution(monkeypatch, supervisor_llm):
+    from tests._report_helpers import report_json
+
+    reader = catalog.load_profile
+    fixture = None
+    try:
+        with monkeypatch.context() as old_runtime:
+            old_runtime.setattr(catalog, "load_profile", lambda digest=DEPLOYED_FIRST_STEP_RELEASE: reader(digest))
+            fixture = protocol.configured.__wrapped__(monkeypatch, SimpleNamespace(param=("developer", "initial")))
+            context = next(fixture)
+            enrolled = protocol.enroll(context)
+            before = protocol.step(context).json()
+        with SAUnitOfWork() as uow:
+            selected = publish_packaged_catalog(uow, DEPLOYED_FIRST_STEP_RELEASE)
+            assert selected.instruction_manifest_sha256 == MANIFEST_SHA256
+        assert protocol.step(context).json() == before
+        supervisor_llm("PASS")
+        command = {"report": report_json("Verified work after packaged catalog publication"),
+                   "operation_key": "retained-agent-step", "expected_version": 1}
+        response = protocol.step(context, **command)
+        assert response.status_code == 200, response.text
+        assert response.json()["result"]["execution_ref"] == enrolled["execution_ref"]
+        assert protocol.step(context, **command).json() == response.json()
+        with SAUnitOfWork() as uow:
+            task = uow.tasks.get_by_key(context[1]["task"], project_id=context[1]["namespace_id"])
+            assert task.mode_id == enrolled["mode_id"]
+            assert uow.workflows.get_mode(task.mode_id).catalog_version < (
+                uow.workflows.get_by_id(task.workflow_id).active_catalog_version)
+    finally:
+        if fixture is not None:
+            fixture.close()
+
+
 @pytest.mark.parametrize("published", [False, True], ids=["draft", "custom-publication"])
 def test_packaged_publication_current_family_keeps_operator_changes(monkeypatch, published):
     installed = install_retained(monkeypatch, MANIFEST_SHA256)
@@ -241,6 +274,13 @@ def test_retained_native_profile_is_readable_but_cannot_enroll_new_execution(mon
         with SAUnitOfWork() as uow:
             before = all_rows(uow)
             assert catalog.observe_installation(uow) == original
+            workflow = uow.workflows.get_by_id(int(original.bindings[-1].workflow_id))
+            active = read_revision(uow, workflow, workflow.active_catalog_version, selected=True)
+            with pytest.raises(ConflictError, match="does not support configured-cli-v1 publication"):
+                save_draft(uow, workflow.id, CatalogDraft(
+                    expected_version=active["catalog_version"], expected_sha256=active["content_sha256"],
+                    modes=active["modes"]))
+            assert all_rows(uow) == before
         response = client.post("/internal/runtime/assign", headers=protocol.WRITER, json=request)
         assert response.status_code == 409, response.text
         with SAUnitOfWork() as uow:
