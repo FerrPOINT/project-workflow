@@ -1,8 +1,10 @@
 """The shared Auth connection pool never shares identity or cookie authority."""
 
+import asyncio
 from contextlib import asynccontextmanager
 
 import httpx
+import pytest
 from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 
@@ -73,6 +75,59 @@ def test_auth_resources_preserve_existing_lifespan_state_and_cleanup(monkeypatch
         assert browser.get("/health").json() == {"resource": "still-present"}
         assert events == ["start"]
     assert events == ["start", "stop"]
+
+
+def test_cancelling_one_caller_keeps_the_pool_and_other_identity_alive(monkeypatch):
+    original_client = httpx.AsyncClient
+    tokens = {name: human_token(name) for name in ("alice", "bob")}
+    requests = []
+
+    async def exercise():
+        entered = asyncio.Event()
+
+        async def owner(request):
+            requests.append(request)
+            if request.headers["authorization"] == f"Bearer {tokens['alice']}":
+                entered.set()
+                await asyncio.Future()
+            return httpx.Response(200, json=human_identity("bob"),
+                                  headers={"set-cookie": "owner_session=must-not-propagate; Path=/"})
+
+        monkeypatch.setattr(sso.httpx, "AsyncClient", lambda **kwargs: original_client(
+            transport=httpx.MockTransport(owner), **kwargs))
+        app, _ = _app(monkeypatch)
+
+        @app.get("/api/verified")
+        def verified(request: Request):
+            return {"subject": request.state.central_subject}
+
+        async with app.router.lifespan_context(app):
+            pool = app.state.central_auth_http
+            async with original_client(transport=httpx.ASGITransport(app=app),
+                                       base_url="http://localhost:8812") as client:
+                pending = asyncio.create_task(client.get(
+                    "/api/verified", headers={"Authorization": f"Bearer {tokens['alice']}"}))
+                try:
+                    await asyncio.wait_for(entered.wait(), timeout=2)
+                    response = await asyncio.wait_for(client.get(
+                        "/api/verified", headers={"Authorization": f"Bearer {tokens['bob']}"}), timeout=2)
+                    assert response.status_code == 200
+                    assert response.json() == {"subject": "bob"}
+                finally:
+                    pending.cancel()
+                    with pytest.raises(asyncio.CancelledError):
+                        await pending
+                response = await client.get("/api/verified", headers={"Authorization": f"Bearer {tokens['bob']}"})
+                assert response.status_code == 200
+                assert response.json() == {"subject": "bob"}
+                assert not pool.is_closed
+                assert len(pool.cookies) == 0
+        assert pool.is_closed
+        assert not hasattr(app.state, "central_auth_http")
+        assert len(requests) == 3
+        assert all("cookie" not in request.headers for request in requests)
+
+    asyncio.run(exercise())
 
 
 def test_standalone_does_not_allocate_a_central_auth_client(monkeypatch):

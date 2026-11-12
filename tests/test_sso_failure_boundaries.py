@@ -203,7 +203,7 @@ def test_db_denial_restores_original_context_but_unrelated_failure_is_not_author
     monkeypatch.setenv("PROJECT_WORKFLOW_SPACES__ENABLED", "false")
     _central(monkeypatch, lambda request: httpx.Response(200, json=human_identity("human")))
     request = Request({
-        "type": "http", "method": "GET", "scheme": "http", "path": "/api/tasks",
+        "type": "http", "app": app, "method": "GET", "scheme": "http", "path": "/api/tasks",
         "query_string": b"", "server": ("localhost", 8812),
         "headers": [(b"authorization", ("Bearer " + human_token("human")).encode())],
     })
@@ -217,26 +217,27 @@ def test_db_denial_restores_original_context_but_unrelated_failure_is_not_author
     original = RequestClock(time.monotonic() + 30, time.time() + 30)
 
     async def exercise():
-        token = sso.current_clock.set(original)
-        try:
-            async def handler(_request):
-                active = sso.current_clock.get()
-                assert active is not None and active is not original
-                active.require_current()
-                raise database_error
+        async with app.router.lifespan_context(app):
+            token = sso.current_clock.set(original)
+            try:
+                async def handler(_request):
+                    active = sso.current_clock.get()
+                    assert active is not None and active is not original
+                    active.require_current()
+                    raise database_error
 
-            middleware = sso._SsoMiddleware(app, settings)
-            if sqlstate == "42501":
-                response = await middleware.dispatch(request, handler)
-                assert response.status_code == 403
-                assert b"synthetic-private" not in response.body
-            else:
-                with pytest.raises(DBAPIError) as error:
-                    await middleware.dispatch(request, handler)
-                assert error.value is database_error
-            assert sso.current_clock.get() is original
-        finally:
-            sso.current_clock.reset(token)
+                middleware = sso._SsoMiddleware(app, settings)
+                if sqlstate == "42501":
+                    response = await middleware.dispatch(request, handler)
+                    assert response.status_code == 403
+                    assert b"synthetic-private" not in response.body
+                else:
+                    with pytest.raises(DBAPIError) as error:
+                        await middleware.dispatch(request, handler)
+                    assert error.value is database_error
+                assert sso.current_clock.get() is original
+            finally:
+                sso.current_clock.reset(token)
 
     asyncio.run(exercise())
 
