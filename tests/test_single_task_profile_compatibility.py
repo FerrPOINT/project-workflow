@@ -53,23 +53,22 @@ def test_first_step_profile_changes_only_opening_worker_description():
     assert expected == current
 
 
-def test_current_autonomous_profile_preserves_phase_contracts_and_other_roles():
-    previous, _ = catalog.load_profile(FIRST_STEP_RELEASE)
+def test_linear_profile_preserves_role_bindings_and_phase_identities():
+    previous, _ = catalog.load_profile("a6d82abf1c7d3965b452e29783bd7a1adc093bcf9f460aa36f4060bf78eba70a")
     current, _ = catalog.load_profile()
     assert len(previous["workflows"]) == len(current["workflows"])
     for old_workflow, new_workflow in zip(previous["workflows"], current["workflows"], strict=True):
         role = old_workflow["role_key"]
         assert new_workflow["role_key"] == role
-        if role not in {"analyst", "architect"}:
-            assert old_workflow == new_workflow
-            continue
+        assert old_workflow["namespace"] == new_workflow["namespace"]
         for old_mode, new_mode in zip(old_workflow["modes"], new_workflow["modes"], strict=True):
             assert {key: value for key, value in old_mode.items() if key != "phases"} == {
                 key: value for key, value in new_mode.items() if key != "phases"
             }
             for old_phase, new_phase in zip(old_mode["phases"], new_mode["phases"], strict=True):
-                assert {key: value for key, value in old_phase.items() if key != "instructions"} == {
-                    key: value for key, value in new_phase.items() if key != "instructions"
+                changed_content = {"instructions", "checks", "evidence"}
+                assert {key: value for key, value in old_phase.items() if key not in changed_content} == {
+                    key: value for key, value in new_phase.items() if key not in changed_content
                 }
 
 

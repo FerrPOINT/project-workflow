@@ -229,7 +229,7 @@ def test_reviewer_first_reads_actual_developer_result_then_seals_verified_proven
     for required in (
         "supplied previous_result_id AFTER Developer Complete", "task-tracker sdlc result read",
         "source=delivery", "matching task/cycle", "role=developer", "exact candidate commit_sha",
-        "Embed that verified Developer result ID", "Reviewer's own sealed acknowledgment report",
+        "Embed that verified Developer result ID", "Reviewer's own sealed review report",
         "Do not amend Developer artifacts", "wait for your own future accepted Reviewer result",
     ):
         assert required in source
