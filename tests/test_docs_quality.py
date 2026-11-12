@@ -77,28 +77,19 @@ def test_readme_does_not_advertise_absent_systemd_unit() -> None:
     assert "curl --fail http://127.0.0.1:8812/health" in readme
 
 
-def test_hosted_ci_covers_quality_and_compose_readiness() -> None:
-    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
-
-    assert "branches: [master]" in workflow
-    assert "pytest -q --timeout=60" in workflow
-    assert "pytest -q -m integration --timeout=120" in workflow
-    assert "WORKFLOW_APPLICATION_CLOCK_TEST_URL" in workflow
-    assert "ruff check ." in workflow
-    assert "mypy project_workflow scripts" in workflow
-    # Fleet CI convention: light pipeline; E2E, coverage thresholds and
-    # compose readiness checks run locally via make quality / make compose.
+def test_quality_gate_is_local_without_hosted_workflows() -> None:
+    assert not list((ROOT / ".github/workflows").glob("*.yml"))
+    assert not list((ROOT / ".github/workflows").glob("*.yaml"))
+    guide = (ROOT / "docs/quality-gate.md").read_text(encoding="utf-8")
+    assert "GitHub Actions удалены" in guide
+    assert "make quality" in guide
+    assert "scripts/quality.ps1 quality" in guide
 
 
 def test_quality_gate_supplies_qualified_cli_source_independently_of_sdk() -> None:
     revision = "25b0b2aafaa9feaa854ca86f11043ff825842229"
-    workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
     script = (ROOT / "scripts/quality.ps1").read_text(encoding="utf-8")
     guide = (ROOT / "docs/quality-gate.md").read_text(encoding="utf-8")
-    assert "sha=$(cat .base-revision)" in workflow
-    assert "ref: ${{ steps.base-sdk.outputs.sha }}" in workflow
-    assert "path: workflow-cli-base" in workflow and f"ref: {revision}" in workflow
-    assert "PYTHONPATH: ${{ github.workspace }}/workflow-cli-base/base-modules/python/cli-core" in workflow
     for text in (script, guide):
         assert revision in text and "WORKFLOW_CLI_BASE" in text
         assert "base-modules/python/cli-core" in text and "PYTHONPATH" in text
