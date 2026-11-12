@@ -1,7 +1,7 @@
 {
   "instruction_overlay": {
     "path": "project_workflow/infrastructure/single_task_delivery_instructions.py",
-    "sha256": "b93f1d209eede25fab26ec6ea29817527e9cf520133fcdeaf620e9858150210a"
+    "sha256": "da7c1d364740355101fbc7ca098120527664b9f01033d9bbe439c746a4c90e10"
   },
   "instruction_profile": "single-task-v1",
   "instruction_source": {
@@ -76,7 +76,7 @@
       "namespace_cli_command": "workflow-single-task-devops",
       "namespace_name": "single-task-devops",
       "profile": "single-task-v1-devops",
-      "role_instructions_sha256": "e6ca6009b9b004fd0bdb0ea3f347f0bdabea5329b1a30f7301934f86170cc812",
+      "role_instructions_sha256": "a8c95ec85e583f5ccb490496a01ef20f19ee832053496e3b617b3fa18e99f000",
       "workflow_key": "single-task-v1:devops"
     },
     "project_manager": {
@@ -102,7 +102,7 @@
       "namespace_cli_command": "workflow-single-task-reviewer",
       "namespace_name": "single-task-reviewer",
       "profile": "single-task-v1-reviewer",
-      "role_instructions_sha256": "c41933c678810a13e731a825149f20d4371df839af710153648346720a58cd4e",
+      "role_instructions_sha256": "7ac7ec245028739c270da3c1055e41eb003b484aa0f61aea6caf75b8ac165e36",
       "workflow_key": "single-task-v1:reviewer"
     },
     "tester": {
@@ -115,7 +115,7 @@
       "namespace_cli_command": "workflow-single-task-tester",
       "namespace_name": "single-task-tester",
       "profile": "single-task-v1-tester",
-      "role_instructions_sha256": "969c1460b4415a0850537fc054f04dae3df44478ad18776e4feeb43971f97a4f",
+      "role_instructions_sha256": "5a315beea319444a70f4a68776ba134e0808769ddf9f0592adfe05422507ccff",
       "workflow_key": "single-task-v1:tester"
     }
   },
@@ -128,7 +128,7 @@
   "workflow_catalog": {
     "artifact": "project_workflow/references/single_task_catalog_v1.json",
     "hash_encoding": "utf-8-lf-no-bom-with-final-newline",
-    "sha256": "40e16f0d551cb11ff203cd3321d0d8f9895a0f4cedd70375712d960dd8f82390",
+    "sha256": "333a2ca0a87bbbc88a505fa99cd170b074620cbc7fad21e374076a8192515bb0",
     "version": 1
   }
 }

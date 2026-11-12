@@ -167,7 +167,7 @@ def test_devops_uses_accepted_descriptor_not_preloaded_or_new_build_substitute(g
     context = mode_for(catalog, "devops", "delivery")["phases"][0]["instructions"][1]["description"]
     for required in (
         "accepted Developer candidate's original publication pipeline", "accepted Developer result/SHA",
-        "propagated through Review and Testing", "Do not edit the accepted candidate",
+        "Tracker's accepted Tester and Reviewer result links", "Do not edit the accepted candidate",
         "independently preloaded image", "substitute another publication pipeline",
         "registered workspace's published forge-delivery recipe", "real owner target",
         "Fleet owns workspace/session lifecycle", "do not begin/end sessions",
@@ -230,7 +230,8 @@ def test_reviewer_first_reads_actual_developer_result_then_seals_verified_proven
     for required in (
         "supplied previous_result_id AFTER Developer Complete", "task-tracker sdlc result read",
         "source=delivery", "matching task/cycle", "role=developer", "exact candidate commit_sha",
-        "Embed that verified Developer result ID", "Reviewer's own sealed acknowledgment report",
+        "Tracker owns the predecessor links", "Reviewer's own sealed acknowledgment report",
+        "previous_stage=Development|Rework", "next_stage=Review",
         "Do not amend Developer artifacts", "wait for your own future accepted Reviewer result",
     ):
         assert required in source
@@ -238,18 +239,23 @@ def test_reviewer_first_reads_actual_developer_result_then_seals_verified_proven
     assert terminal.index(source) < terminal.index("task-tracker attachment upload")
 
 
-def test_tester_and_devops_propagate_accepted_predecessor_reports_not_synthetic_ids(generated):
+def test_tester_and_devops_follow_authoritative_tracker_predecessor_links(generated):
     catalog, _ = generated
     tester = instructions.ROLE_SOURCE_EVIDENCE["tester"]
     for required in (
         "accepted Reviewer result", "supplied previous_result_id", "sealed report",
-        "acceptedDeveloperResultId", "reread that accepted Developer result", "task/cycle",
+        "receipt.previous_result_id", "accepted Developer result", "task/cycle",
+        "role=reviewer, verdict=approved", "role=developer", "exact commit_sha",
+        "Tracker owns these links", "without recreating lineage",
         "old passing cycle", "Do not wait for your own future accepted Tester result",
     ):
         assert required in tester
     devops = instructions.ROLE_SOURCE_EVIDENCE["devops"]
     for required in (
-        "accepted Tester result", "supplied previous_result_id", "rereads that real accepted Developer result/SHA",
+        "supplied previous_result_id", "accepted Developer result/SHA",
+        "source=delivery", "same task/cycle at every hop", "Tester with verdict=passed",
+        "receipt.previous_result_id selects Reviewer", "verdict=approved", "selects Developer",
+        "immutable Tracker links, not copied report IDs", "Missing/mismatched links remain unresolved",
         "operator owner-target references", "actually published Forge target policy", "never invent",
         "cicd-cli dev-workspace check --workspace", "cicd-cli dev-workspace operation --workspace",
         "accepted-publication-pipeline-uuid", "accepted-candidate-sha", "result.deploymentObservation",
@@ -260,8 +266,20 @@ def test_tester_and_devops_propagate_accepted_predecessor_reports_not_synthetic_
     ):
         assert required in devops
     for role, source in (("tester", tester), ("devops", devops)):
+        assert "acceptedDeveloperResultId" not in source
         terminal = instruction_text(mode_for(catalog, role, "delivery")["phases"][-1])
         assert terminal.index(source) < terminal.index("task-tracker attachment upload")
+
+
+@pytest.mark.parametrize("role", ["reviewer", "tester", "devops"])
+def test_reports_do_not_own_predecessor_identity(generated, role):
+    catalog, _ = generated
+    text = " ".join(instruction_text(phase) for phase in mode_for(catalog, role, "delivery")["phases"])
+    assert "task-tracker sdlc result read --task" in text
+    assert "supplied previous_result_id" in text
+    assert "acceptedDeveloperResultId" not in text
+    assert "Embed that verified Developer result ID" not in text
+    assert "Propagate its verified" not in text
 
 
 def test_devops_current_delivery_has_exact_operation_identity_and_no_legacy_bootstrap(generated):

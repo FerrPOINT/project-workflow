@@ -67,6 +67,11 @@ def test_persistent_workspace_instructions_preserve_published_family_and_role_id
     assert "cicd-cli workspace delivery --project" not in json.dumps(current_catalog)
 
 
+def test_uninstalled_intermediate_catalog_is_not_a_runtime_family():
+    with pytest.raises(ValueError, match="Unsupported single-task profile manifest"):
+        load_profile("30b78fe4b8f834d4cef66302cdf4e9803ee3078ca5414b154fcd49a31410ab62")
+
+
 def test_new_profile_identities_cannot_impersonate_legacy_or_base_metadata():
     catalog_bytes, manifest_bytes = render()
     catalog, manifest = json.loads(catalog_bytes), json.loads(manifest_bytes)
