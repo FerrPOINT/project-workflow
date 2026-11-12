@@ -170,9 +170,7 @@ def test_renderer_error_cannot_fall_back_to_private_report(history, renderer):
 
 
 @pytest.mark.parametrize("actor,status", [("machine", 403), ("human", 404)])
-def test_legacy_cli_surface_cannot_expose_diagnostics(history, renderer, monkeypatch, actor, status):
-    (client, assignment), _ = history
-    assert not any(getattr(route, "path", None) == "/api/cli/history" for route in client.app.routes)
+def test_legacy_cli_surface_cannot_expose_diagnostics(request, renderer, monkeypatch, actor, status):
     headers = MACHINE if actor == "machine" else {"Authorization": "Bearer sdlc_pat_test-human"}
     original_client = httpx.AsyncClient
     calls = []
@@ -188,6 +186,8 @@ def test_legacy_cli_surface_cannot_expose_diagnostics(history, renderer, monkeyp
     monkeypatch.setattr(sso.httpx, "AsyncClient", lambda **kwargs: original_client(
         transport=httpx.MockTransport(introspect), **kwargs,
     ))
+    (client, assignment), _ = request.getfixturevalue("history")
+    assert not any(getattr(route, "path", None) == "/api/cli/history" for route in client.app.routes)
     response = client.get("/api/cli/history", headers=headers, params={
         "task": assignment["task"], "namespace_id": assignment["namespace_id"], "projection": PROJECTION})
     assert response.status_code == status, response.text
