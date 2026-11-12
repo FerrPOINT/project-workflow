@@ -205,16 +205,14 @@ ROLE_IMAGE_BUILD = {
         "descriptor artifact ID and raw SHA, exact pipeline/job/attempt and original task-workspace receipt "
         "in changes/checks. Review and Testing must retain this provenance for DevOps. "
     ),
-    "devops": FORGE_IMAGE_BUILD
-    + (
-        "DevOps consumes the actual descriptor from the accepted Developer candidate's original pipeline "
+    "devops": (
+        "DevOps consumes the actual descriptor from the accepted Developer candidate's original publication pipeline "
         "and verifies it against the accepted Developer result/SHA propagated through Review and Testing. "
-        "Do not edit the accepted candidate, replace its descriptor with an independently preloaded image, "
-        "or substitute a new DevOps workspace/pipeline for the saved build provenance. The configured "
-        "delivery owner must observe that exact image on its verified daemon; image transfer or daemon "
-        "substitution is not authorized. Use the existing guarded workspace delivery/readback commands "
-        "and current DevOps taskFence, then verify actual deployment, health, application acceptance and "
-        "rollback evidence before the unchanged final Workflow/Tracker handoff. "
+        "Do not edit the accepted candidate, rebuild it, replace its descriptor with an independently "
+        "preloaded image or substitute another publication pipeline. Use only the registered workspace's "
+        "published forge-delivery recipe and its real owner target. Fleet owns workspace/session lifecycle; "
+        "do not begin/end sessions or bootstrap another workspace as DevOps. Verify actual deployment, "
+        "health, application acceptance and available rollback evidence before the final Workflow/Tracker handoff. "
     ),
 }
 
@@ -268,22 +266,42 @@ ROLE_SOURCE_EVIDENCE = {
         "DevOps reads the actual accepted Tester result identified by supplied previous_result_id and its "
         "sealed report, resolves the propagated acceptedDeveloperResultId and rereads that real accepted "
         "Developer result/SHA. Verify the same task/cycle, reviewed/tested candidate, repository, original "
-        "pipeline/workspace receipt, lookup hash, artifact ID and raw SHA. Require separately supplied "
+        "publication pipeline/workspace receipt, artifact ID and raw SHA. Require separately supplied "
         "operator owner-target references and the actually published Forge target policy; never invent an "
         "environment, deployment URL or target, enroll one as agent, or use a protected stand by default. "
-        "Use existing cicd-cli workspace delivery --project <forge-configuration-uuid> --operation-key "
-        "<original-workspace-key> --from-file <delivery.json> and cicd-cli workspace delivery-readback "
-        "--project <forge-configuration-uuid> --operation-key <original-workspace-key> --delivery-key "
-        "<original-delivery-key> --from-file <lookup.json>. Use the existing DeliveryCommand and current "
-        "DevOps taskFence with actual developmentResultId; preserve the old build/workspace binding "
-        "separately from the current DevOps assignment/lease. Keep the saved build's original workspace key; "
-        "do not replace it with the current DevOps startup key. Owner target policy and server verification "
-        "remain authoritative; do not replace this with generic deployment create or an unbound pipeline. "
-        "Retain actual deployment, health, acceptance and rollback readbacks in sealed deployment/verification "
-        "artifacts. Unknown delivery uses original-key readback, not another effect. Do not wait for your own "
+        "Read cicd-cli dev-workspace show --workspace <registered-workspace-uuid> using your own permanently "
+        "configured Forge PAT/session. Require the current assignment's Fleet-prepared workspace and session, "
+        "the actual workspace version and a published check whose executor is forge-delivery. Missing target, "
+        "recipe or access is an operator blocker; do not invent one, borrow a native service-account token "
+        "or select a global token. Save one original operation UUID before submitting cicd-cli dev-workspace "
+        "check --workspace <registered-workspace-uuid> --operation-id <original-operation-uuid> "
+        "--expected-version <actual-workspace-version> --recipe <published-forge-delivery-recipe> "
+        "--commit <accepted-candidate-sha> --source-pipeline <accepted-publication-pipeline-uuid>. "
+        "Read the original operation using cicd-cli dev-workspace operation --workspace "
+        "<registered-workspace-uuid> --operation-id <original-operation-uuid>. Preserve its exact "
+        "id/workspace_id, request.recipe/source_commit/source_pipeline_id, pipeline_id and successful "
+        "result.deploymentObservation, the typed Forge deployment observation for that actual operation. "
+        "Require operation state=succeeded, result.state=succeeded and observation phase=deployed. Match "
+        "observation.sourceCommit to the accepted candidate and receipt.sourcePipelineId to the accepted "
+        "publication pipeline. Unknown, failed, missing or mismatched observations remain unresolved. "
+        "Do not substitute a submitted request, pipeline success alone or a reconstructed observation. "
+        "Owner target policy and server verification remain authoritative; do not replace this with generic "
+        "deployment create or an unbound pipeline. Publish the SAME exact original operation GET JSON bytes "
+        "as both sealed deployment and verification artifacts; retain raw bytes and verify their identical "
+        "SHA256. Do not add a report wrapper or predecessor IDs to those Forge bytes. Accepted Tester-to-Developer "
+        "provenance remains in authoritative Tracker results and sealed predecessor artifacts; verify it "
+        "separately, without pretending these IDs exist in the Forge operation. Unknown delivery uses this "
+        "original-key readback, never another POST, operation UUID, version or pipeline. Do not wait for your own "
         "future accepted result or Tracker transition before ending this run. "
     ),
 }
+
+PERSISTENT_ASSIGNMENT = (
+    "Assignment id/version/holder/fence remain stable until a confirmed owner transition or explicit "
+    "cancellation, including across Fleet restart; time does not expire the assignment. The wire field "
+    "lease is historical ownership metadata, not an expiry deadline. Do not send heartbeat/renew commands "
+    "or choose the stage yourself. "
+)
 
 def sealed_artifacts_instruction(role: str) -> str:
     report = "analysis.md document" if role == "analyst" else "structured JSON role reports/checks/deployment evidence"
@@ -303,8 +321,8 @@ def sealed_artifacts_instruction(role: str) -> str:
         "through task-tracker attachment upload --issue <task-uuid> "
         f"{upload}. Use only the current supplied "
         "assignment/execution/agent/fence and run context. Tracker enforces exact routing, "
-        "Running/InProgress and a live lease; the lease holder is the scheduler, not the agent. Do not "
-        "renew it as scheduler or choose the stage yourself. Preserve the exact uploaded bytes, filename and "
+        "Running/InProgress and the current assignment owner/fence. "
+        f"{PERSISTENT_ASSIGNMENT}Preserve the exact uploaded bytes, filename and "
         "MIME for replay. Use the actual server-returned artifact.receipt {reference,sha256}, with "
         "reference=tracker-attachment:<UUID> and SHA256 of raw bytes, and artifact.binding "
         "{assignment_id,execution_id,role}. Read the saved metadata back with attachment list, download "
@@ -332,8 +350,8 @@ def artifact_instruction(role: str) -> str:
             "task-tracker decomposition save --task <task-uuid> --from-file -. Use its actual "
             "expected_revision, one stable idempotency_key, current context.assignment fence and verified "
             "requirements revision/hash and analysis_result_id. Preserve existing section IDs; do not "
-            "invent source coordinates, permissions or predecessor results. The lease holder is the "
-            "scheduler, not the agent. Do not renew it as scheduler or choose the stage yourself. "
+            "invent source coordinates, permissions or predecessor results. "
+            f"{PERSISTENT_ASSIGNMENT}"
             "BEFORE the FINAL Workflow "
             "phase report, read task-tracker decomposition operation --task <task-uuid> --key <original-key> "
             "and task-tracker decomposition revision --task <task-uuid> --revision <saved-revision>. "
@@ -425,6 +443,8 @@ def context_instruction(role: str) -> str:
         ) + SOURCE_CONTEXT + FORGE_TASK_WORKSPACE + ROLE_IMAGE_BUILD[role]
     if role in {"reviewer", "tester"}:
         return common + artifact_instruction(role)
+    if role == "devops":
+        return common + SOURCE_CONTEXT + ROLE_IMAGE_BUILD[role] + artifact_instruction(role)
     return common + SOURCE_CONTEXT + FORGE_TASK_WORKSPACE + ROLE_IMAGE_BUILD.get(role, "") + artifact_instruction(role)
 
 

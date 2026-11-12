@@ -50,6 +50,23 @@ def test_common_status_instruction_changes_role_hashes_but_not_profile_bindings(
         }
 
 
+def test_persistent_workspace_instructions_preserve_published_family_and_role_identities():
+    previous_catalog, previous = load_profile("a6d82abf1c7d3965b452e29783bd7a1adc093bcf9f460aa36f4060bf78eba70a")
+    current_catalog, current = load_profile()
+    assert previous["workflow_catalog"]["sha256"] == "a0390b7ae6556432f47beda3ede356eff11d72d45422678b1549cf08cd77540b"
+    changed = set()
+    for role, definition in current["roles"].items():
+        old = previous["roles"][role]
+        assert {k: v for k, v in definition.items() if k != "role_instructions_sha256"} == {
+            k: v for k, v in old.items() if k != "role_instructions_sha256"
+        }
+        if definition["role_instructions_sha256"] != old["role_instructions_sha256"]:
+            changed.add(role)
+    assert changed == set(previous["roles"]) - {"project_manager"}
+    assert "cicd-cli workspace delivery --project" in json.dumps(previous_catalog)
+    assert "cicd-cli workspace delivery --project" not in json.dumps(current_catalog)
+
+
 def test_new_profile_identities_cannot_impersonate_legacy_or_base_metadata():
     catalog_bytes, manifest_bytes = render()
     catalog, manifest = json.loads(catalog_bytes), json.loads(manifest_bytes)

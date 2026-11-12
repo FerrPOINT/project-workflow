@@ -13,7 +13,7 @@ MODES = [
     ("analyst", "analysis"), ("architect", "decomposition"), ("developer", "initial"),
     ("developer", "rework"), ("reviewer", "delivery"), ("tester", "delivery"), ("devops", "delivery"),
 ]
-WORKSPACE_MODES = [("devops", "delivery")]
+WORKSPACE_MODES = [("developer", "initial"), ("developer", "rework")]
 TRIGGER = (
     "cicd-cli pipeline run --project <approved-forge-project-uuid> --git-ref <exact-source-sha> "
     "--idempotency-key <assignment-uuid> --task-intent -"
@@ -120,7 +120,7 @@ def test_first_workspace_uses_actual_task_trigger_and_real_server_allocated_rece
 def test_typed_image_build_is_role_scoped_and_server_capability_is_separate(generated, role, mode):
     catalog, _ = generated
     context = mode_for(catalog, role, mode)["phases"][0]["instructions"][1]["description"]
-    if role not in {"developer", "devops"}:
+    if role != "developer":
         assert instructions.FORGE_IMAGE_BUILD not in context
         return
     assert instructions.FORGE_IMAGE_BUILD in context
@@ -166,11 +166,12 @@ def test_devops_uses_accepted_descriptor_not_preloaded_or_new_build_substitute(g
     catalog, _ = generated
     context = mode_for(catalog, "devops", "delivery")["phases"][0]["instructions"][1]["description"]
     for required in (
-        "accepted Developer candidate's original pipeline", "accepted Developer result/SHA",
+        "accepted Developer candidate's original publication pipeline", "accepted Developer result/SHA",
         "propagated through Review and Testing", "Do not edit the accepted candidate",
-        "independently preloaded image", "new DevOps workspace/pipeline", "exact image on its verified daemon",
-        "image transfer or daemon substitution is not authorized", "current DevOps taskFence",
-        "deployment, health, application acceptance and rollback evidence", "unchanged final Workflow/Tracker handoff",
+        "independently preloaded image", "substitute another publication pipeline",
+        "registered workspace's published forge-delivery recipe", "real owner target",
+        "Fleet owns workspace/session lifecycle", "do not begin/end sessions",
+        "deployment, health, application acceptance and available rollback evidence", "final Workflow/Tracker handoff",
     ):
         assert required in context
 
@@ -250,16 +251,48 @@ def test_tester_and_devops_propagate_accepted_predecessor_reports_not_synthetic_
     for required in (
         "accepted Tester result", "supplied previous_result_id", "rereads that real accepted Developer result/SHA",
         "operator owner-target references", "actually published Forge target policy", "never invent",
-        "cicd-cli workspace delivery --project", "cicd-cli workspace delivery-readback --project",
-        "current DevOps taskFence", "actual developmentResultId", "old build/workspace binding separately",
-        "saved build's original workspace key", "do not replace it with the current DevOps startup key",
-        "generic deployment create", "health, acceptance and rollback readbacks", "original-key readback",
+        "cicd-cli dev-workspace check --workspace", "cicd-cli dev-workspace operation --workspace",
+        "accepted-publication-pipeline-uuid", "accepted-candidate-sha", "result.deploymentObservation",
+        "SAME exact original operation GET JSON bytes", "both sealed deployment and verification artifacts",
+        "Do not add a report wrapper or predecessor IDs", "authoritative Tracker results",
+        "generic deployment create", "original-key readback",
         "Do not wait for your own future accepted result or Tracker transition",
     ):
         assert required in devops
     for role, source in (("tester", tester), ("devops", devops)):
         terminal = instruction_text(mode_for(catalog, role, "delivery")["phases"][-1])
         assert terminal.index(source) < terminal.index("task-tracker attachment upload")
+
+
+def test_devops_current_delivery_has_exact_operation_identity_and_no_legacy_bootstrap(generated):
+    catalog, _ = generated
+    phases = mode_for(catalog, "devops", "delivery")["phases"]
+    text = " ".join(instruction_text(phase) for phase in phases)
+    check = (
+        "cicd-cli dev-workspace check --workspace <registered-workspace-uuid> "
+        "--operation-id <original-operation-uuid> --expected-version <actual-workspace-version> "
+        "--recipe <published-forge-delivery-recipe> --commit <accepted-candidate-sha> "
+        "--source-pipeline <accepted-publication-pipeline-uuid>"
+    )
+    readback = (
+        "cicd-cli dev-workspace operation --workspace <registered-workspace-uuid> "
+        "--operation-id <original-operation-uuid>"
+    )
+    assert check in text and readback in text
+    assert shlex.split(check)[4:8] == ["<registered-workspace-uuid>", "--operation-id", "<original-operation-uuid>", "--expected-version"]
+    for required in (
+        "own permanently configured Forge PAT/session", "Missing target, recipe or access is an operator blocker",
+        "request.recipe/source_commit/source_pipeline_id", "identical SHA256", "never another POST",
+        "without pretending these IDs exist in the Forge operation", "Fleet owns workspace/session lifecycle",
+        "operation state=succeeded", "result.state=succeeded", "observation phase=deployed",
+        "observation.sourceCommit", "receipt.sourcePipelineId", "remain unresolved",
+    ):
+        assert required in text
+    for forbidden in ("cicd-cli workspace delivery", "TaskWorkspaceIntent", "pipeline run --task-intent",
+                      "current DevOps taskFence", "live lease"):
+        assert forbidden not in text
+    # The explicit Developer task-pipeline procedure remains available to its owning role.
+    assert TRIGGER in instruction_text(mode_for(catalog, "developer", "initial")["phases"][0])
 
 
 def test_conditional_pm_brief_and_single_task_inventory_are_pinned(generated):

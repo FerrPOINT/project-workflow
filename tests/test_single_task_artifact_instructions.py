@@ -76,8 +76,9 @@ def test_configured_artifacts_keep_current_authority_and_original_provenance(gen
         LIST, DOWNLOAD, upload, "current configured assignment", "project rights",
         "Ordinary comments carry discussion", "do not replace sealed artifacts",
         "Do not borrow owner/scheduler credentials", "human token", "task=root", "artifact.binding",
-        "actual producer/predecessor", "Running/InProgress", "live lease",
-        "lease holder is the scheduler, not the agent", "Do not renew it as scheduler",
+        "actual producer/predecessor", "Running/InProgress", "current assignment owner/fence",
+        "Assignment id/version/holder/fence remain stable", "across Fleet restart",
+        "time does not expire the assignment", "Do not send heartbeat/renew commands",
     ):
         assert required in authority
     assert selected["phases"][0]["instructions"][0]["description"] == instructions.FIRST_STEP
@@ -207,7 +208,7 @@ def test_defaults_keep_unaffected_roles_and_phase_identity(generated):
     for workflow in catalog["workflows"]:
         role = workflow["role_key"]
         original = before[role]
-        if role not in {"analyst", "architect", "developer", "reviewer", "tester"}:
+        if role not in {"analyst", "architect", "developer", "reviewer", "tester", "devops"}:
             assert workflow == original
             continue
         for current_mode, old_mode in zip(workflow["modes"], original["modes"], strict=True):
@@ -316,10 +317,11 @@ def test_every_mode_explicitly_starts_same_assignment_before_business_work(gener
 
 
 @pytest.mark.parametrize("role,mode", TECHNICAL_MODES)
-def test_stage_completion_does_not_replace_native_handoff_or_lease_authority(generated, role, mode):
+def test_stage_completion_preserves_permanent_assignment_and_native_handoff(generated, role, mode):
     catalog, _ = generated
     final = phase_text(mode_for(catalog, role, mode)["phases"][-1])
-    assert "Do not renew it as scheduler or choose the stage yourself" in final
+    assert instructions.PERSISTENT_ASSIGNMENT in final
+    assert "live lease" not in final
     assert "or set status yourself" not in final
     after = instructions.completion_instruction(role)
     assert "accepted proposal records the current stage as Completed but is not a stage handoff" in after
