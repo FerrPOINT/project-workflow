@@ -1,4 +1,5 @@
 """Controlled launch/report fixtures through the shared evaluator; no research agent runs."""
+import json
 from copy import deepcopy
 from uuid import uuid4
 
@@ -10,7 +11,7 @@ from project_workflow import config
 from project_workflow.application import background, catalog_publication
 from project_workflow.domain.background import BackgroundConclusion, BackgroundStep
 from project_workflow.domain.catalog_publication import CatalogDraft, CatalogPublish
-from project_workflow.domain.exceptions import ConflictError
+from project_workflow.domain.exceptions import ConflictError, NotFoundError
 from project_workflow.infrastructure.background_admission import RunAdmission
 from project_workflow.infrastructure.db import models as m
 from project_workflow.infrastructure.db.background_professions import ensure_background_professions
@@ -152,3 +153,130 @@ def test_background_dto_rejects_tracker_and_runtime_settings():
                          "project_id": str(uuid4()), "requirements_revision": 1}.items():
         with pytest.raises(ValidationError):
             BackgroundStep.model_validate({**base, field: value})
+
+
+def execution_rows(uow):
+    return {
+        model.__tablename__: uow.session.execute(select(model.__table__)).mappings().all()
+        for model in (m.Task, m.TaskRuntimeAssignment, m.TaskStepHistoryEntry, m.TaskPhaseEvent)
+    }
+
+
+@pytest.mark.parametrize("changed", ["platform-mode", "run-id", "namespace", "profession", "publication"])
+def test_launch_refuses_foreign_identity_or_publication_without_creating_a_cursor(execution, monkeypatch, changed):
+    uow, admission, command = execution
+    foreign = admission.model_copy(deep=True)
+    request = command
+    if changed == "platform-mode":
+        monkeypatch.setenv("PROJECT_WORKFLOW_MODE", "standalone")
+        config.get_settings.cache_clear()
+    elif changed == "run-id":
+        request = command.model_copy(update={"run_id": str(uuid4())})
+    elif changed == "namespace":
+        request = command.model_copy(update={"namespace_id": command.namespace_id + 1000})
+    elif changed == "profession":
+        foreign.context.profession = "REFACTORER"
+    else:
+        foreign.workflow_revision = "f" * 64
+    before = execution_rows(uow)
+    with pytest.raises(ConflictError):
+        background.step(uow, request, foreign, lambda: None)
+    assert execution_rows(uow) == before
+    monkeypatch.setenv("PROJECT_WORKFLOW_MODE", "platform")
+    config.get_settings.cache_clear()
+    assert background.step(uow, command, admission, lambda: None)["result"]["version"] == 1
+
+
+@pytest.mark.parametrize("changed", ["assignment-revision", "cursor-cycle", "ledger", "stale-report"])
+def test_saved_cursor_rejects_changed_custody_and_keeps_the_original_history(execution, supervisor_llm, changed):
+    uow, admission, command = execution
+    background.step(uow, command, admission, lambda: None)
+    supervisor_llm("PASS")
+    first_report = command.model_copy(update={"report": report_json("First observation"),
+        "operation_key": "first-observation", "expected_version": 1})
+    assert background.step(uow, first_report, admission, lambda: None)["result"]["version"] == 2
+    original_history = background.history(uow, admission)["result"]
+    task = uow.session.scalar(select(m.Task))
+    assignment = uow.session.scalar(select(m.TaskRuntimeAssignment))
+    entry = uow.session.scalar(select(m.TaskStepHistoryEntry))
+    request = command
+    if changed == "assignment-revision":
+        assignment.assignment_revision += 1
+    elif changed == "cursor-cycle":
+        task.cycle_number += 1
+    elif changed == "ledger":
+        entry.evaluation_snapshot = "{}"
+    else:
+        request = first_report.model_copy(update={"operation_key": "stale-observation"})
+    uow.session.flush()
+    before = execution_rows(uow)
+    with pytest.raises(ConflictError):
+        background.step(uow, request, admission, lambda: None)
+    assert execution_rows(uow) == before
+    uow.rollback()
+    assert background.history(uow, admission)["result"] == original_history
+
+
+def test_completed_cursor_without_a_conclusion_is_not_reported_as_success(execution):
+    uow, admission, command = execution
+    background.step(uow, command, admission, lambda: None)
+    task = uow.session.scalar(select(m.Task))
+    task.status = "done"
+    uow.session.flush()
+    before = execution_rows(uow)
+    with pytest.raises(ConflictError, match="conclusion missing"):
+        background.history(uow, admission)
+    assert execution_rows(uow) == before
+    uow.rollback()
+    assert background.history(uow, admission)["result"]["version"] == 1
+
+
+@pytest.mark.parametrize("changed", ["mode", "run-id"])
+def test_archived_history_refuses_a_foreign_saved_identity_without_changing_it(execution, changed):
+    uow, admission, command = execution
+    background.step(uow, command, admission, lambda: None)
+    assignment = uow.session.scalar(select(m.TaskRuntimeAssignment))
+    payload = json.loads(assignment.payload)
+    if changed == "mode":
+        payload["mode"] = "single_task"
+    else:
+        payload["admission"]["run_id"] = str(uuid4())
+    assignment.payload = json.dumps(payload)
+    uow.session.flush()
+    before = execution_rows(uow)
+    with pytest.raises(ConflictError):
+        background.archived_history(uow, admission.run_id, n=1, before_history_id=None)
+    assert execution_rows(uow) == before
+    uow.rollback()
+    assert background.archived_history(uow, admission.run_id, n=1, before_history_id=None)["result"]["version"] == 1
+
+
+@pytest.mark.parametrize("selector", [{"n": 0}, {"n": 201}, {"operation_key": "original", "before_history_id": 1}])
+def test_history_rejects_invalid_selectors_and_does_not_start_research(execution, selector):
+    uow, admission, command = execution
+    before = execution_rows(uow)
+    with pytest.raises(ValueError, match="Invalid background history selector"):
+        background.history(uow, admission, **selector)
+    with pytest.raises(NotFoundError, match="not started"):
+        background.history(uow, admission, n=1)
+    assert execution_rows(uow) == before
+    background.step(uow, command, admission, lambda: None)
+    assert background.history(uow, admission, n=1)["result"]["records"] == []
+
+
+@pytest.mark.parametrize("change", [{"summary": " "}, {"coverage": [" "]}, {"limitations": [" "]}])
+def test_conclusion_requires_meaningful_text_in_each_statement(change):
+    value = {"status": "incomplete", "summary": "Read the authorized source", "coverage": ["module.py"],
+             "limitations": ["A dependency could not be read"]}
+    with pytest.raises(ValidationError, match="empty statements"):
+        BackgroundConclusion.model_validate(value | change)
+
+
+@pytest.mark.parametrize("change", [
+    {"operation_key": None}, {"operation_key": " padded "}, {"operation_key": "control\nkey"}])
+def test_report_requires_a_canonical_operation_key(change):
+    value = {"interaction_protocol": "configured-cli-v1", "execution_mode": "background", "run_id": str(uuid4()),
+             "namespace_id": 1, "report": report_json("Observation"),
+             "operation_key": "observation", "expected_version": 1}
+    with pytest.raises(ValidationError):
+        BackgroundStep.model_validate(value | change)

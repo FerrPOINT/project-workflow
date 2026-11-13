@@ -73,7 +73,7 @@ def test_pm_review_migration_preserves_populated_execution_and_history(tmp_path)
                 (None,),
             ]
         with pytest.raises(
-            RuntimeError, match="Configured phase history is forward-only"
+            RuntimeError, match="Configured catalog is forward-only after source-history convergence"
         ):
             run_alembic_command("downgrade", engine, "0014_launch_profile_only")
         assert database_revisions(engine) == {"0033_background_convergence"}

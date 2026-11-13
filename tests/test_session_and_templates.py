@@ -247,19 +247,22 @@ class TestSessionHelpers:
             with pytest.raises(RuntimeError, match="DATABASE_URL не настроен"):
                 get_database_url()
 
-    def test_run_alembic_command_mocks_alembic(self, tmp_path):
-        from unittest.mock import patch
+    def test_run_alembic_command_upgrades_and_replays_the_current_schema(self, tmp_path):
+        from sqlalchemy import inspect
 
-        from project_workflow.infrastructure.db.session import run_alembic_command
+        from project_workflow.infrastructure.db.session import database_revisions, migration_head, run_alembic_command
 
         engine = get_engine(f"sqlite:///{tmp_path}/test.db")
-        with (
-            patch("project_workflow.infrastructure.db.session.command.upgrade") as mock_upgrade,
-            patch("project_workflow.infrastructure.db.session.Config"),
-        ):
+        try:
             run_alembic_command("upgrade", engine)
-            mock_upgrade.assert_called_once()
-        reset_engine()
+            assert database_revisions(engine) == {migration_head()}
+            tables = inspect(engine).get_table_names()
+            assert {"tasks", "profession_workflows", "workflow_catalog_publications"} <= set(tables)
+            run_alembic_command("upgrade", engine)
+            assert database_revisions(engine) == {migration_head()}
+            assert inspect(engine).get_table_names() == tables
+        finally:
+            reset_engine()
 
     def test_programmatic_alembic_config_is_independent_of_working_directory(
         self, tmp_path, monkeypatch

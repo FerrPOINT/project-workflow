@@ -1,0 +1,92 @@
+{
+  "schema": "workflow-background-source-qualification/v1",
+  "date": "2026-11-14",
+  "baseline_commit": "24aad5dc35e68e6ffaa2780148eaf88e125c787f",
+  "unchanged_production_tree": "bf66b6eba109bc9575374e20f85f4b1376ac5def",
+  "python": "3.12",
+  "cli_sdk": "25b0b2aafaa9feaa854ca86f11043ff825842229",
+  "baseline": {
+    "background_catalog_postgres": {
+      "passed": 9
+    },
+    "complete_postgres": {
+      "passed": 217,
+      "skipped": 1,
+      "missing_input": "WORKFLOW_APPLICATION_CLOCK_TEST_URL for request_clock_fixture"
+    },
+    "non_postgres": {
+      "passed": 5003,
+      "failed": 4,
+      "skipped": 15,
+      "coverage_percent": 93.90252285694645
+    },
+    "ruff": "PASS",
+    "mypy": {
+      "result": "PASS",
+      "files": 185
+    }
+  },
+  "repair": {
+    "scope": "Tests only; production and original migrations unchanged",
+    "passed": 36,
+    "new_background_negative_cases": 21,
+    "test_lf_sha256": {
+      "tests/test_background_execution.py": "190d1480491cc65ff6c6850791f1735bba789df8a9e2024bd7252cdf134548a0",
+      "tests/test_profession_execution_membership_migration.py": "02767434c909a849449e2decea5ae6d7862eca89df5ec72aefb88e473eda9daa",
+      "tests/test_retained_pm_migrations.py": "c82332cdf0f2589bd8ea5c15789466564c7a476625a4e7c5a5245a7808188171",
+      "tests/test_session_and_templates.py": "db729355340567f1b77d739c55e695b12a97d0505d8947b9b76a50f5479ee6d1",
+      "tests/test_small_modules.py": "1bd0f43eeec3f8b4f565c3e4f2c0f43b6f923601cb8e141b9033cc39b9cf3e31"
+    },
+    "non_postgres_combined_coverage": {
+      "covered_lines": 13675,
+      "num_statements": 14547,
+      "percent_covered": 94.00563690107926,
+      "percent_covered_display": "94.0056",
+      "missing_lines": 872,
+      "excluded_lines": 15,
+      "percent_statements_covered": 94.00563690107926,
+      "percent_statements_covered_display": "94.0056"
+    },
+    "coverage_threshold_percent": 94,
+    "coverage_exclusions_changed": false,
+    "source_unchanged_during_run": true,
+    "ruff": "PASS"
+  },
+  "receipt_ids": [
+    "workflow-6ba6c9b0dd",
+    "workflow-delta-6a538e0344",
+    "workflow-package-f70d497b1b"
+  ],
+  "remaining": [
+    "Dedicated PostgreSQL application-clock case",
+    "Eleven committed Python Playwright cases skipped because runner dependency absent",
+    "One POSIX executable-mode case skipped on Windows",
+    "Final artifacts, isolated Compose/Kubernetes installation and real-agent acceptance"
+  ],
+  "real_pinned_package": {
+    "passed": 3,
+    "receipt_id": "workflow-package-f70d497b1b",
+    "installed_runtime": false,
+    "auth_http": "controlled peer",
+    "pins": [
+      "4b9b4c9297a13fb28a6ba2039af2f7cb719f2f58",
+      "6e1d190ecd15b772b1066c472f864b8becb3f97a",
+      "4e5647d3a3015c26be8f5a390c4d5537d1d10d02"
+    ],
+    "preparation": "agent-skills directory; exact missing package blobs materialized in existing partial Git object cache without checkout/index changes"
+  },
+  "baseline_skip_classification": {
+    "real_pinned_package": {
+      "count": 3,
+      "state": "passed separately"
+    },
+    "python_playwright": {
+      "count": 11,
+      "state": "open, runner dependency absent"
+    },
+    "posix_git_mode": {
+      "count": 1,
+      "state": "open, skipped on Windows"
+    }
+  }
+}

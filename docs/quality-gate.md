@@ -368,6 +368,32 @@ python scripts/install_namespace_clis.py --bin-dir <dir>
 только `project-workflow step/history`. `project-workflow` не получает новых
 публичных команд: wrapper names являются пользовательской CLI-командой нужного неймспейса.
 
+## Background Integration Qualification, 2026-11-14
+
+Production tree `bf66b6eba109bc9575374e20f85f4b1376ac5def` is unchanged from
+`24aad5d`. Its owned PostgreSQL gate passed nine background catalog cases and
+217 complete-suite cases; the dedicated application-clock case needs its own
+`request_clock_fixture` input and remains open. Ruff and mypy pass.
+
+The original non-PostgreSQL run records 5003 passed, four failed and 15 skipped,
+with 93.9025% coverage. Test-only corrections retain the current forward-only
+barrier and verify its unchanged schema/history. Programmatic migration tests
+now exercise the actual Engine and caller-owned Connection instead of counting
+internal Alembic calls. The Connection case prepares historical SQLite batch
+DDL through the Engine before testing the new data-only join.
+
+The four repaired cases, 11 existing background cases and 21 new negative cases
+pass together: 36 passed. The new cases check foreign identity/publication,
+changed custody, stale versions, missing conclusions, invalid history selectors
+and canonical operation keys, with unchanged stored rows and valid neighboring
+reads. Appending this scoped non-PostgreSQL run to the unchanged-production
+baseline yields 13675/14547 statements, **94.0056%**, above the unchanged 94%
+gate without new exclusions. This is composite evidence, not a new full run.
+
+See [compact source evidence](evidence/background-v1-source-20261114.json).
+Recorded skips, exact-artifact installation and real-agent acceptance remain
+separate checks; these controlled evaluator/SQLite tests do not prove them.
+
 ## References
 
 - [README](../README.md) — launch modes and command overview.
