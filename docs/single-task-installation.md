@@ -35,7 +35,8 @@ initialization transaction, catalog lock, repositories и profession membership.
 Bootstrap печатает typed installation readback после успешного commit. Повторный
 запуск полностью сверяет content/relations и сохраняет реальные IDs/counts.
 Drift, partial install и foreign collisions отклоняются без repair. Ошибка первого
-создания откатывает transaction. Legacy metadata/defaults/task/history не меняются.
+создания откатывает transaction. Существующая current-установка и её история
+не переназначаются; переход прежних профессий описан ниже.
 
 Чтобы явно выбрать каталог из установленного образа, оператор указывает SHA-256
 манифеста из текущего installation readback.
@@ -80,6 +81,43 @@ DTO содержит instruction profile/manifest hash, catalog version/hash, ac
 namespace/workflow IDs, role/launch profile, role instruction hash, mode IDs/scopes
 и phase IDs. `runtime_ready=false`, `live_activation_allowed=false`.
 Installed binding не является runtime admission или Tracker transition receipt.
+
+## Переход С Прежнего Base-Каталога
+
+Миграция `0033_legacy_profession_transition` выполняется штатным `scripts.init_db`
+в общей транзакции миграции и bootstrap. Для точного опубликованного Base-v4
+(`hermes-sdlc:*`, active catalog4) она сохраняет IDs существующих профессий,
+добавляет current workflows с sealed baseline и переключает на них default
+workflow каждой профессии. CLI/code/profile и стандартные названия этой же
+профессии принимают значения current `single-task-v1`; theme сохраняется.
+Новых параллельных профессий не создаётся. Это явный forward transition,
+а не переключатель env или возможность исполнять прежний протокол после отказа.
+
+Старые workflow/mode/phase IDs, membership, задачи и отчёты сохраняются для
+исторического чтения. Сохранённые FK указывают на исходный workflow, независимо
+от нового default профессии. Повтор не добавляет workflow или publication.
+Если global default выбирал legacy workflow, его флаг выбора переходит к
+соответствующему current workflow той же роли. Внешний custom default не меняется;
+это изменение текущего выбора, а не исторического содержимого.
+Raw editor API отвергает запись в retired `hermes-sdlc:` workflow и его фазы;
+чтение истории сохраняется. Авторские workflows остаются редактируемыми,
+включая standalone: этот режим не исполняет платформенный `hermes-sdlc`.
+Установка, уже содержащая валидный `single-task-v1`, не переназначается,
+включая её текущие исполнения и принятые публикации.
+
+До первой записи переход проверяет опубликованный Git blob Base-v4, полный
+каталог и его содержимое, однозначную profession membership, незанятые current
+идентичности и отсутствие незавершённых legacy задач/bindings. Изменённый каталог,
+операторский профиль, конфликт владельца или неподтверждённый PM terminal
+отклоняются с откатом всей initialization transaction. Неподдерживаемые старые
+семьи не подменяются defaults.
+
+SQLite regression проходит через фактический predecessor `0015`, v3/v4 modes и
+normal init; PostgreSQL node —
+`tests/test_legacy_profession_transition_postgres.py::test_0015_base_v4_adopts_current_professions_and_preserves_history_postgres`.
+Он использует существующий owner fixture `pg_url` и marker `integration`;
+отсутствие его PG prerequisites/skip не считается приёмкой. Смена исходников
+не доказывает миграцию или установку на Relevanter/PDLC.
 
 ## Source И Pins
 

@@ -464,6 +464,7 @@ def ensure_migrated(engine: Engine | Connection | None = None) -> None:
         "0029_analyst_twelve_phases",
         "0030_analyst_baseline_ledger",
         "0031_explicit_stage_start",
+        "0032_current_source_baseline",
     }
     incompatible_revision = bool(revisions) and not revisions.issubset(compatible_upgrade_revisions)
     _validate_legacy_archives(target)
