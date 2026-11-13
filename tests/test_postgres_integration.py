@@ -53,6 +53,7 @@ from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.infrastructure.llm import OpenAICompatibleClient
 from project_workflow.interfaces.ui.app import create_app
 from tests._report_helpers import report_json
+from tests.test_background_catalog_convergence import HISTORIES as BACKGROUND_HISTORIES
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -2409,3 +2410,28 @@ def test_retired_phase_edges_do_not_block_deletion_and_rollback_is_atomic(pg_url
             service.delete_phase(second["id"])
         assert service.get_phase(second["id"]) is not None
         assert service.get_phase(second["id"])["rollback_target_phase_id"] == third["id"]
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("history", BACKGROUND_HISTORIES)
+def test_released_background_and_main_catalogs_converge_on_postgres(pg_url, monkeypatch, history):
+    from tests.test_background_catalog_convergence import (
+        published_catalog_history,
+        test_convergence_preserves_both_published_catalog_histories,
+    )
+
+    with published_catalog_history(get_engine(pg_url), monkeypatch, history) as predecessor:
+        test_convergence_preserves_both_published_catalog_histories(predecessor)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("history", BACKGROUND_HISTORIES)
+@pytest.mark.parametrize("invalid", ["schema", "publication"])
+def test_invalid_background_catalog_convergence_rolls_back_on_postgres(pg_url, monkeypatch, history, invalid):
+    from tests.test_background_catalog_convergence import (
+        published_catalog_history,
+        test_convergence_refuses_incompatible_schema_or_publication_without_stamping,
+    )
+
+    with published_catalog_history(get_engine(pg_url), monkeypatch, history) as predecessor:
+        test_convergence_refuses_incompatible_schema_or_publication_without_stamping(predecessor, invalid)

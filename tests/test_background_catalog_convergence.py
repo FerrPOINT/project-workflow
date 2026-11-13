@@ -1,5 +1,6 @@
 """Both released 0032 histories retain published operator content on convergence."""
 
+from contextlib import contextmanager
 from copy import deepcopy
 
 import pytest
@@ -44,29 +45,38 @@ def publish_operator_content(uow, workflow_id):
     ), publisher_subject="test-owner")
 
 
-@pytest.fixture(params=[
+HISTORIES = [
     ("0032_current_source_baseline", "d035a0ddb06436714b76e40bc8cb68084203011f53dd52436732367690940e85", False),
     ("0032_current_source_defaults", "920379c0c86455148e6fae35e2007037595c2d1cc82116c392c575c4625ffd28", False),
     ("0032_current_source_defaults", "852e0647ad8645c9c6280b21c1595b9efa6ff87754d07df8dcc92bcb04f76381", True),
-])
+]
+
+
+@contextmanager
+def published_catalog_history(engine, monkeypatch, history):
+    predecessor, manifest, mixed = history
+    run_alembic_command("upgrade", engine, "0031_explicit_stage_start" if mixed else predecessor)
+    load = catalog.load_profile
+    with monkeypatch.context() as historical:
+        historical.setattr(catalog, "load_profile", lambda digest=None: load(digest or manifest))
+        with SAUnitOfWork(engine) as uow:
+            installed = catalog.ensure_single_task_catalog(uow)
+            professions = ensure_background_professions(uow)
+            pm = next(int(item.workflow_id) for item in installed.bindings if item.role_key == "project_manager")
+            bug = uow.projects.get_by_id(professions["BUG_SEARCHER"]).workflow_id
+            publications = {workflow_id: publish_operator_content(uow, workflow_id) for workflow_id in (pm, bug)}
+    if mixed:
+        run_alembic_command("upgrade", engine, predecessor)
+        manifest = "920379c0c86455148e6fae35e2007037595c2d1cc82116c392c575c4625ffd28"
+    yield engine, predecessor, manifest, publications, mixed
+
+
+@pytest.fixture(params=HISTORIES)
 def published_predecessor(tmp_path, monkeypatch, request):
-    predecessor, manifest, mixed = request.param
     engine = sa.create_engine(f"sqlite:///{tmp_path / 'background-convergence.db'}")
     try:
-        run_alembic_command("upgrade", engine, "0031_explicit_stage_start" if mixed else predecessor)
-        load = catalog.load_profile
-        with monkeypatch.context() as historical:
-            historical.setattr(catalog, "load_profile", lambda digest=None: load(digest or manifest))
-            with SAUnitOfWork(engine) as uow:
-                installed = catalog.ensure_single_task_catalog(uow)
-                professions = ensure_background_professions(uow)
-                pm = next(int(item.workflow_id) for item in installed.bindings if item.role_key == "project_manager")
-                bug = uow.projects.get_by_id(professions["BUG_SEARCHER"]).workflow_id
-                publications = {workflow_id: publish_operator_content(uow, workflow_id) for workflow_id in (pm, bug)}
-        if mixed:
-            run_alembic_command("upgrade", engine, predecessor)
-            manifest = "920379c0c86455148e6fae35e2007037595c2d1cc82116c392c575c4625ffd28"
-        yield engine, predecessor, manifest, publications, mixed
+        with published_catalog_history(engine, monkeypatch, request.param) as history:
+            yield history
     finally:
         engine.dispose()
 
