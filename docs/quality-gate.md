@@ -365,15 +365,18 @@ python scripts/install_namespace_clis.py --bin-dir <dir>
 
 Скрипт читает неймспейсы из PostgreSQL, создаёт wrapper-команды из
 `cli_command`, выставляет `PROJECT_WORKFLOW_NAMESPACE_ID=<id>` и вызывает
-только `project-workflow step/history`. `project-workflow` не получает новых
-публичных команд: wrapper names являются пользовательской CLI-командой нужного неймспейса.
+только `project-workflow step/history`. Этот генератор не создаёт отдельные
+подкоманды для каждой профессии: wrapper names являются пользовательскими
+ярлыками существующих команд в нужном неймспейсе.
 
 ## Background Integration Qualification, 2026-11-14
 
 Production tree `bf66b6eba109bc9575374e20f85f4b1376ac5def` is unchanged from
-`24aad5d`. Its owned PostgreSQL gate passed nine background catalog cases and
-217 complete-suite cases; the dedicated application-clock case needs its own
-`request_clock_fixture` input and remains open. Ruff and mypy pass.
+`24aad5d`. Its owned PostgreSQL baseline passed 217 cases, including the nine
+background catalog cases. The missing application-clock case subsequently
+passed on `b9564ac` with its own `request_clock_fixture`: 218 cases qualified
+in total, with unchanged production inputs and verified owned cleanup.
+Ruff and mypy pass.
 
 The original non-PostgreSQL run records 5003 passed, four failed and 15 skipped,
 with 93.9025% coverage. Test-only corrections retain the current forward-only
@@ -389,6 +392,13 @@ and canonical operation keys, with unchanged stored rows and valid neighboring
 reads. Appending this scoped non-PostgreSQL run to the unchanged-production
 baseline yields 13675/14547 statements, **94.0056%**, above the unchanged 94%
 gate without new exclusions. This is composite evidence, not a new full run.
+
+Three real pinned Base package cases also pass with controlled HTTP/SQLite
+peers. Actual OpenAPI exporters match the tracked seven-path runtime and
+one-path binding snapshots byte-for-byte after newline normalization; the
+binding exporter removed one extra terminal newline. The full generated schema
+contains 47 paths. Browser dependencies and matching cached Chromium are ready;
+eleven committed browser cases and one POSIX provenance case remain open.
 
 See [compact source evidence](evidence/background-v1-source-20261114.json).
 Recorded skips, exact-artifact installation and real-agent acceptance remain

@@ -55,11 +55,12 @@
   "receipt_ids": [
     "workflow-6ba6c9b0dd",
     "workflow-delta-6a538e0344",
-    "workflow-package-f70d497b1b"
+    "workflow-package-f70d497b1b",
+    "workflow-27a2dd28a2",
+    "workflow-schema-cbe0656733"
   ],
   "remaining": [
-    "Dedicated PostgreSQL application-clock case",
-    "Eleven committed Python Playwright cases skipped because runner dependency absent",
+    "Eleven committed Python Playwright cases; dependencies and cached Chromium1208 prepared, execution pending shared host slot",
     "One POSIX executable-mode case skipped on Windows",
     "Final artifacts, isolated Compose/Kubernetes installation and real-agent acceptance"
   ],
@@ -82,11 +83,45 @@
     },
     "python_playwright": {
       "count": 11,
-      "state": "open, runner dependency absent"
+      "state": "Baseline runner dependency absent; pinned dependency and matching cached engine now prepared, execution pending"
     },
     "posix_git_mode": {
       "count": 1,
       "state": "open, skipped on Windows"
     }
+  },
+  "application_clock_postgres": {
+    "passed": 1,
+    "source_commit": "b9564acd0db1090f3341de89a6df78e3e4a14df2",
+    "receipt_id": "workflow-27a2dd28a2",
+    "source_unchanged": true,
+    "owned_postgres_cleaned": true
+  },
+  "composed_postgres": {
+    "passed": 218,
+    "skipped": 0,
+    "scope": "217 complete baseline cases and the missing application-clock case; unchanged production tree; nine catalog cases are included, not additional"
+  },
+  "generated_api": {
+    "receipt_id": "workflow-schema-cbe0656733",
+    "generated_from_actual_models": true,
+    "source_cli_sdk": "25b0b2aafaa9feaa854ca86f11043ff825842229",
+    "tracked_snapshots": {
+      "runtime": {
+        "sha256": "67b170cbb2e36e9b15f867050ec6866d47f9ef12ca85f7fc56f0650c1478e088",
+        "paths": 7,
+        "semantic_matches_tracked": true,
+        "normalized_bytes_match": true
+      },
+      "base-binding": {
+        "sha256": "aabc85dcb2625036ea5d2137834811a5d796ee488af8016e7dd1a7c97ac63a3b",
+        "paths": 1,
+        "semantic_matches_tracked": true,
+        "normalized_bytes_match": true
+      }
+    },
+    "full_paths": 47,
+    "full_schema_sha256": "51733595525d3eb59529a8ec26361a1879273eea521d81ce54c5cfcae600393f",
+    "base_binding_change": "Actual exporter normalized the terminal newline only; parsed model content is unchanged"
   }
 }
