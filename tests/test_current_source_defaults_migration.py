@@ -1,4 +1,4 @@
-"""Source-default upgrades are explicit, append-only and fenced by publications."""
+"""The released background sibling preserves its original append-only cutover."""
 
 from copy import deepcopy
 
@@ -12,6 +12,7 @@ from project_workflow.infrastructure.db.session import ensure_migrated, run_alem
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 
 PREVIOUS = "852e0647ad8645c9c6280b21c1595b9efa6ff87754d07df8dcc92bcb04f76381"
+TARGET = "920379c0c86455148e6fae35e2007037595c2d1cc82116c392c575c4625ffd28"
 
 
 @pytest.fixture
@@ -51,17 +52,31 @@ def test_upgrade_is_append_only_idempotent_and_preserves_unrelated_publication(p
                 draft_sha256=draft["content_sha256"], operation_key="unrelated-human-publication"),
                 publisher_subject="controlled-owner")
     before = snapshot(engine)
-    ensure_migrated(engine)
+    run_alembic_command("upgrade", engine, "0032_current_source_defaults")
     with SAUnitOfWork(engine) as uow:
-        assert catalog.observe_installation(uow).instruction_manifest_sha256 == catalog.MANIFEST_SHA256
-        assert editor.read_operation(uow, workflows["project_manager"], "unrelated-human-publication") == published
-        assert editor.read_active(uow, workflows["project_manager"])["content_sha256"] == published["content_sha256"]
+        # The historical sibling sealed only changed roles. The forward
+        # convergence must retain this material while completing its receipts.
+        assert catalog._observe_profile(uow, *reader(TARGET)).instruction_manifest_sha256 == TARGET
+        workflow = uow.workflows.get_by_id(workflows["project_manager"])
+        retained = editor.read_revision(uow, workflow, published["catalog_version"], selected=True)
+        assert {**retained, "published": True} == published
+        with pytest.raises(ValueError, match="Sealed baseline manifest differs"):
+            editor.read_operation(uow, workflows["project_manager"], "unrelated-human-publication")
     after = snapshot(engine)
     for table in ("phases", "phase_instructions", "phase_checks", "phase_evidence_requirements",
                   "workflow_modes", "workflow_catalog_publications", "tasks", "task_step_history"):
         assert all(row in after[table] for row in before[table]), table
     ensure_migrated(engine)
-    assert snapshot(engine) == after
+    converged = snapshot(engine)
+    for table in ("phases", "phase_instructions", "phase_checks", "phase_evidence_requirements",
+                  "workflow_modes", "workflow_catalog_publications", "tasks", "task_step_history"):
+        assert all(row in converged[table] for row in after[table]), table
+    with SAUnitOfWork(engine) as uow:
+        assert catalog.observe_installation(uow).instruction_manifest_sha256 == TARGET
+        assert editor.read_active(uow, workflows["project_manager"])["content_sha256"] == published["content_sha256"]
+        assert editor.read_operation(uow, workflows["project_manager"], "unrelated-human-publication") == published
+    ensure_migrated(engine)
+    assert snapshot(engine) == converged
 
 
 @pytest.mark.parametrize("role", ["analyst", "architect"])
@@ -81,5 +96,5 @@ def test_selected_custom_content_blocks_upgrade_before_any_write(predecessor, mo
                 publisher_subject="controlled-owner")
     before = snapshot(engine)
     with pytest.raises(ValueError, match="source-default cutover publication required"):
-        ensure_migrated(engine)
+        run_alembic_command("upgrade", engine, "0032_current_source_defaults")
     assert snapshot(engine) == before

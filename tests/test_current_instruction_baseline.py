@@ -25,7 +25,7 @@ from tests.test_stage_start_catalog_cutover import snapshot
 PREVIOUS = "852e0647ad8645c9c6280b21c1595b9efa6ff87754d07df8dcc92bcb04f76381"
 PREVIOUS_REVISION = "0031_explicit_stage_start"
 TARGET = "d035a0ddb06436714b76e40bc8cb68084203011f53dd52436732367690940e85"
-TARGET_REVISION = "0032_current_source_baseline"
+TARGET_REVISION = "0033_background_catalog_convergence"
 
 
 @pytest.fixture
@@ -143,7 +143,7 @@ def test_cutover_preserves_publications_history_and_pins(predecessor, monkeypatc
     ordinary_init(engine, monkeypatch)
     after = snapshot(engine)
     additive = {"workflow_modes", "phases", "phase_instructions", "phase_checks",
-                "phase_evidence_requirements", "workflow_catalog_publications"}
+                "phase_evidence_requirements", "workflow_catalog_publications", "projects", "profession_workflows"}
     for name in before.keys() - additive - {"workflows", "alembic_version"}:
         assert after[name] == before[name], name
     for name in additive:
@@ -152,12 +152,27 @@ def test_cutover_preserves_publications_history_and_pins(predecessor, monkeypatc
                        for row in before["workflow_catalog_publications"]}
     receipts = [row for row in after["workflow_catalog_publications"]
                 if (row["workflow_id"], row["catalog_version"]) not in receipts_before]
-    assert len(receipts) == 7
-    assert len(after["phases"]) == len(before["phases"]) + 33
+    assert len(receipts) == 9
+    source_receipts = [row for row in receipts if row["operation_key"].startswith(editor.BASELINE_OPERATION)]
+    assert len(source_receipts) == 7
+    old_workflow_ids = {row["id"] for row in before["workflows"]}
+    background_workflows = [row for row in after["workflows"] if row["id"] not in old_workflow_ids]
+    assert {row["key"] for row in background_workflows} == {
+        "fleet:background:bug_searcher", "fleet:background:refactorer",
+    }
+    background_ids = {row["id"] for row in background_workflows}
+    assert {row["workflow_id"] for row in receipts if row not in source_receipts} == background_ids
+    old_profession_ids = {row["id"] for row in before["projects"]}
+    assert {row["code"] for row in after["projects"] if row["id"] not in old_profession_ids} == {
+        "BUG_SEARCHER", "REFACTORER",
+    }
+    assert len(after["profession_workflows"]) == len(before["profession_workflows"]) + 2
+    assert len(after["phases"]) == len(before["phases"]) + 33 + 20
+    assert len([row for row in after["phases"] if row["workflow_id"] in background_ids]) == 20
     with SAUnitOfWork(engine) as uow:
         assert catalog.observe_installation(uow).instruction_manifest_sha256 == TARGET
         old_workflows = {row["id"]: row for row in before["workflows"]}
-        for receipt in receipts:
+        for receipt in source_receipts:
             old = old_workflows[receipt["workflow_id"]]
             assert receipt["parent_version"] == old["active_catalog_version"]
             assert receipt["operation_key"] == f'{editor.BASELINE_OPERATION}{old["id"]}:{TARGET}'

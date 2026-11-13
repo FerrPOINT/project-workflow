@@ -348,6 +348,45 @@ def ensure_schema(engine: Engine | Connection | None = None) -> None:
             Base.metadata.create_all(conn)
 
 
+def _converge_background_catalog_history(connection: Connection, alembic_cfg: Config) -> None:
+    """Account for the sibling content-only revision without recutting newer catalogs.
+
+    Both 0032 revisions have identical ORM schemas. The main predecessor may
+    already contain a newer sealed family and operator publications; replaying
+    the sibling's source cutover would reject or replace that accepted content.
+    Validate the complete schema and publication provenance before recording
+    the equivalent parent, in the same transaction as the forward merge.
+    """
+    main = "0032_current_source_baseline"
+    if database_revisions(connection) == {"0033_background_catalog_convergence"}:
+        return
+    if database_revisions(connection) == {"0032_current_source_defaults"}:
+        from importlib import import_module
+
+        convergence = import_module(
+            "project_workflow.infrastructure.db.migrations.versions.0033_background_catalog_convergence"
+        )
+        convergence.converge_catalog(connection)
+    # Keep the accepted main cutover for older installations. Starting from
+    # the background sibling, Alembic only adds the missing main parent.
+    command.upgrade(alembic_cfg, main)
+    if database_revisions(connection) != {main}:
+        return
+    if not _metadata_is_current(connection):
+        raise DatabaseRecreateRequired()
+    from .single_task_catalog import observe_installation
+    from .uow import SAUnitOfWork
+
+    uow = SAUnitOfWork(connection)
+    try:
+        uow.lock_catalog_state()
+        if any(w.key and w.key.startswith("single-task-v1:") for w in uow.workflows.list()):
+            observe_installation(uow)
+        command.stamp(alembic_cfg, (main, "0032_current_source_defaults"))
+    finally:
+        uow.close()
+
+
 def run_alembic_command(
     cmd: str,
     engine: Engine | Connection | None = None,
@@ -362,6 +401,8 @@ def run_alembic_command(
 
     def migrate(connection: Connection) -> None:
         alembic_cfg.attributes["connection"] = connection
+        if cmd == "upgrade" and revision in ("head", "0033_background_catalog_convergence"):
+            _converge_background_catalog_history(connection, alembic_cfg)
         getattr(command, cmd)(alembic_cfg, revision)
         if cmd == "downgrade" and revision == "base" and connection.dialect.name == "postgresql":
             schema = get_settings().DB_SCHEMA
@@ -464,6 +505,8 @@ def ensure_migrated(engine: Engine | Connection | None = None) -> None:
         "0029_analyst_twelve_phases",
         "0030_analyst_baseline_ledger",
         "0031_explicit_stage_start",
+        "0032_current_source_baseline",
+        "0032_current_source_defaults",
     }
     incompatible_revision = bool(revisions) and not revisions.issubset(compatible_upgrade_revisions)
     _validate_legacy_archives(target)

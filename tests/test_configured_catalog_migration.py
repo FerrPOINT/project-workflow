@@ -111,7 +111,7 @@ def assert_populated_catalog_upgrade_preserves_history(engine, monkeypatch, pred
                     "SELECT id,phase_id FROM phase_evidence_requirements ORDER BY id"
                 )).all()[:len(evidence)] == evidence
             assert (
-                "0032_current_source_baseline"
+                "0033_background_catalog_convergence"
                 == connection.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one()
             )
     finally:
