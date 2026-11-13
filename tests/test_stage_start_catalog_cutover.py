@@ -57,7 +57,7 @@ def predecessor(database, monkeypatch):
 
 def test_fresh_installation_selects_the_current_start_contract(database):
     engine = database
-    from project_workflow.infrastructure.db.session import ensure_migrated, migration_head
+    from project_workflow.infrastructure.db.session import ensure_migrated
 
     ensure_migrated(engine)
     with SAUnitOfWork(engine) as uow:
