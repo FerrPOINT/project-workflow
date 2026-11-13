@@ -161,6 +161,8 @@ class _SsoMiddleware(BaseHTTPMiddleware):
                     return _auth_error(request, 403, "Учётная запись не активна")
                 if identity["subject_role"] != identity["role"]:
                     raise ValueError("conflicting human role")
+                if not isinstance(identity["expires_at"], str):
+                    raise ValueError("Human PAT requires a finite credential expiry")
                 observed = datetime.fromisoformat(identity["observed_at"].replace("Z", "+00:00"))
                 expires_at = datetime.fromisoformat(identity["expires_at"].replace("Z", "+00:00"))
                 if (observed.tzinfo is None or observed.utcoffset() is None
