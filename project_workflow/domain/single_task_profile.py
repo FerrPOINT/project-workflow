@@ -1,8 +1,7 @@
 """Workflow-owned installed-profile observations, never execution proof."""
 
-from typing import Literal, NamedTuple
-
 import re
+from typing import Literal, NamedTuple
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -18,8 +17,8 @@ PROFESSION_TOOL_REQUIREMENTS = {
     "tester": ("forge",),
     "devops": ("forge",),
 }
-CATALOG_SHA256 = "333a2ca0a87bbbc88a505fa99cd170b074620cbc7fad21e374076a8192515bb0"
-MANIFEST_SHA256 = "328815479d9ee782b901b8b9c7f4caecf8123b9b7ab9d8ca9c07d05e7c5c58f5"
+CATALOG_SHA256 = "a7f62ec43396cb1cfe2b5e6985de572df211f4042a04e1e8c0125f2aaabd4d4e"
+MANIFEST_SHA256 = "a4248f93f5299b12cc9b0714d10b368645217c0a7718617c6658bf252f4624b7"
 RETAINED_CATALOG_SHA256 = "86e6c983b7aa6a2c99da11d1d4b1f1b4563ff913262236903a19bc86bdec2d67"
 RETAINED_MANIFEST_SHA256 = "652a38c0f7bdb48a569aa3fcd5c2e81e153db6e22b5201cfb6ce15c988dd57f3"
 
@@ -31,6 +30,8 @@ class CatalogManifest(NamedTuple):
 # Sealed earlier revisions remain available for readback.
 CATALOG_MANIFESTS = {
     MANIFEST_SHA256: CatalogManifest(CATALOG_SHA256, "configured-cli-v1"),
+    "328815479d9ee782b901b8b9c7f4caecf8123b9b7ab9d8ca9c07d05e7c5c58f5":
+        CatalogManifest("333a2ca0a87bbbc88a505fa99cd170b074620cbc7fad21e374076a8192515bb0", "configured-cli-v1"),
     "a6d82abf1c7d3965b452e29783bd7a1adc093bcf9f460aa36f4060bf78eba70a":
         CatalogManifest("a0390b7ae6556432f47beda3ede356eff11d72d45422678b1549cf08cd77540b", "configured-cli-v1"),
     "d035a0ddb06436714b76e40bc8cb68084203011f53dd52436732367690940e85":
@@ -83,7 +84,8 @@ def is_single_task_key(key: str | None) -> bool:
 
 
 def valid_profession_key(value: str) -> bool:
-    return value not in {"catalog", "installation", "dev_ops"} and re.fullmatch(r"[a-z][a-z0-9_]{1,31}", value) is not None
+    return (value not in {"catalog", "installation", "dev_ops"}
+            and re.fullmatch(r"[a-z][a-z0-9_]{1,31}", value) is not None)
 
 
 class _Observation(BaseModel):

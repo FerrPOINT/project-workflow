@@ -216,6 +216,25 @@ live catalog не активировался и legacy/proposal pins не изм
 
 ## Validation И Parent QA
 
+DevOps выбирает контракт по опубликованному owner target рецепта Forge.
+Для `base_resource_rollout` исходная операция Check получает
+`result.baseOperationObservation` с `forge/base-operation-observation/v1`
+и запечатанной квитанцией `pdlc/resource-rollout-delivery/v1` в фазе `complete`.
+Для pipeline deployment сохраняется `result.deploymentObservation` в фазе
+`deployed`. Физическое применение Base выполняет владелец установки.
+После публикации его квитанции DevOps сверяет ту же операцию Check командой
+`cicd-cli dev-workspace reconcile`, затем читает исходный UUID операции.
+Кандидат, исходная публикация, назначение и сессия сохраняются.
+
+Обновление инструкций собирается `python scripts/build_single_task_profile.py`,
+а `--check` проверяет артефакты и runtime pins выбранного checkout.
+После поставки нового пакета владелец установки публикует каталог штатной командой
+`python scripts/init_db.py --publish-packaged-catalog-from <installed-manifest-sha256>`.
+Обычная повторная инициализация сохраняет установленный каталог. Явная публикация
+сверяет прежний manifest и добавляет новые редакции, сохраняя существующие
+исполнения и их snapshots. Неизвестная редакция либо пользовательский черновик
+требует сверки до публикации. Предыдущий sealed manifest остаётся доступен для чтения.
+
 Focused tests: настоящий `init_db` дважды, persisted router readback, coexistence
 с авторскими legacy edits/task/history, rollback, drift, task=root DTO,
 auth/version-1 bypass rejection, source hashes и producer/terminal последовательность.

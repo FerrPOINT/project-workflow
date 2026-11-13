@@ -147,8 +147,12 @@ def all_rows(uow):
             for name, table in m.Base.metadata.tables.items()}
 
 
-def test_packaged_publication_preserves_task_and_old_phases(monkeypatch):
-    old = install_retained(monkeypatch, DEPLOYED_FIRST_STEP_RELEASE)
+@pytest.mark.parametrize("installed_manifest", [
+    DEPLOYED_FIRST_STEP_RELEASE,
+    "328815479d9ee782b901b8b9c7f4caecf8123b9b7ab9d8ca9c07d05e7c5c58f5",
+])
+def test_packaged_publication_preserves_task_and_old_phases(monkeypatch, installed_manifest):
+    old = install_retained(monkeypatch, installed_manifest)
     reviewer = next(binding for binding in old.bindings if binding.role_key == "reviewer")
     workflow_id = int(reviewer.workflow_id)
     with SAUnitOfWork() as uow:
@@ -164,7 +168,7 @@ def test_packaged_publication_preserves_task_and_old_phases(monkeypatch):
             publish_packaged_catalog(uow, FIRST_STEP_RELEASE)
         assert all_rows(uow) == before
 
-        selected = publish_packaged_catalog(uow, DEPLOYED_FIRST_STEP_RELEASE)
+        selected = publish_packaged_catalog(uow, installed_manifest)
         assert selected.instruction_manifest_sha256 == MANIFEST_SHA256
         assert [(b.namespace_id, b.workflow_id) for b in selected.bindings] == [
             (b.namespace_id, b.workflow_id) for b in old.bindings
@@ -175,7 +179,7 @@ def test_packaged_publication_preserves_task_and_old_phases(monkeypatch):
         assert read_revision(uow, workflow, revision["catalog_version"]) == revision
 
     with SAUnitOfWork() as uow:
-        assert publish_packaged_catalog(uow, DEPLOYED_FIRST_STEP_RELEASE) == selected
+        assert publish_packaged_catalog(uow, installed_manifest) == selected
         assert all_rows(uow) == after
 
 

@@ -297,7 +297,9 @@ def test_devops_current_delivery_has_exact_operation_identity_and_no_legacy_boot
         "--operation-id <original-operation-uuid>"
     )
     assert check in text and readback in text
-    assert shlex.split(check)[4:8] == ["<registered-workspace-uuid>", "--operation-id", "<original-operation-uuid>", "--expected-version"]
+    assert shlex.split(check)[4:8] == [
+        "<registered-workspace-uuid>", "--operation-id", "<original-operation-uuid>", "--expected-version",
+    ]
     for required in (
         "own permanently configured Forge PAT/session", "Missing target, recipe or access is an operator blocker",
         "request.recipe/source_commit/source_pipeline_id", "identical SHA256", "never another POST",
@@ -312,6 +314,34 @@ def test_devops_current_delivery_has_exact_operation_identity_and_no_legacy_boot
     # The explicit Developer task-pipeline procedure remains available to its owning role.
     assert TRIGGER in instruction_text(mode_for(catalog, "developer", "initial")["phases"][0])
 
+
+def test_devops_selects_the_published_owner_target_and_reconciles_the_original_base_check(generated):
+    catalog, _ = generated
+    phases = mode_for(catalog, "devops", "delivery")["phases"]
+    text = instruction_text(phases[0])
+    for required in (
+        "Select the observation contract from that published recipe's owner target",
+        "do not switch contracts after a failure", "published base_resource_rollout",
+        "pipeline_id=null", "result.baseOperationObservation", "schema=forge/base-operation-observation/v1",
+        "observation.workspaceOperationId to the saved Check UUID", "workspaceId to the current registered workspace",
+        "sourcePipelineId to the accepted original publication", "sourceCommit to the accepted Developer candidate",
+        "target.schema=pdlc/base-resource-target/v1", "exact published target",
+        "deliveryReceipt={sha256,receipt}", "verify its canonical SHA256",
+        "receipt.schema=pdlc/resource-rollout-delivery/v1", "receipt.phase=complete",
+        "component key/namespace/namespaceUid/deployment/deploymentUid/container",
+        "receipt.operationId, planSha256, sourceConfigurationSha256, configurationSha256, sourceCatalogSha256",
+        "normalReceiptSha256", "ready=true, guard=READY, replicas=1, readyReplicas=1",
+        "observedGeneration>=generation", "exact immutable published image",
+        "Base alone physically applies", "DevOps never receives Base credentials",
+        "workspace_base_delivery_receipt_missing", "original-operation reconciliation",
+        "cicd-cli dev-workspace reconcile --workspace <registered-workspace-uuid>",
+        "same saved Check UUID", "same candidate, publication, assignment and session",
+        "published pipeline deployment target", "result.deploymentObservation",
+        "schema=forge/kubernetes-deployment-observation/v1", "observation phase=deployed",
+    ):
+        assert required in text
+    assert text.index("published recipe's owner target") < text.index("result.baseOperationObservation")
+    assert text.index("result.baseOperationObservation") < text.index("result.deploymentObservation")
 
 def test_conditional_pm_brief_and_single_task_inventory_are_pinned(generated):
     catalog, manifest = generated

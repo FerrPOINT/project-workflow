@@ -1,7 +1,7 @@
 {
   "instruction_overlay": {
     "path": "project_workflow/infrastructure/single_task_delivery_instructions.py",
-    "sha256": "da7c1d364740355101fbc7ca098120527664b9f01033d9bbe439c746a4c90e10"
+    "sha256": "87e43925f59b15649dd74a73a8334650d195e38aac135d78f834e6736bb61eb2"
   },
   "instruction_profile": "single-task-v1",
   "instruction_source": {
@@ -76,7 +76,7 @@
       "namespace_cli_command": "workflow-single-task-devops",
       "namespace_name": "single-task-devops",
       "profile": "single-task-v1-devops",
-      "role_instructions_sha256": "a8c95ec85e583f5ccb490496a01ef20f19ee832053496e3b617b3fa18e99f000",
+      "role_instructions_sha256": "10a897eccaa48ad7e22edfe204fc275e5959eb1487cb31f68ed802c0083b4a59",
       "workflow_key": "single-task-v1:devops"
     },
     "project_manager": {
@@ -128,7 +128,7 @@
   "workflow_catalog": {
     "artifact": "project_workflow/references/single_task_catalog_v1.json",
     "hash_encoding": "utf-8-lf-no-bom-with-final-newline",
-    "sha256": "333a2ca0a87bbbc88a505fa99cd170b074620cbc7fad21e374076a8192515bb0",
+    "sha256": "a7f62ec43396cb1cfe2b5e6985de572df211f4042a04e1e8c0125f2aaabd4d4e",
     "version": 1
   }
 }
