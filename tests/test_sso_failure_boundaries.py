@@ -203,7 +203,7 @@ def test_db_denial_restores_original_context_but_unrelated_failure_is_not_author
     monkeypatch.setenv("PROJECT_WORKFLOW_SPACES__ENABLED", "false")
     _central(monkeypatch, lambda request: httpx.Response(200, json=human_identity("human")))
     request = Request({
-        "type": "http", "method": "GET", "scheme": "http", "path": "/api/tasks",
+        "type": "http", "app": app, "method": "GET", "scheme": "http", "path": "/api/tasks",
         "query_string": b"", "server": ("localhost", 8812),
         "headers": [(b"authorization", ("Bearer " + human_token("human")).encode())],
     })
@@ -217,26 +217,27 @@ def test_db_denial_restores_original_context_but_unrelated_failure_is_not_author
     original = RequestClock(time.monotonic() + 30, time.time() + 30)
 
     async def exercise():
-        token = sso.current_clock.set(original)
-        try:
-            async def handler(_request):
-                active = sso.current_clock.get()
-                assert active is not None and active is not original
-                active.require_current()
-                raise database_error
+        async with app.router.lifespan_context(app):
+            token = sso.current_clock.set(original)
+            try:
+                async def handler(_request):
+                    active = sso.current_clock.get()
+                    assert active is not None and active is not original
+                    active.require_current()
+                    raise database_error
 
-            middleware = sso._SsoMiddleware(app, settings)
-            if sqlstate == "42501":
-                response = await middleware.dispatch(request, handler)
-                assert response.status_code == 403
-                assert b"synthetic-private" not in response.body
-            else:
-                with pytest.raises(DBAPIError) as error:
-                    await middleware.dispatch(request, handler)
-                assert error.value is database_error
-            assert sso.current_clock.get() is original
-        finally:
-            sso.current_clock.reset(token)
+                middleware = sso._SsoMiddleware(app, settings)
+                if sqlstate == "42501":
+                    response = await middleware.dispatch(request, handler)
+                    assert response.status_code == 403
+                    assert b"synthetic-private" not in response.body
+                else:
+                    with pytest.raises(DBAPIError) as error:
+                        await middleware.dispatch(request, handler)
+                    assert error.value is database_error
+                assert sso.current_clock.get() is original
+            finally:
+                sso.current_clock.reset(token)
 
     asyncio.run(exercise())
 
@@ -289,6 +290,7 @@ def test_project_policy_requires_active_identity_and_typed_role_before_owner_rpc
 @pytest.mark.parametrize("spaces", ["false", "true"])
 @pytest.mark.parametrize("clock_case", [
     "future", "stale", "invalid_observed", "invalid_expiry", "missing_expiry", "naive_expiry", "conflicting_role",
+    "null_expiry", "boolean_expiry", "numeric_expiry",
 ])
 def test_pat_clock_and_role_must_be_valid_before_handler_or_owner_rpc(monkeypatch, clock_case, spaces):
     app, settings = _app(monkeypatch)
@@ -307,6 +309,8 @@ def test_pat_clock_and_role_must_be_valid_before_handler_or_owner_rpc(monkeypatc
         identity["expires_at"] = (now + timedelta(seconds=30)).replace(tzinfo=None).isoformat()
     elif clock_case == "conflicting_role":
         identity["subject_role"] = "admin"
+    elif clock_case in {"null_expiry", "boolean_expiry", "numeric_expiry"}:
+        identity["expires_at"] = {"null_expiry": None, "boolean_expiry": False, "numeric_expiry": 0}[clock_case]
     else:
         identity["expires_at"] = "not-a-timestamp"
 
@@ -516,3 +520,20 @@ def test_dotenv_platform_settings_never_lose_sso_middleware(
         login = client.get("/login")
     assert login.status_code == 303
     assert login.headers["location"].startswith(settings.AUTH_ISSUER + "/oidc/authorize?")
+
+
+@pytest.mark.parametrize("spaces", ["false", "true"])
+def test_persistent_machine_pat_cannot_enter_human_routes(monkeypatch, spaces):
+    app, settings = _app(monkeypatch)
+    monkeypatch.setenv("PROJECT_WORKFLOW_SPACES__ENABLED", spaces)
+    identity = personal_identity("machine", role="service_account", scopes=["project-workflow:read"])
+    identity["expires_at"] = None
+    _central(monkeypatch, lambda request: httpx.Response(200, json=identity))
+
+    async def unexpected(*args, **kwargs):
+        pytest.fail("A persistent machine PAT must not reach the human project owner")
+
+    monkeypatch.setattr(project_admission, "confirm", unexpected)
+    with TestClient(app, follow_redirects=False) as client:
+        response = client.get("/api/tasks", headers={"Authorization": "Bearer pdlc_pat_machine"})
+    assert response.status_code == 403

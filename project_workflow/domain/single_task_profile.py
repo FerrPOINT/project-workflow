@@ -17,8 +17,8 @@ PROFESSION_TOOL_REQUIREMENTS = {
     "tester": ("forge",),
     "devops": ("forge",),
 }
-CATALOG_SHA256 = "a7f62ec43396cb1cfe2b5e6985de572df211f4042a04e1e8c0125f2aaabd4d4e"
-MANIFEST_SHA256 = "a4248f93f5299b12cc9b0714d10b368645217c0a7718617c6658bf252f4624b7"
+CATALOG_SHA256 = "de4316cd6f59d65e92ef63fe2feb98254d098fbacc45d0fc2debdc91fd39c6d4"
+MANIFEST_SHA256 = "5fae642c5c3fe4ec7be7cbf1e1e52a45cd70cf3b5b7edfdb9e7cbd9dee2669a8"
 RETAINED_CATALOG_SHA256 = "86e6c983b7aa6a2c99da11d1d4b1f1b4563ff913262236903a19bc86bdec2d67"
 RETAINED_MANIFEST_SHA256 = "652a38c0f7bdb48a569aa3fcd5c2e81e153db6e22b5201cfb6ce15c988dd57f3"
 
@@ -30,6 +30,10 @@ class CatalogManifest(NamedTuple):
 # Sealed earlier revisions remain available for readback.
 CATALOG_MANIFESTS = {
     MANIFEST_SHA256: CatalogManifest(CATALOG_SHA256, "configured-cli-v1"),
+    "a4248f93f5299b12cc9b0714d10b368645217c0a7718617c6658bf252f4624b7":
+        CatalogManifest("a7f62ec43396cb1cfe2b5e6985de572df211f4042a04e1e8c0125f2aaabd4d4e", "configured-cli-v1"),
+    "3b56d64226d48d84082e43eb9ff45228a0aa6c2e1bc2640dd7389452cfcaa473":
+        CatalogManifest("dd5970c3ca44614282e46050fbfaadb25dae4264f97dce9479ab672814aea855", "configured-cli-v1"),
     "328815479d9ee782b901b8b9c7f4caecf8123b9b7ab9d8ca9c07d05e7c5c58f5":
         CatalogManifest("333a2ca0a87bbbc88a505fa99cd170b074620cbc7fad21e374076a8192515bb0", "configured-cli-v1"),
     "a6d82abf1c7d3965b452e29783bd7a1adc093bcf9f460aa36f4060bf78eba70a":

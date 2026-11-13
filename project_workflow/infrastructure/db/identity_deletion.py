@@ -44,7 +44,7 @@ def _authorize_transaction(connection: Connection, authority: Authority) -> None
     # Sample the remaining original clocks AFTER the DB anchor response. Even
     # network time and a later lock wait can only shorten this fixed DB deadline.
     until = min(anchor + timedelta(seconds=authority.remaining()),
-                datetime.fromtimestamp(authority.expires_at, timezone.utc))
+                datetime.fromtimestamp(authority.confirmation_expires_at, timezone.utc))
     authorization = str(uuid4())
     connection.execute(text("INSERT INTO identity_owner_command_authorizations(authorization_id,valid_until) "
                             "VALUES(:id,:until)"), {"id": authorization, "until": until})

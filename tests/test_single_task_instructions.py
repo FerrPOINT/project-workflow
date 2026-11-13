@@ -98,21 +98,20 @@ def test_role_work_keeps_architecture_rework_independent_review_and_deployment_p
     for required in ("ONLY an architecture", "inside this same task", "Plan steps are text", "No delivery DAG"):
         assert required in architecture
     rework = instruction_text(mode_for(catalog, "developer", "rework")["phases"][1])
-    assert "finding -> change -> verification" in rework
+    assert "record finding, change and verification" in rework
     assert "always returns to Review / Ready" in rework and "fresh Testing run" in rework
     for role in ("reviewer", "tester"):
         review = instruction_text(mode_for(catalog, role, "delivery")["phases"][1])
-        for required in ("immutable findings", "severity", "reproduction", "expected vs", "Rework / Ready"):
-            assert required in review
-        assert "business rework verdict" in instruction_text(mode_for(catalog, role, "delivery")["phases"][-1])
-        assert "server Rework limit" in completion_instruction(role)
+        assert "severity" in review and "findings" in review
+        assert "rework" in review and "Rework / Ready" not in review
+        assert "Automatic Rework is disabled" in completion_instruction(role)
     for phase in mode_for(catalog, "devops", "delivery")["phases"][1:]:
         criteria = " ".join(phase["checks"] + phase["evidence"]).lower()
         assert all(word in criteria for word in ("artifact", "deployment receipt", "health", "acceptance"))
 
 
 @pytest.mark.parametrize("role,mode", [(role, mode) for role, mode in MODES[1:]
-                                       if role not in {"analyst", "architect"}])
+                                       if role not in {"analyst", "architect", "reviewer"}])
 def test_critical_hold_uses_actual_sealed_evidence_and_assignment_key_without_false_completion(catalog, role, mode):
     text = instruction_text(mode_for(catalog, role, mode)["phases"][1])
     for required in ("requirements_contradiction", "missing_business_decision", "sealed evidence",
@@ -121,7 +120,7 @@ def test_critical_hold_uses_actual_sealed_evidence_and_assignment_key_without_fa
                      "original-key readback", "not a completed stage", "Leave the phase unfinished",
                      "finish the native run", "never calls scheduler commands"):
         assert required in text
-    assert "normal rework" in text
+    assert "record Review/Test defects without blocking the next role" in text
 
 
 def test_current_artifacts_have_exact_complete_source_provenance(catalog):

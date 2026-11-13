@@ -122,10 +122,6 @@ def verified_catalog_administrator(request, monkeypatch):
     if fixture not in request.fixturenames:
         yield
         return
-    client, _ = request.getfixturevalue(fixture)
-    settings = client.app.state.workflow_settings
-    authorization = "Bearer " + human_token(PUBLISHER_SUBJECT, issuer=settings.AUTH_ISSUER)
-
     def identity(request):
         assert str(request.url) == settings.AUTH_INTERNAL_BASE_URL.rstrip("/") + "/auth/me"
         assert request.headers["Authorization"] == authorization
@@ -134,6 +130,9 @@ def verified_catalog_administrator(request, monkeypatch):
     monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: AsyncClient(
         transport=httpx.MockTransport(identity), **kwargs,
     ))
+    client, _ = request.getfixturevalue(fixture)
+    settings = client.app.state.workflow_settings
+    authorization = "Bearer " + human_token(PUBLISHER_SUBJECT, issuer=settings.AUTH_ISSUER)
     client.headers["Authorization"] = authorization
     try:
         yield

@@ -411,7 +411,10 @@ def test_actual_189_190_191_labels_and_prior_marks_are_frozen_independently_of_o
 def test_tester_uses_original_sealed_criterion_not_the_unpublished_private_clarification():
     artifact = json.loads(LABELS.read_text(encoding="utf-8"))
     tester = next(case for case in artifact["cases"] if case["id"] == "tester-role-work-complete")
-    catalog = json.loads((ROOT / "project_workflow/references/single_task_catalog_v1.json").read_text(encoding="utf-8"))
+    source = tester["provenance"]["criterion_source"]
+    retained = (ROOT / source["retained_file"]).read_bytes()
+    assert hashlib.sha256(retained).hexdigest() == source["retained_sha256"]
+    catalog = json.loads(retained)
     workflow = next(workflow for workflow in catalog["workflows"] if workflow["role_key"] == "tester")
     phase = next(phase for phase in workflow["modes"][0]["phases"] if phase["code"] == "TS-TEST-02")
     text = tester["user_payload"]["criteria"][1]["text"]

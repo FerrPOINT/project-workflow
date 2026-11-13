@@ -1,5 +1,8 @@
 docs/proposals/single-task-v1.catalog.json text eol=lf
 docs/evidence/*.json text eol=lf
+# These retained journals are authenticated as exact original CRLF bytes.
+docs/evidence/advisor-v18-verdict-boundary-dda58fa-20261104.json -text -eol whitespace=cr-at-eol
+docs/evidence/advisor-v18-approved-budget-controls-a6a7cc3-20261104.json -text -eol whitespace=cr-at-eol
 docs/proposals/single-task-v1.manifest.json text eol=lf
 project_workflow/references/single_task_catalog_v1.json text eol=lf
 project_workflow/references/single_task_manifest_v1.json text eol=lf

@@ -78,18 +78,22 @@ Standalone использует явный `step --start` без обязате�
 
 | Профессия | Mode | Работа | Разрешённая следующая stage / status |
 | --- | --- | --- | --- |
-| PM | draft | Brainstorming, clarification, requirements review внутри Draft | Exact owner confirmation: Backlog / Ready; затем Tracker pickup: Analysis / Ready |
+| PM | draft | Brainstorming, clarification, requirements review внутри Draft | После owner confirmation и агентского Draft / Completed: Analysis / Ready |
 | Analyst | analysis | Анализ и coverage требований одной задачи | Architecture / Ready |
 | Architect | decomposition | Только архитектура и текстовый план одной задачи | Development / Ready той же задачи |
 | Developer | initial | Реализация и evidence точного candidate | Review / Ready |
-| Developer | rework | Исправление frozen findings | Review / Ready, затем Testing заново |
-| Reviewer | delivery | Независимое review candidate | passed: Testing / Ready; needs_rework: Rework / Ready |
-| Tester | delivery | Проверка acceptance candidate | passed: Deployment / Ready; needs_rework: Rework / Ready |
+| Developer | rework | Сохранённый mode прежних назначений; автоматически не выбирается | Review / Ready |
+| Reviewer | delivery | Все связанные PR, полный diff, замечания к коду | approved и rework: Testing / Ready |
+| Tester | delivery | Проверка acceptance candidate с фактическими результатами | passed и rework: Deployment / Ready |
 | DevOps | delivery | Artifact, deployment, health, deployed acceptance | Deployment / Completed |
 
 Stages: Draft, Backlog, Analysis, Architecture, Development, Review, Testing,
 Rework, Deployment. Status отдельно: Ready, InProgress, Completed. `waiting_reason`
-и runtime state не заменяют status. Агент не выставляет InProgress сам при старте.
+и runtime state не заменяют status. Агент первой фазой сам выполняет Start и
+проверяет InProgress. Последняя фаза после принятого отчёта Workflow включает
+публикацию сводки, агентское завершение текущего назначения и readback Completed.
+Tracker после настоящего terminal сам меняет стадию и устанавливает Ready следующей
+роли. После DevOps сохраняется финальный Deployment/Completed, следующей роли нет.
 Никаких children/decomposition cards, delivery DAG, aggregate scopes или integration
 barriers в новом flow. Старые integration modes остаются доступными старому flow.
 
@@ -105,8 +109,10 @@ PM сначала получает exact owner confirmation receipt, затем 
 Tracker proposal/readback с явно названными разрешёнными stage/status.
 Будущий receipt не включён в checks/evidence как условие предшествующего report:
 это предотвращает цикл «сначала принеси результат ещё не выполненного handoff».
-Дефекты Reviewer/Tester возвращают эту же задачу в Rework. Новый candidate снова
-проходит Review и Testing. DevOps завершает задачу только с совпадающими доказательствами
+Дефекты Reviewer/Tester сохраняются в комментариях и sealed reports. Они не мешают
+завершить выполненную проверку и передать работу дальше; автоматический Rework
+отключён. Фактический verdict не подменяется успешным ради передачи. DevOps
+завершает задачу только с совпадающими доказательствами
 artifact/deployment/health/acceptance; успешная сборка сама по себе недостаточна.
 
 ## Sealed Role Artifacts
@@ -308,7 +314,8 @@ existing Starlette/anyio deprecation. PG/native/image/live проверки не
   изменение revision после consent; handoff только после exact confirmation receipt.
 - Полный путь одной задачи Draft → Backlog → Analysis → Architecture → Development
   → Review → Testing → Deployment; UUID сохраняется, children и barriers отсутствуют.
-- Defects из Review и Testing: Rework → Review → Testing для нового candidate;
+- Defects из Review и Testing сохраняются; текущая цепочка продолжается к DevOps
+  без автоматического Rework. Повторные циклы — следующий этап;
   stale findings/evidence и replay не пропускают стадии.
 - Unknown ACK/restart: original operation readback, без второго эффекта, подмены
   identity, generic patch или фиктивного receipt.

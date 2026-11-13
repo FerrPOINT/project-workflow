@@ -9,8 +9,11 @@ import json
 import os
 import secrets
 import time
+from collections.abc import AsyncIterator, Mapping
+from contextlib import asynccontextmanager
 from dataclasses import replace
 from datetime import datetime, timezone
+from http.cookiejar import CookieJar, DefaultCookiePolicy
 from urllib.parse import urlencode, urlparse
 
 import httpx
@@ -127,10 +130,11 @@ class _SsoMiddleware(BaseHTTPMiddleware):
         started = time.monotonic()
         wall_started = datetime.now(timezone.utc)
         try:
-            async with httpx.AsyncClient(timeout=5, follow_redirects=False) as client:
-                response = await client.get(settings.AUTH_INTERNAL_BASE_URL.rstrip("/") + path,
-                                            params={"include_lifetime": "true"} if is_personal_token else None,
-                                            headers={"Authorization": f"Bearer {token}"})
+            response = await request.app.state.central_auth_http.get(
+                settings.AUTH_INTERNAL_BASE_URL.rstrip("/") + path,
+                params={"include_lifetime": "true"} if is_personal_token else None,
+                headers={"Authorization": f"Bearer {token}"},
+            )
         except httpx.RequestError:
             return _auth_error(request, 503, "Central Auth временно недоступен")
         if response.status_code == 401:
@@ -157,6 +161,8 @@ class _SsoMiddleware(BaseHTTPMiddleware):
                     return _auth_error(request, 403, "Учётная запись не активна")
                 if identity["subject_role"] != identity["role"]:
                     raise ValueError("conflicting human role")
+                if not isinstance(identity["expires_at"], str):
+                    raise ValueError("Human PAT requires a finite credential expiry")
                 observed = datetime.fromisoformat(identity["observed_at"].replace("Z", "+00:00"))
                 expires_at = datetime.fromisoformat(identity["expires_at"].replace("Z", "+00:00"))
                 if (observed.tzinfo is None or observed.utcoffset() is None
@@ -269,6 +275,21 @@ def install_sso(app: FastAPI, settings: Settings | None = None) -> None:
     if not settings.AUTH_INTERNAL_BASE_URL:
         raise RuntimeError("AUTH_INTERNAL_BASE_URL is required for SSO")
     _cipher(settings)
+    previous_lifespan = app.router.lifespan_context
+
+    @asynccontextmanager
+    async def auth_lifespan(current_app: FastAPI) -> AsyncIterator[Mapping[str, object]]:
+        async with previous_lifespan(current_app) as state:
+            # Pool connections, never an upstream cookie session shared by different callers.
+            cookies = CookieJar(policy=DefaultCookiePolicy(allowed_domains=[]))
+            async with httpx.AsyncClient(timeout=5, follow_redirects=False, cookies=cookies) as client:
+                current_app.state.central_auth_http = client
+                try:
+                    yield {} if state is None else state
+                finally:
+                    del current_app.state.central_auth_http
+
+    app.router.lifespan_context = auth_lifespan
     app.add_middleware(_SsoMiddleware, settings=settings)
 
     @app.get("/login", include_in_schema=False)
@@ -315,37 +336,37 @@ def install_sso(app: FastAPI, settings: Settings | None = None) -> None:
         if not code:
             return _auth_error(request, 401, "Вход не подтверждён")
         try:
-            async with httpx.AsyncClient(timeout=5) as client:
-                exchange = await client.post(settings.AUTH_INTERNAL_BASE_URL.rstrip("/") + "/oidc/token", data={
-                    "grant_type": "authorization_code", "client_id": _CLIENT_ID,
-                    "redirect_uri": settings.AUTH_PUBLIC_ORIGIN.rstrip("/") + settings.UI_BASE_PATH + "/sso/callback",
-                    "code": code, "code_verifier": transaction["verifier"],
-                })
-                if exchange.status_code != 200:
-                    return _auth_error(request, 401, "Central Auth отклонил вход")
-                tokens = exchange.json()
-                access_token = tokens["access_token"]
-                jwks_url = settings.AUTH_INTERNAL_BASE_URL.rstrip("/") + "/oidc/jwks"
-                signing_key = await asyncio.to_thread(jwt.PyJWKClient(jwks_url, timeout=5).get_signing_key_from_jwt,
-                                                      tokens["id_token"])
-                claims = jwt.decode(tokens["id_token"], signing_key.key, algorithms=["ES256"],
-                                    audience=_CLIENT_ID, issuer=settings.AUTH_ISSUER,
-                                    options={"require": ["exp", "sub", "iss", "aud", "nonce"]})
-                if not secrets.compare_digest(str(claims["nonce"]), str(transaction["nonce"])):
-                    return _auth_error(request, 401, "Подтверждение входа не совпало")
-                confirmation = await client.get(settings.AUTH_INTERNAL_BASE_URL.rstrip("/") + "/auth/me",
-                                                headers={"Authorization": f"Bearer {access_token}"})
-                if confirmation.status_code != 200:
-                    return _auth_error(request, 401, "Центральная сессия недействительна")
-                identity = confirmation.json()
-                if not isinstance(identity, dict) or identity.get("id") != claims["sub"]:
-                    return _auth_error(request, 401, "Центральная сессия недействительна")
-                machines = {item.strip() for item in os.environ.get(
-                    "PROJECT_WORKFLOW_NAMESPACE__MACHINE_SUBJECTS", "").split(",") if item.strip()}
-                if (identity.get("status") != "active" or identity.get("role") not in ("user", "admin")
-                        or identity.get("subject_role") == "service_account"
-                        or identity["id"] in machines):
-                    return _auth_error(request, 403, "Действующая учётная запись пользователя не подтверждена")
+            client = request.app.state.central_auth_http
+            exchange = await client.post(settings.AUTH_INTERNAL_BASE_URL.rstrip("/") + "/oidc/token", data={
+                "grant_type": "authorization_code", "client_id": _CLIENT_ID,
+                "redirect_uri": settings.AUTH_PUBLIC_ORIGIN.rstrip("/") + settings.UI_BASE_PATH + "/sso/callback",
+                "code": code, "code_verifier": transaction["verifier"],
+            })
+            if exchange.status_code != 200:
+                return _auth_error(request, 401, "Central Auth отклонил вход")
+            tokens = exchange.json()
+            access_token = tokens["access_token"]
+            jwks_url = settings.AUTH_INTERNAL_BASE_URL.rstrip("/") + "/oidc/jwks"
+            signing_key = await asyncio.to_thread(jwt.PyJWKClient(jwks_url, timeout=5).get_signing_key_from_jwt,
+                                                  tokens["id_token"])
+            claims = jwt.decode(tokens["id_token"], signing_key.key, algorithms=["ES256"],
+                                audience=_CLIENT_ID, issuer=settings.AUTH_ISSUER,
+                                options={"require": ["exp", "sub", "iss", "aud", "nonce"]})
+            if not secrets.compare_digest(str(claims["nonce"]), str(transaction["nonce"])):
+                return _auth_error(request, 401, "Подтверждение входа не совпало")
+            confirmation = await client.get(settings.AUTH_INTERNAL_BASE_URL.rstrip("/") + "/auth/me",
+                                            headers={"Authorization": f"Bearer {access_token}"})
+            if confirmation.status_code != 200:
+                return _auth_error(request, 401, "Центральная сессия недействительна")
+            identity = confirmation.json()
+            if not isinstance(identity, dict) or identity.get("id") != claims["sub"]:
+                return _auth_error(request, 401, "Центральная сессия недействительна")
+            machines = {item.strip() for item in os.environ.get(
+                "PROJECT_WORKFLOW_NAMESPACE__MACHINE_SUBJECTS", "").split(",") if item.strip()}
+            if (identity.get("status") != "active" or identity.get("role") not in ("user", "admin")
+                    or identity.get("subject_role") == "service_account"
+                    or identity["id"] in machines):
+                return _auth_error(request, 403, "Действующая учётная запись пользователя не подтверждена")
         except (httpx.RequestError, jwt.PyJWTError, KeyError, ValueError, TypeError):
             return _auth_error(request, 503, "Не удалось завершить центральный вход")
         destination = settings.UI_BASE_PATH + _safe_next(str(transaction["next"]))

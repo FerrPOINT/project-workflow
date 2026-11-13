@@ -8,6 +8,7 @@ from sqlalchemy import select
 
 from project_workflow.domain.single_task_profile import ROLE_MODES
 from project_workflow.infrastructure.db import models as m
+from project_workflow.infrastructure.db.session import ensure_migrated, get_engine
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from tests import test_catalog_publication as publication
 from tests.test_catalog_publication import operator_publication_count
@@ -16,6 +17,34 @@ from tests.test_configured_postgres import configured as configured
 from tests.test_configured_postgres import pg_url as pg_url
 
 pytestmark = pytest.mark.integration
+
+
+@pytest.mark.parametrize("operator_draft", [False, True])
+def test_packaged_catalog_publication_preserves_the_installed_history(pg_url, monkeypatch, operator_draft):
+    from tests import test_single_task_profile_compatibility as compatibility
+
+    engine = get_engine(pg_url)
+    assert engine.dialect.name == "postgresql"
+    ensure_migrated(engine)
+    if operator_draft:
+        compatibility.test_packaged_publication_keeps_an_operator_draft(monkeypatch)
+    else:
+        compatibility.test_packaged_publication_preserves_task_and_old_phases(monkeypatch)
+
+
+def test_packaged_catalog_preserves_the_enrolled_agent_on_postgres(pg_url, monkeypatch, supervisor_llm):
+    from project_workflow.application import state as app_state
+    from project_workflow.interfaces import ui as ui_package
+    from project_workflow.interfaces.ui import state as ui_state
+    from tests import test_single_task_profile_compatibility as compatibility
+
+    engine = get_engine(pg_url)
+    assert engine.dialect.name == "postgresql"
+    ensure_migrated(engine)
+    state = app_state._AppState(database_url=pg_url)
+    for module in (app_state, ui_state, ui_package):
+        monkeypatch.setattr(module, "_app_state", state)
+    compatibility.test_packaged_publication_keeps_the_enrolled_agent_execution(monkeypatch, supervisor_llm)
 
 
 @pytest.mark.parametrize("configured", [("architect", "decomposition")], indirect=True)

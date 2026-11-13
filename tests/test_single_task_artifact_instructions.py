@@ -200,17 +200,16 @@ def test_analyst_business_document_keeps_provenance_in_existing_metadata(generat
         assert required in final
 
 
-def test_defaults_keep_unaffected_roles_and_phase_identity(generated):
+def test_linear_defaults_keep_all_role_and_phase_identities(generated):
     catalog, _ = generated
-    old, _ = load_profile("920379c0c86455148e6fae35e2007037595c2d1cc82116c392c575c4625ffd28")
+    old, _ = load_profile("a6d82abf1c7d3965b452e29783bd7a1adc093bcf9f460aa36f4060bf78eba70a")
     before = {workflow["role_key"]: workflow for workflow in old["workflows"]}
     phase_content = {"instructions", "checks", "evidence"}
     for workflow in catalog["workflows"]:
         role = workflow["role_key"]
         original = before[role]
-        if role not in {"analyst", "architect", "developer", "reviewer", "tester", "devops"}:
-            assert workflow == original
-            continue
+        for key in ("key", "name", "namespace", "workflow_order", "role_key"):
+            assert workflow[key] == original[key]
         for current_mode, old_mode in zip(workflow["modes"], original["modes"], strict=True):
             assert current_mode["key"] == old_mode["key"]
             for current_phase, old_phase in zip(current_mode["phases"], old_mode["phases"], strict=True):
@@ -327,8 +326,26 @@ def test_stage_completion_preserves_permanent_assignment_and_native_handoff(gene
     assert "accepted proposal records the current stage as Completed but is not a stage handoff" in after
     assert "Fleet verifies real terminal before Tracker Complete" in after
     assert "Only an actual next-stage handoff resets Ready" in after
-    if role == "tester":
-        assert f"{'Review' if role == 'reviewer' else 'Testing'} / Completed" in instructions.TARGETS[role]
-        assert "rework_limit_reached" in after
+    if role in {"reviewer", "tester"}:
+        assert "for both" in instructions.TARGETS[role]
+        assert "Automatic Rework is disabled" in after
+        assert "Rework / Ready" not in after and "rework_limit_reached" not in after
     if role == "devops":
         assert instructions.TARGETS[role] == "Deployment / Completed"
+
+
+@pytest.mark.parametrize("role,mode", [("project_manager", "draft"), *TECHNICAL_MODES])
+def test_every_role_first_starts_and_last_explicitly_completes_its_assignment(generated, role, mode):
+    catalog, _ = generated
+    phases = mode_for(catalog, role, mode)["phases"]
+    first, final = phase_text(phases[0]), phase_text(phases[-1])
+    assert "Before business work, explicitly start" in first
+    assert "verify the same assignment is InProgress" in first
+    assert "AFTER accepted complete=true" in final
+    assert "explicitly set the current assignment to Completed" in final
+    assert "verify its original operation receipt" in final
+    assert "Tracker owns the next stage" in final
+    assert "continue the next phase in this same run" in final
+    actions = instructions.completion_instruction(role)
+    assert "discussion publish" in actions
+    assert ("pm completion submit" if role == "project_manager" else "sdlc result propose") in actions

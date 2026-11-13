@@ -51,6 +51,9 @@ SINGLE_TASK = (
     "waiting_reason and runtime/agent state are separate observations, never substitute statuses. "
     "Only a real Tracker receipt establishes a business transition; explicitly Start the current stage "
     "as InProgress before business work, but never choose the stage or borrow a scheduler lease. "
+    "The final phase explicitly completes the current assignment after Workflow acceptance; the "
+    "application then selects the next stage. Reviewer advances to Tester and Tester to DevOps even "
+    "when findings exist. Automatic Rework is disabled; DevOps ends the chain. "
     "Use the ordinary terminal with project-workflow, task-tracker and cicd-cli as actually installed and "
     "authorized. Do not modify original Hermes, install skills or infer capabilities from their names. "
     "Existing skill names are references, not authorization to execute legacy multi-task instructions."
@@ -100,12 +103,20 @@ ACTIONS = {
         "Rework always returns to Review / Ready, followed by a fresh Testing run.",
     ],
     ("reviewer", "delivery"): [
-        "Acknowledge the assigned handoff. Read the accepted Developer result and confirm its candidate identity.",
-        "Publish the Tracker task comment «Проверено» with task-tracker sdlc discussion publish "
-        "--task <task-uuid> --from-file -. Use the current assignment fence and the stable key "
-        "reviewer-ack:<assignment_id>. Read back that operation and save its comment_id.",
-        "Record the acknowledgment, its comment ID and candidate provenance in the report. "
-        "Use approved for the handoff to Testing / Ready. Tester owns functional verification.",
+        "Read the task requirements, analysis, architecture/plan, full discussion, attachments and "
+        "accepted Developer result. Use the installed forge-operator and exact-code-review skills. "
+        "Discover ALL linked PRs with cicd-cli pr for-task using the Tracker instance/task from parsed "
+        "context. Follow every page across repositories and PR statuses; a Developer list is not the authority.",
+        "For each PR read review-context for exact base/head SHA, the full diff with pr patch, affected "
+        "sources, contracts, dataflow, permissions, persistence, migrations and failure paths. Read existing "
+        "CI for those SHA and state missing evidence honestly. Never substitute a truncated preview for "
+        "the full diff. Do not run tests, builds, pipelines or workspaces, fix code, push or merge.",
+        "Publish confirmed findings through pr comment with severity, expected/actual, acceptance criterion "
+        "and evidence; use general comments or path/old|new/line anchors, including deleted lines. Preserve "
+        "the exact reviewed SHA and stable operation_id. After unknown acceptance read pr comments by the "
+        "original operation key before another write. Before the final report reread the entire PR set "
+        "and SHA, review changed parts and retain persisted comment references. Report the actual "
+        "approved|rework verdict: findings do not block completed review work or Testing / Ready handoff.",
     ],
     ("tester", "delivery"): [
         "Read the accepted candidate and assigned verification target. Confirm the workspace and served SHA "
@@ -113,14 +124,17 @@ ACTIONS = {
         "Exercise the approved acceptance criteria against that target using the configured tools, including "
         "the browser for user-facing criteria. Record the actual observations for each criterion.",
         "For defects record immutable findings with severity, reproduction and expected vs actual results. "
-        "Choose passed with actual evidence or rework with actionable findings. Defects go to Rework / Ready "
-        "on the same task, followed by a fresh acknowledgment and test of the repaired candidate.",
+        "Choose passed with actual evidence or rework with actionable findings. Both verdicts complete "
+        "actual testing work and advance to Deployment / Ready for DevOps. Preserve failures and "
+        "untested cases honestly; do not wait for fixes, repair code or request a Rework transition.",
     ],
     ("devops", "delivery"): [
-        "Verify the exact candidate SHA/artifact accepted by Review and Testing and the authorized deployment "
+        "Verify the exact candidate SHA/artifact examined by Review and Testing and the authorized deployment "
         "target. Through the installed cicd-cli inspect actual help and supported operations before invoking "
         "them; this preset does not invent build/deploy/health commands. Record immutable artifact provenance.",
-        "Build/release and deploy the approved artifact through the authorized existing CI/CD procedure. "
+        "Read the actual Reviewer/Tester verdicts, findings and limitations; completing their work does not "
+        "certify defect-free code or grant a deployment permission. Build/release and deploy the assigned "
+        "artifact through the authorized existing CI/CD procedure. "
         "Read actual deployment receipt/target/revision, verify health and run deployed acceptance for this "
         "task. Preserve rollback references and report failed/unknown operations without claiming success.",
         "Terminal evidence is limited to this task's exact artifact, deployment, health and acceptance. "
@@ -139,12 +153,15 @@ ROLE_CHECKS = {
         "For rework, every finding has a verified fix or explicit blocker; new Review and Testing are required.",
     ],
     "reviewer": [
-        "The Tracker task contains the acknowledged comment and its receipt identifies this assignment.",
-        "The report records the comment ID, approved handoff and exact candidate identity.",
+        "Every linked PR has been reviewed at recorded base/head SHA against the task requirements; "
+        "confirmed findings are saved as PR comments and changed inputs have been reinspected.",
+        "The report preserves the actual approved|rework verdict, ready CI evidence and limitations. "
+        "Defects do not prevent completion or the subsequent Testing handoff.",
     ],
     "tester": [
         "Results identify actual candidate/environment and executed, failed and untested acceptance cases.",
-        "passed covers required acceptance; needs_rework includes immutable reproduction and expected/actual results.",
+        "passed covers required acceptance; rework includes immutable reproduction and expected/actual results. "
+        "Both verdicts complete actual testing work without waiting for fixes and advance to DevOps.",
     ],
     "devops": [
         "Artifact provenance and deployment receipt match the exact reviewed and tested candidate and target.",
@@ -154,14 +171,15 @@ ROLE_CHECKS = {
 ROLE_EVIDENCE = {
     "architect": ["Architecture decisions, dataflow, ordered plan, criterion coverage and rollback references."],
     "developer": ["Exact candidate SHA, diff/files and test outputs; rework finding/change/verification matrix."],
-    "reviewer": ["Tracker comment ID, accepted Developer candidate identity and acknowledgment report receipt."],
+    "reviewer": ["All linked PRs/base/head SHA, requirements coverage, read CI results, persisted PR comment "
+                 "references, actual approved|rework verdict and verified review report receipt."],
     "tester": ["Acceptance matrix with candidate/environment/results and passed decision or frozen defects."],
     "devops": ["Exact artifact provenance, deployment receipt/target, health results and deployed acceptance."],
 }
 
 
 
-PREVIOUS_MANIFEST = "2f16635c0f588d1f285393b4ad8c163119b4dba4b9918335c821f295e88a4f64"
+PREVIOUS_MANIFEST = "a6d82abf1c7d3965b452e29783bd7a1adc093bcf9f460aa36f4060bf78eba70a"
 ANALYST_RULES = (
     "Work independently on this approved PM scope. Never interview the user, request analysis consent, "
     "return the task to PM or invoke critical PM review. Do not rewrite approved requirements or choose "
@@ -339,8 +357,9 @@ def load_single_task_professions() -> list[dict[str, Any]]:
         workflow["previous_baseline_manifest_sha256"] = PREVIOUS_MANIFEST
         if role == "analyst":
             workflow["skill_allowlist"] = sorted(set(workflow["skill_allowlist"]) | {"wiki-operator", "forge-operator"})
-        if role == "architect":
-            workflow["skill_allowlist"] = sorted(set(workflow["skill_allowlist"]) | {"forge-operator"})
+        if role in {"architect", "reviewer"}:
+            workflow["skill_allowlist"] = sorted(set(workflow["skill_allowlist"]) | {"forge-operator"}
+                                               | ({"exact-code-review"} if role == "reviewer" else set()))
         workflow.pop("terminal_contract", None)
         workflow["description"] = f"{PROFILE_KEY}: {role} for one Tracker task; opt-in instructions."
         workflow["modes"] = []
@@ -365,7 +384,8 @@ def load_single_task_professions() -> list[dict[str, Any]]:
                 "Workflow step and task context",
                 [FIRST_STEP, context_instruction(role), SINGLE_TASK, REPORT],
                 ["The returned Workflow step is admitted in the assigned namespace.",
-                 "The one Tracker task, current stage/status and input references match."],
+                 "The one Tracker task, current stage/status and input references match.",
+                 "The agent explicitly started this assignment and verified InProgress before business work."],
                 ["Actual first Workflow step response and task/input references."],
             )
             if role == "project_manager":
@@ -412,7 +432,8 @@ def load_single_task_professions() -> list[dict[str, Any]]:
                     description=f"{PROFILE_KEY}: {role}/{mode_key}; {name}.",
                     instructions=[
                         {"description": text, "skills": ["project-workflow-executor", "tracker-operator"]
-                         + (["forge-operator"] if role == "architect" else [])}
+                         + (["forge-operator"] if role == "architect" else
+                            ["forge-operator", "exact-code-review"] if role == "reviewer" else [])}
                         for text in instructions
                     ],
                     checks=list(checks),

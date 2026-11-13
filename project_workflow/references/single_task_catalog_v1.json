@@ -2,7 +2,7 @@
   "catalog_version": 1,
   "instruction_overlay": {
     "path": "project_workflow/infrastructure/single_task_delivery_instructions.py",
-    "sha256": "87e43925f59b15649dd74a73a8334650d195e38aac135d78f834e6736bb61eb2"
+    "sha256": "df97e52e80e29ee2cfc076929018f61b9def6e9b720b92cd877dea9c23be8d32"
   },
   "instruction_profile": "single-task-v1",
   "instruction_source": {
@@ -13,7 +13,7 @@
       "sha256": "d6d18f98b55f14210a3f0e12404074705495d535aa8ba29ae449624b845668c9"
     },
     "path": "project_workflow/infrastructure/single_task_catalog.py",
-    "sha256": "f91f5dce582f5fa485dd0059701d968533b2394aca856e790e8f94a2bee0822a"
+    "sha256": "a9845c249adf620c3c860c1628d35e906010a3aa9da0642b54b65802aa7e668e"
   },
   "schema": "single-task-sdlc/workflow-catalog/v1",
   "workflows": [
@@ -32,7 +32,8 @@
             {
               "checks": [
                 "The returned Workflow step is admitted in the assigned namespace.",
-                "The one Tracker task, current stage/status and input references match."
+                "The one Tracker task, current stage/status and input references match.",
+                "The agent explicitly started this assignment and verified InProgress before business work."
               ],
               "code": "PM-DRAFT-01",
               "description": "single-task-v1: project_manager/draft; Workflow step and task context.",
@@ -55,7 +56,7 @@
                   ]
                 },
                 {
-                  "description": "This preset works on ONE Tracker task throughout. Never create children, decomposition cards, parent/dependency links for a delivery DAG, aggregate work or integration barriers. Do not activate integration or integration_rework modes. The Architect mode key decomposition means architecture and an implementation plan inside this task only. Stages are Draft, Backlog, Analysis, Architecture, Development, Review, Testing, Rework, Deployment. Status is separately Ready, InProgress or Completed; waiting_reason and runtime/agent state are separate observations, never substitute statuses. Only a real Tracker receipt establishes a business transition; explicitly Start the current stage as InProgress before business work, but never choose the stage or borrow a scheduler lease. Use the ordinary terminal with project-workflow, task-tracker and cicd-cli as actually installed and authorized. Do not modify original Hermes, install skills or infer capabilities from their names. Existing skill names are references, not authorization to execute legacy multi-task instructions.",
+                  "description": "This preset works on ONE Tracker task throughout. Never create children, decomposition cards, parent/dependency links for a delivery DAG, aggregate work or integration barriers. Do not activate integration or integration_rework modes. The Architect mode key decomposition means architecture and an implementation plan inside this task only. Stages are Draft, Backlog, Analysis, Architecture, Development, Review, Testing, Rework, Deployment. Status is separately Ready, InProgress or Completed; waiting_reason and runtime/agent state are separate observations, never substitute statuses. Only a real Tracker receipt establishes a business transition; explicitly Start the current stage as InProgress before business work, but never choose the stage or borrow a scheduler lease. The final phase explicitly completes the current assignment after Workflow acceptance; the application then selects the next stage. Reviewer advances to Tester and Tester to DevOps even when findings exist. Automatic Rework is disabled; DevOps ends the chain. Use the ordinary terminal with project-workflow, task-tracker and cicd-cli as actually installed and authorized. Do not modify original Hermes, install skills or infer capabilities from their names. Existing skill names are references, not authorization to execute legacy multi-task instructions.",
                   "skills": [
                     "project-workflow-executor",
                     "tracker-operator"
@@ -183,7 +184,7 @@
                   ]
                 },
                 {
-                  "description": "PRECOMMIT ASSESSMENT ONLY: finish the current phase work and report actual inputs, outputs, checks, evidence and unresolved blockers. The report cannot contain its own future terminal receipt, future final comment or future Tracker transition. These are subsequent actions after acceptance. Missing, stale, mismatched or fabricated current work/evidence must not pass. The FULL latest saved requirements document, resolved feedback and blocking questions, and the actual human owner's confirmation must match the exact task/revision/hash/owner in Draft. Do not claim Tracker Completed before acceptance or require an external verifier checklist or Analyst. Submit project-workflow --json step --task <workflow-task-key> --operation-key <stable-key> --expected-version <current-version> --report - --requirements-revision <confirmed-revision> --requirements-sha256 <confirmed-content-hash>. Supply the actual report on stdin and use only the saved owner's exact confirmation. ",
+                  "description": "PRECOMMIT ASSESSMENT ONLY: finish the current phase work and report actual inputs, outputs, checks, evidence and unresolved blockers. The report cannot contain its own future terminal receipt, future final comment or future Tracker transition. These are subsequent actions after acceptance. Missing, stale, mismatched or fabricated current work/evidence must not pass. Complete this final phase through its subsequent status action: AFTER accepted complete=true, follow the returned completion_instructions to save and read back the final Task summary, explicitly set the current assignment to Completed and verify its original operation receipt. The agent changes status; Tracker owns the next stage and its Ready reset after real native terminal. Do not finish at a complete=false phase: continue the next phase in this same run. The FULL latest saved requirements document, resolved feedback and blocking questions, and the actual human owner's confirmation must match the exact task/revision/hash/owner in Draft. Do not claim Tracker Completed before acceptance or require an external verifier checklist or Analyst. Submit project-workflow --json step --task <workflow-task-key> --operation-key <stable-key> --expected-version <current-version> --report - --requirements-revision <confirmed-revision> --requirements-sha256 <confirmed-content-hash>. Supply the actual report on stdin and use only the saved owner's exact confirmation. ",
                   "skills": [
                     "project-workflow-executor",
                     "tracker-operator"
@@ -202,7 +203,7 @@
         "launch_profile": "single-task-v1-project-manager",
         "name": "single-task-project-manager"
       },
-      "previous_baseline_manifest_sha256": "2f16635c0f588d1f285393b4ad8c163119b4dba4b9918335c821f295e88a4f64",
+      "previous_baseline_manifest_sha256": "a6d82abf1c7d3965b452e29783bd7a1adc093bcf9f460aa36f4060bf78eba70a",
       "role_key": "project_manager",
       "skill_names": [
         "immutable-evidence-reporting",
@@ -250,7 +251,7 @@
                   ]
                 },
                 {
-                  "description": "This preset works on ONE Tracker task throughout. Never create children, decomposition cards, parent/dependency links for a delivery DAG, aggregate work or integration barriers. Do not activate integration or integration_rework modes. The Architect mode key decomposition means architecture and an implementation plan inside this task only. Stages are Draft, Backlog, Analysis, Architecture, Development, Review, Testing, Rework, Deployment. Status is separately Ready, InProgress or Completed; waiting_reason and runtime/agent state are separate observations, never substitute statuses. Only a real Tracker receipt establishes a business transition; explicitly Start the current stage as InProgress before business work, but never choose the stage or borrow a scheduler lease. Use the ordinary terminal with project-workflow, task-tracker and cicd-cli as actually installed and authorized. Do not modify original Hermes, install skills or infer capabilities from their names. Existing skill names are references, not authorization to execute legacy multi-task instructions.",
+                  "description": "This preset works on ONE Tracker task throughout. Never create children, decomposition cards, parent/dependency links for a delivery DAG, aggregate work or integration barriers. Do not activate integration or integration_rework modes. The Architect mode key decomposition means architecture and an implementation plan inside this task only. Stages are Draft, Backlog, Analysis, Architecture, Development, Review, Testing, Rework, Deployment. Status is separately Ready, InProgress or Completed; waiting_reason and runtime/agent state are separate observations, never substitute statuses. Only a real Tracker receipt establishes a business transition; explicitly Start the current stage as InProgress before business work, but never choose the stage or borrow a scheduler lease. The final phase explicitly completes the current assignment after Workflow acceptance; the application then selects the next stage. Reviewer advances to Tester and Tester to DevOps even when findings exist. Automatic Rework is disabled; DevOps ends the chain. Use the ordinary terminal with project-workflow, task-tracker and cicd-cli as actually installed and authorized. Do not modify original Hermes, install skills or infer capabilities from their names. Existing skill names are references, not authorization to execute legacy multi-task instructions.",
                   "skills": [
                     "project-workflow-executor",
                     "tracker-operator"
@@ -683,7 +684,7 @@
                   ]
                 },
                 {
-                  "description": "PRECOMMIT ASSESSMENT ONLY: finish the current phase work and report actual inputs, outputs, checks, evidence and unresolved blockers. The report cannot contain its own future terminal receipt, future final comment or future Tracker transition. These are subsequent actions after acceptance. Missing, stale, mismatched or fabricated current work/evidence must not pass. Prepare result.role=analyst with analysis ArtifactReceipt from verified saved role artifacts and the exact assigned candidate. Reviewer/Tester may complete verification with a business rework verdict and real findings; do not pass a defective candidate to obtain acceptance of a correct verification report. ",
+                  "description": "PRECOMMIT ASSESSMENT ONLY: finish the current phase work and report actual inputs, outputs, checks, evidence and unresolved blockers. The report cannot contain its own future terminal receipt, future final comment or future Tracker transition. These are subsequent actions after acceptance. Missing, stale, mismatched or fabricated current work/evidence must not pass. Complete this final phase through its subsequent status action: AFTER accepted complete=true, follow the returned completion_instructions to save and read back the final Task summary, explicitly set the current assignment to Completed and verify its original operation receipt. The agent changes status; Tracker owns the next stage and its Ready reset after real native terminal. Do not finish at a complete=false phase: continue the next phase in this same run. Prepare result.role=analyst with analysis ArtifactReceipt from verified saved role artifacts and the exact assigned candidate. Reviewer/Tester may complete verification with a business rework verdict and real findings; do not pass a defective candidate to obtain acceptance of a correct verification report. ",
                   "skills": [
                     "project-workflow-executor",
                     "tracker-operator"
@@ -702,7 +703,7 @@
         "launch_profile": "single-task-v1-analyst",
         "name": "single-task-analyst"
       },
-      "previous_baseline_manifest_sha256": "2f16635c0f588d1f285393b4ad8c163119b4dba4b9918335c821f295e88a4f64",
+      "previous_baseline_manifest_sha256": "a6d82abf1c7d3965b452e29783bd7a1adc093bcf9f460aa36f4060bf78eba70a",
       "role_key": "analyst",
       "skill_names": [
         "domain-modeling",
@@ -731,7 +732,8 @@
             {
               "checks": [
                 "The returned Workflow step is admitted in the assigned namespace.",
-                "The one Tracker task, current stage/status and input references match."
+                "The one Tracker task, current stage/status and input references match.",
+                "The agent explicitly started this assignment and verified InProgress before business work."
               ],
               "code": "AR-DECOMP-01",
               "description": "single-task-v1: architect/decomposition; Workflow step and task context.",
@@ -756,7 +758,7 @@
                   ]
                 },
                 {
-                  "description": "This preset works on ONE Tracker task throughout. Never create children, decomposition cards, parent/dependency links for a delivery DAG, aggregate work or integration barriers. Do not activate integration or integration_rework modes. The Architect mode key decomposition means architecture and an implementation plan inside this task only. Stages are Draft, Backlog, Analysis, Architecture, Development, Review, Testing, Rework, Deployment. Status is separately Ready, InProgress or Completed; waiting_reason and runtime/agent state are separate observations, never substitute statuses. Only a real Tracker receipt establishes a business transition; explicitly Start the current stage as InProgress before business work, but never choose the stage or borrow a scheduler lease. Use the ordinary terminal with project-workflow, task-tracker and cicd-cli as actually installed and authorized. Do not modify original Hermes, install skills or infer capabilities from their names. Existing skill names are references, not authorization to execute legacy multi-task instructions.",
+                  "description": "This preset works on ONE Tracker task throughout. Never create children, decomposition cards, parent/dependency links for a delivery DAG, aggregate work or integration barriers. Do not activate integration or integration_rework modes. The Architect mode key decomposition means architecture and an implementation plan inside this task only. Stages are Draft, Backlog, Analysis, Architecture, Development, Review, Testing, Rework, Deployment. Status is separately Ready, InProgress or Completed; waiting_reason and runtime/agent state are separate observations, never substitute statuses. Only a real Tracker receipt establishes a business transition; explicitly Start the current stage as InProgress before business work, but never choose the stage or borrow a scheduler lease. The final phase explicitly completes the current assignment after Workflow acceptance; the application then selects the next stage. Reviewer advances to Tester and Tester to DevOps even when findings exist. Automatic Rework is disabled; DevOps ends the chain. Use the ordinary terminal with project-workflow, task-tracker and cicd-cli as actually installed and authorized. Do not modify original Hermes, install skills or infer capabilities from their names. Existing skill names are references, not authorization to execute legacy multi-task instructions.",
                   "skills": [
                     "project-workflow-executor",
                     "tracker-operator",
@@ -862,7 +864,7 @@
                   ]
                 },
                 {
-                  "description": "PRECOMMIT ASSESSMENT ONLY: finish the current phase work and report actual inputs, outputs, checks, evidence and unresolved blockers. The report cannot contain its own future terminal receipt, future final comment or future Tracker transition. These are subsequent actions after acceptance. Missing, stale, mismatched or fabricated current work/evidence must not pass. Prepare result.role=architect with design referencing the exact verified decomposition revision and server content_sha256, not a future Developer candidate or an attachment substitute. Report the actual architecture, ordered implementation plan, coverage and verification of its saved content. Technical result metadata remains separate from the substantive report. Tracker proposal and handoff are subsequent actions after acceptance. ",
+                  "description": "PRECOMMIT ASSESSMENT ONLY: finish the current phase work and report actual inputs, outputs, checks, evidence and unresolved blockers. The report cannot contain its own future terminal receipt, future final comment or future Tracker transition. These are subsequent actions after acceptance. Missing, stale, mismatched or fabricated current work/evidence must not pass. Complete this final phase through its subsequent status action: AFTER accepted complete=true, follow the returned completion_instructions to save and read back the final Task summary, explicitly set the current assignment to Completed and verify its original operation receipt. The agent changes status; Tracker owns the next stage and its Ready reset after real native terminal. Do not finish at a complete=false phase: continue the next phase in this same run. Prepare result.role=architect with design referencing the exact verified decomposition revision and server content_sha256, not a future Developer candidate or an attachment substitute. Report the actual architecture, ordered implementation plan, coverage and verification of its saved content. Technical result metadata remains separate from the substantive report. Tracker proposal and handoff are subsequent actions after acceptance. ",
                   "skills": [
                     "project-workflow-executor",
                     "tracker-operator",
@@ -882,7 +884,7 @@
         "launch_profile": "single-task-v1-architect",
         "name": "single-task-architect"
       },
-      "previous_baseline_manifest_sha256": "2f16635c0f588d1f285393b4ad8c163119b4dba4b9918335c821f295e88a4f64",
+      "previous_baseline_manifest_sha256": "a6d82abf1c7d3965b452e29783bd7a1adc093bcf9f460aa36f4060bf78eba70a",
       "role_key": "architect",
       "skill_names": [
         "domain-modeling",
@@ -910,7 +912,8 @@
             {
               "checks": [
                 "The returned Workflow step is admitted in the assigned namespace.",
-                "The one Tracker task, current stage/status and input references match."
+                "The one Tracker task, current stage/status and input references match.",
+                "The agent explicitly started this assignment and verified InProgress before business work."
               ],
               "code": "DV-INITIAL-01",
               "description": "single-task-v1: developer/initial; Workflow step and task context.",
@@ -933,7 +936,7 @@
                   ]
                 },
                 {
-                  "description": "This preset works on ONE Tracker task throughout. Never create children, decomposition cards, parent/dependency links for a delivery DAG, aggregate work or integration barriers. Do not activate integration or integration_rework modes. The Architect mode key decomposition means architecture and an implementation plan inside this task only. Stages are Draft, Backlog, Analysis, Architecture, Development, Review, Testing, Rework, Deployment. Status is separately Ready, InProgress or Completed; waiting_reason and runtime/agent state are separate observations, never substitute statuses. Only a real Tracker receipt establishes a business transition; explicitly Start the current stage as InProgress before business work, but never choose the stage or borrow a scheduler lease. Use the ordinary terminal with project-workflow, task-tracker and cicd-cli as actually installed and authorized. Do not modify original Hermes, install skills or infer capabilities from their names. Existing skill names are references, not authorization to execute legacy multi-task instructions.",
+                  "description": "This preset works on ONE Tracker task throughout. Never create children, decomposition cards, parent/dependency links for a delivery DAG, aggregate work or integration barriers. Do not activate integration or integration_rework modes. The Architect mode key decomposition means architecture and an implementation plan inside this task only. Stages are Draft, Backlog, Analysis, Architecture, Development, Review, Testing, Rework, Deployment. Status is separately Ready, InProgress or Completed; waiting_reason and runtime/agent state are separate observations, never substitute statuses. Only a real Tracker receipt establishes a business transition; explicitly Start the current stage as InProgress before business work, but never choose the stage or borrow a scheduler lease. The final phase explicitly completes the current assignment after Workflow acceptance; the application then selects the next stage. Reviewer advances to Tester and Tester to DevOps even when findings exist. Automatic Rework is disabled; DevOps ends the chain. Use the ordinary terminal with project-workflow, task-tracker and cicd-cli as actually installed and authorized. Do not modify original Hermes, install skills or infer capabilities from their names. Existing skill names are references, not authorization to execute legacy multi-task instructions.",
                   "skills": [
                     "project-workflow-executor",
                     "tracker-operator"
@@ -984,7 +987,7 @@
                   ]
                 },
                 {
-                  "description": "Decide routine technical details within approved requirements; Review/Test defects use normal rework. Only requirements_contradiction or missing_business_decision that prevents safe progress requires PM business review. Read the current task-tracker sdlc context and lifecycle. Publish and read back sealed evidence for this actual assignment/execution/role using the authorized attachment commands. Submit the strict SubmitCriticalBlocker body with fence, current requirement_revision/content_hash, kind, question, rationale, options, recommendation, evidence and idempotency_key using task-tracker sdlc critical-blocker submit --task <task-uuid> --from-file -. Pass JSON on stdin. Its stable key is fleet-critical-blocker:<current-Tracker-assignment-uuid>, taken from the verified context assignment_id, never from a native run or another role result. Keep question <=4096 bytes, rationale <=8192 bytes, at most 8 options and 1..16 sealed evidence entries. A recommendation references an actual option_id. Missing current fence/evidence/access is a blocker; do not borrow an identity or fabricate proof. Read the original operation using task-tracker sdlc critical-blocker operation --task <task-uuid> --key <exact-original-key>. Verify task/root/project/owner, assignment/execution/agent, role, requirements revision/hash and blocker ID/hash. Unknown acceptance requires original-key readback; retain the same exact body/key, without a blind resend or a new key. A held receipt is not a completed stage, PM return or Workflow completion. Leave the phase unfinished, report the held receipt or unresolved uncertainty and finish the native run. Fleet and Tracker own actual termination, release and guarded return; the agent never calls scheduler commands or invents terminal proof. Missing producer capability is an operator dependency, not permission for a generic status change. ",
+                  "description": "Decide routine technical details within approved requirements; record Review/Test defects without blocking the next role or requesting a Rework transition. Only requirements_contradiction or missing_business_decision that prevents safe progress requires PM business review. Read the current task-tracker sdlc context and lifecycle. Publish and read back sealed evidence for this actual assignment/execution/role using the authorized attachment commands. Submit the strict SubmitCriticalBlocker body with fence, current requirement_revision/content_hash, kind, question, rationale, options, recommendation, evidence and idempotency_key using task-tracker sdlc critical-blocker submit --task <task-uuid> --from-file -. Pass JSON on stdin. Its stable key is fleet-critical-blocker:<current-Tracker-assignment-uuid>, taken from the verified context assignment_id, never from a native run or another role result. Keep question <=4096 bytes, rationale <=8192 bytes, at most 8 options and 1..16 sealed evidence entries. A recommendation references an actual option_id. Missing current fence/evidence/access is a blocker; do not borrow an identity or fabricate proof. Read the original operation using task-tracker sdlc critical-blocker operation --task <task-uuid> --key <exact-original-key>. Verify task/root/project/owner, assignment/execution/agent, role, requirements revision/hash and blocker ID/hash. Unknown acceptance requires original-key readback; retain the same exact body/key, without a blind resend or a new key. A held receipt is not a completed stage, PM return or Workflow completion. Leave the phase unfinished, report the held receipt or unresolved uncertainty and finish the native run. Fleet and Tracker own actual termination, release and guarded return; the agent never calls scheduler commands or invents terminal proof. Missing producer capability is an operator dependency, not permission for a generic status change. ",
                   "skills": [
                     "project-workflow-executor",
                     "tracker-operator"
@@ -1030,7 +1033,7 @@
                   ]
                 },
                 {
-                  "description": "PRECOMMIT ASSESSMENT ONLY: finish the current phase work and report actual inputs, outputs, checks, evidence and unresolved blockers. The report cannot contain its own future terminal receipt, future final comment or future Tracker transition. These are subsequent actions after acceptance. Missing, stale, mismatched or fabricated current work/evidence must not pass. Prepare result.role=developer with exact commit_sha, changes ArtifactReceipt and checks ArtifactReceipts from verified saved role artifacts and the exact assigned candidate. Reviewer/Tester may complete verification with a business rework verdict and real findings; do not pass a defective candidate to obtain acceptance of a correct verification report. ",
+                  "description": "PRECOMMIT ASSESSMENT ONLY: finish the current phase work and report actual inputs, outputs, checks, evidence and unresolved blockers. The report cannot contain its own future terminal receipt, future final comment or future Tracker transition. These are subsequent actions after acceptance. Missing, stale, mismatched or fabricated current work/evidence must not pass. Complete this final phase through its subsequent status action: AFTER accepted complete=true, follow the returned completion_instructions to save and read back the final Task summary, explicitly set the current assignment to Completed and verify its original operation receipt. The agent changes status; Tracker owns the next stage and its Ready reset after real native terminal. Do not finish at a complete=false phase: continue the next phase in this same run. Prepare result.role=developer with exact commit_sha, changes ArtifactReceipt and checks ArtifactReceipts from verified saved role artifacts and the exact assigned candidate. Reviewer/Tester may complete verification with a business rework verdict and real findings; do not pass a defective candidate to obtain acceptance of a correct verification report. ",
                   "skills": [
                     "project-workflow-executor",
                     "tracker-operator"
@@ -1053,7 +1056,8 @@
             {
               "checks": [
                 "The returned Workflow step is admitted in the assigned namespace.",
-                "The one Tracker task, current stage/status and input references match."
+                "The one Tracker task, current stage/status and input references match.",
+                "The agent explicitly started this assignment and verified InProgress before business work."
               ],
               "code": "DV-REWORK-01",
               "description": "single-task-v1: developer/rework; Workflow step and task context.",
@@ -1076,7 +1080,7 @@
                   ]
                 },
                 {
-                  "description": "This preset works on ONE Tracker task throughout. Never create children, decomposition cards, parent/dependency links for a delivery DAG, aggregate work or integration barriers. Do not activate integration or integration_rework modes. The Architect mode key decomposition means architecture and an implementation plan inside this task only. Stages are Draft, Backlog, Analysis, Architecture, Development, Review, Testing, Rework, Deployment. Status is separately Ready, InProgress or Completed; waiting_reason and runtime/agent state are separate observations, never substitute statuses. Only a real Tracker receipt establishes a business transition; explicitly Start the current stage as InProgress before business work, but never choose the stage or borrow a scheduler lease. Use the ordinary terminal with project-workflow, task-tracker and cicd-cli as actually installed and authorized. Do not modify original Hermes, install skills or infer capabilities from their names. Existing skill names are references, not authorization to execute legacy multi-task instructions.",
+                  "description": "This preset works on ONE Tracker task throughout. Never create children, decomposition cards, parent/dependency links for a delivery DAG, aggregate work or integration barriers. Do not activate integration or integration_rework modes. The Architect mode key decomposition means architecture and an implementation plan inside this task only. Stages are Draft, Backlog, Analysis, Architecture, Development, Review, Testing, Rework, Deployment. Status is separately Ready, InProgress or Completed; waiting_reason and runtime/agent state are separate observations, never substitute statuses. Only a real Tracker receipt establishes a business transition; explicitly Start the current stage as InProgress before business work, but never choose the stage or borrow a scheduler lease. The final phase explicitly completes the current assignment after Workflow acceptance; the application then selects the next stage. Reviewer advances to Tester and Tester to DevOps even when findings exist. Automatic Rework is disabled; DevOps ends the chain. Use the ordinary terminal with project-workflow, task-tracker and cicd-cli as actually installed and authorized. Do not modify original Hermes, install skills or infer capabilities from their names. Existing skill names are references, not authorization to execute legacy multi-task instructions.",
                   "skills": [
                     "project-workflow-executor",
                     "tracker-operator"
@@ -1127,7 +1131,7 @@
                   ]
                 },
                 {
-                  "description": "Decide routine technical details within approved requirements; Review/Test defects use normal rework. Only requirements_contradiction or missing_business_decision that prevents safe progress requires PM business review. Read the current task-tracker sdlc context and lifecycle. Publish and read back sealed evidence for this actual assignment/execution/role using the authorized attachment commands. Submit the strict SubmitCriticalBlocker body with fence, current requirement_revision/content_hash, kind, question, rationale, options, recommendation, evidence and idempotency_key using task-tracker sdlc critical-blocker submit --task <task-uuid> --from-file -. Pass JSON on stdin. Its stable key is fleet-critical-blocker:<current-Tracker-assignment-uuid>, taken from the verified context assignment_id, never from a native run or another role result. Keep question <=4096 bytes, rationale <=8192 bytes, at most 8 options and 1..16 sealed evidence entries. A recommendation references an actual option_id. Missing current fence/evidence/access is a blocker; do not borrow an identity or fabricate proof. Read the original operation using task-tracker sdlc critical-blocker operation --task <task-uuid> --key <exact-original-key>. Verify task/root/project/owner, assignment/execution/agent, role, requirements revision/hash and blocker ID/hash. Unknown acceptance requires original-key readback; retain the same exact body/key, without a blind resend or a new key. A held receipt is not a completed stage, PM return or Workflow completion. Leave the phase unfinished, report the held receipt or unresolved uncertainty and finish the native run. Fleet and Tracker own actual termination, release and guarded return; the agent never calls scheduler commands or invents terminal proof. Missing producer capability is an operator dependency, not permission for a generic status change. ",
+                  "description": "Decide routine technical details within approved requirements; record Review/Test defects without blocking the next role or requesting a Rework transition. Only requirements_contradiction or missing_business_decision that prevents safe progress requires PM business review. Read the current task-tracker sdlc context and lifecycle. Publish and read back sealed evidence for this actual assignment/execution/role using the authorized attachment commands. Submit the strict SubmitCriticalBlocker body with fence, current requirement_revision/content_hash, kind, question, rationale, options, recommendation, evidence and idempotency_key using task-tracker sdlc critical-blocker submit --task <task-uuid> --from-file -. Pass JSON on stdin. Its stable key is fleet-critical-blocker:<current-Tracker-assignment-uuid>, taken from the verified context assignment_id, never from a native run or another role result. Keep question <=4096 bytes, rationale <=8192 bytes, at most 8 options and 1..16 sealed evidence entries. A recommendation references an actual option_id. Missing current fence/evidence/access is a blocker; do not borrow an identity or fabricate proof. Read the original operation using task-tracker sdlc critical-blocker operation --task <task-uuid> --key <exact-original-key>. Verify task/root/project/owner, assignment/execution/agent, role, requirements revision/hash and blocker ID/hash. Unknown acceptance requires original-key readback; retain the same exact body/key, without a blind resend or a new key. A held receipt is not a completed stage, PM return or Workflow completion. Leave the phase unfinished, report the held receipt or unresolved uncertainty and finish the native run. Fleet and Tracker own actual termination, release and guarded return; the agent never calls scheduler commands or invents terminal proof. Missing producer capability is an operator dependency, not permission for a generic status change. ",
                   "skills": [
                     "project-workflow-executor",
                     "tracker-operator"
@@ -1173,7 +1177,7 @@
                   ]
                 },
                 {
-                  "description": "PRECOMMIT ASSESSMENT ONLY: finish the current phase work and report actual inputs, outputs, checks, evidence and unresolved blockers. The report cannot contain its own future terminal receipt, future final comment or future Tracker transition. These are subsequent actions after acceptance. Missing, stale, mismatched or fabricated current work/evidence must not pass. Prepare result.role=developer with exact commit_sha, changes ArtifactReceipt and checks ArtifactReceipts from verified saved role artifacts and the exact assigned candidate. Reviewer/Tester may complete verification with a business rework verdict and real findings; do not pass a defective candidate to obtain acceptance of a correct verification report. ",
+                  "description": "PRECOMMIT ASSESSMENT ONLY: finish the current phase work and report actual inputs, outputs, checks, evidence and unresolved blockers. The report cannot contain its own future terminal receipt, future final comment or future Tracker transition. These are subsequent actions after acceptance. Missing, stale, mismatched or fabricated current work/evidence must not pass. Complete this final phase through its subsequent status action: AFTER accepted complete=true, follow the returned completion_instructions to save and read back the final Task summary, explicitly set the current assignment to Completed and verify its original operation receipt. The agent changes status; Tracker owns the next stage and its Ready reset after real native terminal. Do not finish at a complete=false phase: continue the next phase in this same run. Prepare result.role=developer with exact commit_sha, changes ArtifactReceipt and checks ArtifactReceipts from verified saved role artifacts and the exact assigned candidate. Reviewer/Tester may complete verification with a business rework verdict and real findings; do not pass a defective candidate to obtain acceptance of a correct verification report. ",
                   "skills": [
                     "project-workflow-executor",
                     "tracker-operator"
@@ -1192,7 +1196,7 @@
         "launch_profile": "single-task-v1-developer",
         "name": "single-task-developer"
       },
-      "previous_baseline_manifest_sha256": "2f16635c0f588d1f285393b4ad8c163119b4dba4b9918335c821f295e88a4f64",
+      "previous_baseline_manifest_sha256": "a6d82abf1c7d3965b452e29783bd7a1adc093bcf9f460aa36f4060bf78eba70a",
       "role_key": "developer",
       "skill_names": [
         "forge-operator",
@@ -1220,7 +1224,8 @@
             {
               "checks": [
                 "The returned Workflow step is admitted in the assigned namespace.",
-                "The one Tracker task, current stage/status and input references match."
+                "The one Tracker task, current stage/status and input references match.",
+                "The agent explicitly started this assignment and verified InProgress before business work."
               ],
               "code": "RV-REVIEW-01",
               "description": "single-task-v1: reviewer/delivery; Workflow step and task context.",
@@ -1232,28 +1237,36 @@
                   "description": "If only the Tracker task UUID is known, read task-tracker sdlc context --task <task-uuid> and take its server-issued workflow_task_key (SDLC-N); never guess the key or create another task. Read this task's current Workflow instructions using project-workflow --json step --task <workflow-task-key>. These initial context/instruction reads are allowed in Ready. Before business work, explicitly start the current Ready stage using the installed tracker-operator skill's Stage Start contract and verify the same assignment is InProgress. That skill owns the command, typed fences and original-key readback; never fabricate a delivery lease for PM. If that assignment is already InProgress, continue it without another Start. Reports require InProgress. Start fences are command metadata, not substantive business-report content. Use the permanently configured namespace and agent credential. Missing configuration or denied access is a blocker; never use a human token or local database fallback. No native binding or temporary files are required. Before reporting this phase, inspect the actual scalar fields from the successful no-report command's parsed stdout JSON: interaction_protocol, task, namespace_id, concrete_agent_ref, assignment_ref, execution_ref, business_task_ref, phase_code, version and status. The CLI prints these fields at top level, not inside an HTTP response envelope. Record the terminal command's exit status separately when available; it is not a Workflow JSON field. Compare these with the server-issued Workflow key and assigned task/namespace/agent, using the Tracker task/root UUID, stage/status and actual input references from the authorized Tracker reads. Validate identity fields by their own authority: Tracker context.assignment.assignment_id equals Workflow assignment_ref; Tracker context.assignment.agent_id equals Workflow concrete_agent_ref; Tracker context.task_id and root_task_id equal Workflow business_task_ref; Tracker workflow_task_key equals Workflow task. Tracker context.assignment.execution_id is the retained tracker_execution_id, NOT Workflow execution_ref. Workflow execution_ref is independently generated at enrollment; these two execution IDs are intentionally separate and are not required to be equal. Validate both under their authority names; compare execution_ref only with the same Workflow enrollment/history, never with Tracker execution_id. A difference between these two IDs alone is not a blocker and does not authorize rebind, replacement IDs or another execution. Assignment version and Workflow cursor version are also separate counters; validate each against its own authority. Actual task/assignment/agent mismatches remain blockers. State an absent requirements revision as absent, not as invented evidence. Validate the already returned instruction read, not a future PASS verdict from the report being submitted. Never invent response values or substitute instruction text for the actual response; failed or mismatched reads remain blockers. Do not copy the technical stdout envelope, identity fields, counters or receipts into the substantive report. Use the installed project-workflow-executor skill for reporting business inputs and verified phase work; command fences remain separate metadata. Omit credentials from the report.",
                   "skills": [
                     "project-workflow-executor",
-                    "tracker-operator"
+                    "tracker-operator",
+                    "forge-operator",
+                    "exact-code-review"
                   ]
                 },
                 {
-                  "description": "Read the ticket and ALL participants comments with task-tracker sdlc discussion read --task <task-uuid>; follow next_after with the same snapshot until next_after is null. Start a fresh complete scan before the final comment. Read requirements, current assignment, previous typed results and authorized attachments. Missing required access is a blocker. Reviewer reads the accepted Developer result from this assignment's supplied previous_result_id AFTER Developer Complete. Read task-tracker sdlc result read --task <task-uuid> --result <accepted-developer-result-uuid>; require source=delivery, matching task/cycle, role=developer and previous_stage=Development|Rework, next_stage=Review and exact candidate commit_sha, then read the sealed changes/checks and their workspace provenance. The Reviewer's own sealed acknowledgment report records actual review work and findings; Tracker owns the predecessor links. Do not amend Developer artifacts to insert a future ID or wait for your own future accepted Reviewer result. Use sealed assignment artifacts for technical evidence under the current configured assignment and project rights. Ordinary comments carry discussion and the final handoff; they do not replace sealed artifacts. Do not borrow owner/scheduler credentials, use a human token or broaden permissions. Read permitted own artifacts and accepted predecessor references using task-tracker attachment list --issue <task-uuid> and task-tracker attachment download <attachment-uuid> --out <private-artifact-path>. Match issue_id to task=root and the exact supplied reference/hash; match expected assignment_id, execution_id and role from artifact.binding to the actual producer/predecessor, not a guessed current assignment for old evidence. Verify SHA256 of the raw downloaded bytes; CLI download success alone is not an ArtifactReceipt. After role work and BEFORE the FINAL Workflow phase report, publish the actual structured JSON role reports/checks/deployment evidence through task-tracker attachment upload --issue <task-uuid> --file <role-artifact.json> --content-type application/json. Use only the current supplied assignment/execution/agent/fence and run context. Tracker enforces exact routing, Running/InProgress and the current assignment owner/fence. Assignment id/version/holder/fence remain stable until a confirmed owner transition or explicit cancellation, including across Fleet restart; time does not expire the assignment. The wire field lease is historical ownership metadata, not an expiry deadline. Do not send heartbeat/renew commands or choose the stage yourself. Preserve the exact uploaded bytes, filename and MIME for replay. Use the actual server-returned artifact.receipt {reference,sha256}, with reference=tracker-attachment:<UUID> and SHA256 of raw bytes, and artifact.binding {assignment_id,execution_id,role}. Read the saved metadata back with attachment list, download by the actual attachment UUID and verify raw SHA256 and size against that receipt. New role outputs must match this current task/assignment/execution/role, including Developer rework. Never fabricate an attachment UUID, reference, SHA or a receipt from a local path, comment, Forge URL/job ID or Workflow terminal hash. Workflow terminal receipt and role artifact contents are separate evidence. Unknown upload acceptance requires authorized metadata/byte readback: locate the actual saved entry by exact current binding, filename, MIME, size and raw SHA; if found, download its returned UUID and retain the verified receipt without another upload. If no matching saved entry exists, only an exact-file replay with the original filename/MIME under the still-current assignment and project rights is permitted; never overwrite sealed bytes, delete evidence, change identity/fence or declare success from uncertainty. 404/403, missing artifact capability, stale binding, checksum mismatch or unavailable readback is a concrete blocker: leave the phase unfinished, report it and do not fake Workflow/business completion. Prepare result.role=reviewer with verdict approved|rework and report ArtifactReceipt from verified artifact receipts. Include actual role evidence in the final phase report. The final report does not require its own future terminal receipt, future ordinary comment or future Tracker transition. ",
+                  "description": "Read the ticket and ALL participants comments with task-tracker sdlc discussion read --task <task-uuid>; follow next_after with the same snapshot until next_after is null. Start a fresh complete scan before the final comment. Read requirements, current assignment, previous typed results and authorized attachments. Missing required access is a blocker. Reviewer reads the accepted Developer result from this assignment's supplied previous_result_id AFTER Developer Complete. Read task-tracker sdlc result read --task <task-uuid> --result <accepted-developer-result-uuid>; require source=delivery, matching task/cycle, role=developer and previous_stage=Development|Rework, next_stage=Review and exact candidate commit_sha, then read the sealed changes/checks and their workspace provenance. The Reviewer's own sealed review report records actual review work and findings; Tracker owns the predecessor links. Record the verified candidate SHA, approved source coordinates and actual pipeline/workspace receipt references as review evidence without copying predecessor result IDs. Do not amend Developer artifacts to insert a future ID or wait for your own future accepted Reviewer result. Use sealed assignment artifacts for technical evidence under the current configured assignment and project rights. Ordinary comments carry discussion and the final handoff; they do not replace sealed artifacts. Do not borrow owner/scheduler credentials, use a human token or broaden permissions. Read permitted own artifacts and accepted predecessor references using task-tracker attachment list --issue <task-uuid> and task-tracker attachment download <attachment-uuid> --out <private-artifact-path>. Match issue_id to task=root and the exact supplied reference/hash; match expected assignment_id, execution_id and role from artifact.binding to the actual producer/predecessor, not a guessed current assignment for old evidence. Verify SHA256 of the raw downloaded bytes; CLI download success alone is not an ArtifactReceipt. After role work and BEFORE the FINAL Workflow phase report, publish the actual structured JSON role reports/checks/deployment evidence through task-tracker attachment upload --issue <task-uuid> --file <role-artifact.json> --content-type application/json. Use only the current supplied assignment/execution/agent/fence and run context. Tracker enforces exact routing, Running/InProgress and the current assignment owner/fence. Assignment id/version/holder/fence remain stable until a confirmed owner transition or explicit cancellation, including across Fleet restart; time does not expire the assignment. The wire field lease is historical ownership metadata, not an expiry deadline. Do not send heartbeat/renew commands or choose the stage yourself. Preserve the exact uploaded bytes, filename and MIME for replay. Use the actual server-returned artifact.receipt {reference,sha256}, with reference=tracker-attachment:<UUID> and SHA256 of raw bytes, and artifact.binding {assignment_id,execution_id,role}. Read the saved metadata back with attachment list, download by the actual attachment UUID and verify raw SHA256 and size against that receipt. New role outputs must match this current task/assignment/execution/role, including Developer rework. Never fabricate an attachment UUID, reference, SHA or a receipt from a local path, comment, Forge URL/job ID or Workflow terminal hash. Workflow terminal receipt and role artifact contents are separate evidence. Unknown upload acceptance requires authorized metadata/byte readback: locate the actual saved entry by exact current binding, filename, MIME, size and raw SHA; if found, download its returned UUID and retain the verified receipt without another upload. If no matching saved entry exists, only an exact-file replay with the original filename/MIME under the still-current assignment and project rights is permitted; never overwrite sealed bytes, delete evidence, change identity/fence or declare success from uncertainty. 404/403, missing artifact capability, stale binding, checksum mismatch or unavailable readback is a concrete blocker: leave the phase unfinished, report it and do not fake Workflow/business completion. Prepare result.role=reviewer with verdict approved|rework and report ArtifactReceipt from verified artifact receipts. Include actual role evidence in the final phase report. The final report does not require its own future terminal receipt, future ordinary comment or future Tracker transition. ",
                   "skills": [
                     "project-workflow-executor",
-                    "tracker-operator"
+                    "tracker-operator",
+                    "forge-operator",
+                    "exact-code-review"
                   ]
                 },
                 {
-                  "description": "This preset works on ONE Tracker task throughout. Never create children, decomposition cards, parent/dependency links for a delivery DAG, aggregate work or integration barriers. Do not activate integration or integration_rework modes. The Architect mode key decomposition means architecture and an implementation plan inside this task only. Stages are Draft, Backlog, Analysis, Architecture, Development, Review, Testing, Rework, Deployment. Status is separately Ready, InProgress or Completed; waiting_reason and runtime/agent state are separate observations, never substitute statuses. Only a real Tracker receipt establishes a business transition; explicitly Start the current stage as InProgress before business work, but never choose the stage or borrow a scheduler lease. Use the ordinary terminal with project-workflow, task-tracker and cicd-cli as actually installed and authorized. Do not modify original Hermes, install skills or infer capabilities from their names. Existing skill names are references, not authorization to execute legacy multi-task instructions.",
+                  "description": "This preset works on ONE Tracker task throughout. Never create children, decomposition cards, parent/dependency links for a delivery DAG, aggregate work or integration barriers. Do not activate integration or integration_rework modes. The Architect mode key decomposition means architecture and an implementation plan inside this task only. Stages are Draft, Backlog, Analysis, Architecture, Development, Review, Testing, Rework, Deployment. Status is separately Ready, InProgress or Completed; waiting_reason and runtime/agent state are separate observations, never substitute statuses. Only a real Tracker receipt establishes a business transition; explicitly Start the current stage as InProgress before business work, but never choose the stage or borrow a scheduler lease. The final phase explicitly completes the current assignment after Workflow acceptance; the application then selects the next stage. Reviewer advances to Tester and Tester to DevOps even when findings exist. Automatic Rework is disabled; DevOps ends the chain. Use the ordinary terminal with project-workflow, task-tracker and cicd-cli as actually installed and authorized. Do not modify original Hermes, install skills or infer capabilities from their names. Existing skill names are references, not authorization to execute legacy multi-task instructions.",
                   "skills": [
                     "project-workflow-executor",
-                    "tracker-operator"
+                    "tracker-operator",
+                    "forge-operator",
+                    "exact-code-review"
                   ]
                 },
                 {
                   "description": "Submit only actual completed phase work with project-workflow --json step --task <workflow-task-key> --operation-key <stable-key> --expected-version <last-returned-version> --report -. Supply report text on stdin. Before submission, check EVERY required_check against actual evidence and include the required_evidence: reference saved alternatives/tradeoffs when they exist, actual blockers and the no-additional-tasks check; do not invent alternatives, checks or evidence. Inspect the returned verdict, missing, blockers, phase and version. A known PARTIAL is not phase acceptance: do the missing work or correct its report in the SAME execution, using the returned version and a NEW operation key ONLY for a new corrected report body. Do not request owner consent or claim preparation complete while preparation remains PARTIAL. After an unknown response retain exactly that key, version and report; read back history for the operation. Provider/transport failure or unknown acceptance is NOT a known PARTIAL and does not permit automatic resubmission. Do not select a replacement key merely because acceptance is unknown. Follow the returned current phase.",
                   "skills": [
                     "project-workflow-executor",
-                    "tracker-operator"
+                    "tracker-operator",
+                    "forge-operator",
+                    "exact-code-review"
                   ]
                 }
               ],
@@ -1262,42 +1275,50 @@
             },
             {
               "checks": [
-                "The Tracker task contains the acknowledged comment and its receipt identifies this assignment.",
-                "The report records the comment ID, approved handoff and exact candidate identity.",
+                "Every linked PR has been reviewed at recorded base/head SHA against the task requirements; confirmed findings are saved as PR comments and changed inputs have been reinspected.",
+                "The report preserves the actual approved|rework verdict, ready CI evidence and limitations. Defects do not prevent completion or the subsequent Testing handoff.",
                 "Unresolved blockers remain explicit; no additional Tracker tasks were created."
               ],
               "code": "RV-REVIEW-02",
               "description": "single-task-v1: reviewer/delivery; Role work on one task.",
               "evidence": [
-                "Tracker comment ID, accepted Developer candidate identity and acknowledgment report receipt."
+                "All linked PRs/base/head SHA, requirements coverage, read CI results, persisted PR comment references, actual approved|rework verdict and verified review report receipt."
               ],
               "instructions": [
                 {
-                  "description": "Acknowledge the assigned handoff. Read the accepted Developer result and confirm its candidate identity.",
+                  "description": "Read the task requirements, analysis, architecture/plan, full discussion, attachments and accepted Developer result. Use the installed forge-operator and exact-code-review skills. Discover ALL linked PRs with cicd-cli pr for-task using the Tracker instance/task from parsed context. Follow every page across repositories and PR statuses; a Developer list is not the authority.",
                   "skills": [
                     "project-workflow-executor",
-                    "tracker-operator"
+                    "tracker-operator",
+                    "forge-operator",
+                    "exact-code-review"
                   ]
                 },
                 {
-                  "description": "Publish the Tracker task comment «Проверено» with task-tracker sdlc discussion publish --task <task-uuid> --from-file -. Use the current assignment fence and the stable key reviewer-ack:<assignment_id>. Read back that operation and save its comment_id.",
+                  "description": "For each PR read review-context for exact base/head SHA, the full diff with pr patch, affected sources, contracts, dataflow, permissions, persistence, migrations and failure paths. Read existing CI for those SHA and state missing evidence honestly. Never substitute a truncated preview for the full diff. Do not run tests, builds, pipelines or workspaces, fix code, push or merge.",
                   "skills": [
                     "project-workflow-executor",
-                    "tracker-operator"
+                    "tracker-operator",
+                    "forge-operator",
+                    "exact-code-review"
                   ]
                 },
                 {
-                  "description": "Record the acknowledgment, its comment ID and candidate provenance in the report. Use approved for the handoff to Testing / Ready. Tester owns functional verification.",
+                  "description": "Publish confirmed findings through pr comment with severity, expected/actual, acceptance criterion and evidence; use general comments or path/old|new/line anchors, including deleted lines. Preserve the exact reviewed SHA and stable operation_id. After unknown acceptance read pr comments by the original operation key before another write. Before the final report reread the entire PR set and SHA, review changed parts and retain persisted comment references. Report the actual approved|rework verdict: findings do not block completed review work or Testing / Ready handoff.",
                   "skills": [
                     "project-workflow-executor",
-                    "tracker-operator"
+                    "tracker-operator",
+                    "forge-operator",
+                    "exact-code-review"
                   ]
                 },
                 {
                   "description": "Submit only actual completed phase work with project-workflow --json step --task <workflow-task-key> --operation-key <stable-key> --expected-version <last-returned-version> --report -. Supply report text on stdin. Before submission, check EVERY required_check against actual evidence and include the required_evidence: reference saved alternatives/tradeoffs when they exist, actual blockers and the no-additional-tasks check; do not invent alternatives, checks or evidence. Inspect the returned verdict, missing, blockers, phase and version. A known PARTIAL is not phase acceptance: do the missing work or correct its report in the SAME execution, using the returned version and a NEW operation key ONLY for a new corrected report body. Do not request owner consent or claim preparation complete while preparation remains PARTIAL. After an unknown response retain exactly that key, version and report; read back history for the operation. Provider/transport failure or unknown acceptance is NOT a known PARTIAL and does not permit automatic resubmission. Do not select a replacement key merely because acceptance is unknown. Follow the returned current phase.",
                   "skills": [
                     "project-workflow-executor",
-                    "tracker-operator"
+                    "tracker-operator",
+                    "forge-operator",
+                    "exact-code-review"
                   ]
                 }
               ],
@@ -1306,15 +1327,15 @@
             },
             {
               "checks": [
-                "The Tracker task contains the acknowledged comment and its receipt identifies this assignment.",
-                "The report records the comment ID, approved handoff and exact candidate identity.",
+                "Every linked PR has been reviewed at recorded base/head SHA against the task requirements; confirmed findings are saved as PR comments and changed inputs have been reinspected.",
+                "The report preserves the actual approved|rework verdict, ready CI evidence and limitations. Defects do not prevent completion or the subsequent Testing handoff.",
                 "The role result is ready for Workflow evaluation with actual evidence.",
                 "The proposed outcome and next stage/status comply with this single-task role."
               ],
               "code": "RV-REVIEW-03",
               "description": "single-task-v1: reviewer/delivery; Workflow report and Tracker handoff.",
               "evidence": [
-                "Tracker comment ID, accepted Developer candidate identity and acknowledgment report receipt.",
+                "All linked PRs/base/head SHA, requirements coverage, read CI results, persisted PR comment references, actual approved|rework verdict and verified review report receipt.",
                 "Final role report and explicit handoff dependencies."
               ],
               "instructions": [
@@ -1322,21 +1343,27 @@
                   "description": "Submit only actual completed phase work with project-workflow --json step --task <workflow-task-key> --operation-key <stable-key> --expected-version <last-returned-version> --report -. Supply report text on stdin. Before submission, check EVERY required_check against actual evidence and include the required_evidence: reference saved alternatives/tradeoffs when they exist, actual blockers and the no-additional-tasks check; do not invent alternatives, checks or evidence. Inspect the returned verdict, missing, blockers, phase and version. A known PARTIAL is not phase acceptance: do the missing work or correct its report in the SAME execution, using the returned version and a NEW operation key ONLY for a new corrected report body. Do not request owner consent or claim preparation complete while preparation remains PARTIAL. After an unknown response retain exactly that key, version and report; read back history for the operation. Provider/transport failure or unknown acceptance is NOT a known PARTIAL and does not permit automatic resubmission. Do not select a replacement key merely because acceptance is unknown. Follow the returned current phase.",
                   "skills": [
                     "project-workflow-executor",
-                    "tracker-operator"
+                    "tracker-operator",
+                    "forge-operator",
+                    "exact-code-review"
                   ]
                 },
                 {
-                  "description": "Reviewer reads the accepted Developer result from this assignment's supplied previous_result_id AFTER Developer Complete. Read task-tracker sdlc result read --task <task-uuid> --result <accepted-developer-result-uuid>; require source=delivery, matching task/cycle, role=developer and previous_stage=Development|Rework, next_stage=Review and exact candidate commit_sha, then read the sealed changes/checks and their workspace provenance. The Reviewer's own sealed acknowledgment report records actual review work and findings; Tracker owns the predecessor links. Do not amend Developer artifacts to insert a future ID or wait for your own future accepted Reviewer result. Use sealed assignment artifacts for technical evidence under the current configured assignment and project rights. Ordinary comments carry discussion and the final handoff; they do not replace sealed artifacts. Do not borrow owner/scheduler credentials, use a human token or broaden permissions. Read permitted own artifacts and accepted predecessor references using task-tracker attachment list --issue <task-uuid> and task-tracker attachment download <attachment-uuid> --out <private-artifact-path>. Match issue_id to task=root and the exact supplied reference/hash; match expected assignment_id, execution_id and role from artifact.binding to the actual producer/predecessor, not a guessed current assignment for old evidence. Verify SHA256 of the raw downloaded bytes; CLI download success alone is not an ArtifactReceipt. After role work and BEFORE the FINAL Workflow phase report, publish the actual structured JSON role reports/checks/deployment evidence through task-tracker attachment upload --issue <task-uuid> --file <role-artifact.json> --content-type application/json. Use only the current supplied assignment/execution/agent/fence and run context. Tracker enforces exact routing, Running/InProgress and the current assignment owner/fence. Assignment id/version/holder/fence remain stable until a confirmed owner transition or explicit cancellation, including across Fleet restart; time does not expire the assignment. The wire field lease is historical ownership metadata, not an expiry deadline. Do not send heartbeat/renew commands or choose the stage yourself. Preserve the exact uploaded bytes, filename and MIME for replay. Use the actual server-returned artifact.receipt {reference,sha256}, with reference=tracker-attachment:<UUID> and SHA256 of raw bytes, and artifact.binding {assignment_id,execution_id,role}. Read the saved metadata back with attachment list, download by the actual attachment UUID and verify raw SHA256 and size against that receipt. New role outputs must match this current task/assignment/execution/role, including Developer rework. Never fabricate an attachment UUID, reference, SHA or a receipt from a local path, comment, Forge URL/job ID or Workflow terminal hash. Workflow terminal receipt and role artifact contents are separate evidence. Unknown upload acceptance requires authorized metadata/byte readback: locate the actual saved entry by exact current binding, filename, MIME, size and raw SHA; if found, download its returned UUID and retain the verified receipt without another upload. If no matching saved entry exists, only an exact-file replay with the original filename/MIME under the still-current assignment and project rights is permitted; never overwrite sealed bytes, delete evidence, change identity/fence or declare success from uncertainty. 404/403, missing artifact capability, stale binding, checksum mismatch or unavailable readback is a concrete blocker: leave the phase unfinished, report it and do not fake Workflow/business completion. Prepare result.role=reviewer with verdict approved|rework and report ArtifactReceipt from verified artifact receipts. Include actual role evidence in the final phase report. The final report does not require its own future terminal receipt, future ordinary comment or future Tracker transition. ",
+                  "description": "Reviewer reads the accepted Developer result from this assignment's supplied previous_result_id AFTER Developer Complete. Read task-tracker sdlc result read --task <task-uuid> --result <accepted-developer-result-uuid>; require source=delivery, matching task/cycle, role=developer and previous_stage=Development|Rework, next_stage=Review and exact candidate commit_sha, then read the sealed changes/checks and their workspace provenance. The Reviewer's own sealed review report records actual review work and findings; Tracker owns the predecessor links. Record the verified candidate SHA, approved source coordinates and actual pipeline/workspace receipt references as review evidence without copying predecessor result IDs. Do not amend Developer artifacts to insert a future ID or wait for your own future accepted Reviewer result. Use sealed assignment artifacts for technical evidence under the current configured assignment and project rights. Ordinary comments carry discussion and the final handoff; they do not replace sealed artifacts. Do not borrow owner/scheduler credentials, use a human token or broaden permissions. Read permitted own artifacts and accepted predecessor references using task-tracker attachment list --issue <task-uuid> and task-tracker attachment download <attachment-uuid> --out <private-artifact-path>. Match issue_id to task=root and the exact supplied reference/hash; match expected assignment_id, execution_id and role from artifact.binding to the actual producer/predecessor, not a guessed current assignment for old evidence. Verify SHA256 of the raw downloaded bytes; CLI download success alone is not an ArtifactReceipt. After role work and BEFORE the FINAL Workflow phase report, publish the actual structured JSON role reports/checks/deployment evidence through task-tracker attachment upload --issue <task-uuid> --file <role-artifact.json> --content-type application/json. Use only the current supplied assignment/execution/agent/fence and run context. Tracker enforces exact routing, Running/InProgress and the current assignment owner/fence. Assignment id/version/holder/fence remain stable until a confirmed owner transition or explicit cancellation, including across Fleet restart; time does not expire the assignment. The wire field lease is historical ownership metadata, not an expiry deadline. Do not send heartbeat/renew commands or choose the stage yourself. Preserve the exact uploaded bytes, filename and MIME for replay. Use the actual server-returned artifact.receipt {reference,sha256}, with reference=tracker-attachment:<UUID> and SHA256 of raw bytes, and artifact.binding {assignment_id,execution_id,role}. Read the saved metadata back with attachment list, download by the actual attachment UUID and verify raw SHA256 and size against that receipt. New role outputs must match this current task/assignment/execution/role, including Developer rework. Never fabricate an attachment UUID, reference, SHA or a receipt from a local path, comment, Forge URL/job ID or Workflow terminal hash. Workflow terminal receipt and role artifact contents are separate evidence. Unknown upload acceptance requires authorized metadata/byte readback: locate the actual saved entry by exact current binding, filename, MIME, size and raw SHA; if found, download its returned UUID and retain the verified receipt without another upload. If no matching saved entry exists, only an exact-file replay with the original filename/MIME under the still-current assignment and project rights is permitted; never overwrite sealed bytes, delete evidence, change identity/fence or declare success from uncertainty. 404/403, missing artifact capability, stale binding, checksum mismatch or unavailable readback is a concrete blocker: leave the phase unfinished, report it and do not fake Workflow/business completion. Prepare result.role=reviewer with verdict approved|rework and report ArtifactReceipt from verified artifact receipts. Include actual role evidence in the final phase report. The final report does not require its own future terminal receipt, future ordinary comment or future Tracker transition. ",
                   "skills": [
                     "project-workflow-executor",
-                    "tracker-operator"
+                    "tracker-operator",
+                    "forge-operator",
+                    "exact-code-review"
                   ]
                 },
                 {
-                  "description": "PRECOMMIT ASSESSMENT ONLY: finish the current phase work and report actual inputs, outputs, checks, evidence and unresolved blockers. The report cannot contain its own future terminal receipt, future final comment or future Tracker transition. These are subsequent actions after acceptance. Missing, stale, mismatched or fabricated current work/evidence must not pass. Prepare the typed Reviewer result with verdict approved and the verified acknowledgment report. The report records the existing Tracker comment ID, exact candidate and Testing / Ready handoff. An acknowledgment does not certify independent code review or acceptance testing. ",
+                  "description": "PRECOMMIT ASSESSMENT ONLY: finish the current phase work and report actual inputs, outputs, checks, evidence and unresolved blockers. The report cannot contain its own future terminal receipt, future final comment or future Tracker transition. These are subsequent actions after acceptance. Missing, stale, mismatched or fabricated current work/evidence must not pass. Complete this final phase through its subsequent status action: AFTER accepted complete=true, follow the returned completion_instructions to save and read back the final Task summary, explicitly set the current assignment to Completed and verify its original operation receipt. The agent changes status; Tracker owns the next stage and its Ready reset after real native terminal. Do not finish at a complete=false phase: continue the next phase in this same run. Prepare result.role=reviewer with verdict approved|rework and report ArtifactReceipt from the verified saved review. Include every linked PR/base/head SHA, requirement coverage, actual ready CI, persisted PR comments and limitations. Reread the full PR set and SHA before this report and review changed parts. Defects do not prevent completion of actual review work; never replace rework with approved. After agent completion and native terminal, Tracker advances to Testing / Ready for either verdict; no Rework loop is enabled. ",
                   "skills": [
                     "project-workflow-executor",
-                    "tracker-operator"
+                    "tracker-operator",
+                    "forge-operator",
+                    "exact-code-review"
                   ]
                 }
               ],
@@ -1352,7 +1379,7 @@
         "launch_profile": "single-task-v1-reviewer",
         "name": "single-task-reviewer"
       },
-      "previous_baseline_manifest_sha256": "2f16635c0f588d1f285393b4ad8c163119b4dba4b9918335c821f295e88a4f64",
+      "previous_baseline_manifest_sha256": "a6d82abf1c7d3965b452e29783bd7a1adc093bcf9f460aa36f4060bf78eba70a",
       "role_key": "reviewer",
       "skill_names": [
         "exact-code-review",
@@ -1378,7 +1405,8 @@
             {
               "checks": [
                 "The returned Workflow step is admitted in the assigned namespace.",
-                "The one Tracker task, current stage/status and input references match."
+                "The one Tracker task, current stage/status and input references match.",
+                "The agent explicitly started this assignment and verified InProgress before business work."
               ],
               "code": "TS-TEST-01",
               "description": "single-task-v1: tester/delivery; Workflow step and task context.",
@@ -1401,7 +1429,7 @@
                   ]
                 },
                 {
-                  "description": "This preset works on ONE Tracker task throughout. Never create children, decomposition cards, parent/dependency links for a delivery DAG, aggregate work or integration barriers. Do not activate integration or integration_rework modes. The Architect mode key decomposition means architecture and an implementation plan inside this task only. Stages are Draft, Backlog, Analysis, Architecture, Development, Review, Testing, Rework, Deployment. Status is separately Ready, InProgress or Completed; waiting_reason and runtime/agent state are separate observations, never substitute statuses. Only a real Tracker receipt establishes a business transition; explicitly Start the current stage as InProgress before business work, but never choose the stage or borrow a scheduler lease. Use the ordinary terminal with project-workflow, task-tracker and cicd-cli as actually installed and authorized. Do not modify original Hermes, install skills or infer capabilities from their names. Existing skill names are references, not authorization to execute legacy multi-task instructions.",
+                  "description": "This preset works on ONE Tracker task throughout. Never create children, decomposition cards, parent/dependency links for a delivery DAG, aggregate work or integration barriers. Do not activate integration or integration_rework modes. The Architect mode key decomposition means architecture and an implementation plan inside this task only. Stages are Draft, Backlog, Analysis, Architecture, Development, Review, Testing, Rework, Deployment. Status is separately Ready, InProgress or Completed; waiting_reason and runtime/agent state are separate observations, never substitute statuses. Only a real Tracker receipt establishes a business transition; explicitly Start the current stage as InProgress before business work, but never choose the stage or borrow a scheduler lease. The final phase explicitly completes the current assignment after Workflow acceptance; the application then selects the next stage. Reviewer advances to Tester and Tester to DevOps even when findings exist. Automatic Rework is disabled; DevOps ends the chain. Use the ordinary terminal with project-workflow, task-tracker and cicd-cli as actually installed and authorized. Do not modify original Hermes, install skills or infer capabilities from their names. Existing skill names are references, not authorization to execute legacy multi-task instructions.",
                   "skills": [
                     "project-workflow-executor",
                     "tracker-operator"
@@ -1421,7 +1449,7 @@
             {
               "checks": [
                 "Results identify actual candidate/environment and executed, failed and untested acceptance cases.",
-                "passed covers required acceptance; needs_rework includes immutable reproduction and expected/actual results.",
+                "passed covers required acceptance; rework includes immutable reproduction and expected/actual results. Both verdicts complete actual testing work without waiting for fixes and advance to DevOps.",
                 "Unresolved blockers remain explicit; no additional Tracker tasks were created."
               ],
               "code": "TS-TEST-02",
@@ -1445,14 +1473,14 @@
                   ]
                 },
                 {
-                  "description": "For defects record immutable findings with severity, reproduction and expected vs actual results. Choose passed with actual evidence or rework with actionable findings. Defects go to Rework / Ready on the same task, followed by a fresh acknowledgment and test of the repaired candidate.",
+                  "description": "For defects record immutable findings with severity, reproduction and expected vs actual results. Choose passed with actual evidence or rework with actionable findings. Both verdicts complete actual testing work and advance to Deployment / Ready for DevOps. Preserve failures and untested cases honestly; do not wait for fixes, repair code or request a Rework transition.",
                   "skills": [
                     "project-workflow-executor",
                     "tracker-operator"
                   ]
                 },
                 {
-                  "description": "Decide routine technical details within approved requirements; Review/Test defects use normal rework. Only requirements_contradiction or missing_business_decision that prevents safe progress requires PM business review. Read the current task-tracker sdlc context and lifecycle. Publish and read back sealed evidence for this actual assignment/execution/role using the authorized attachment commands. Submit the strict SubmitCriticalBlocker body with fence, current requirement_revision/content_hash, kind, question, rationale, options, recommendation, evidence and idempotency_key using task-tracker sdlc critical-blocker submit --task <task-uuid> --from-file -. Pass JSON on stdin. Its stable key is fleet-critical-blocker:<current-Tracker-assignment-uuid>, taken from the verified context assignment_id, never from a native run or another role result. Keep question <=4096 bytes, rationale <=8192 bytes, at most 8 options and 1..16 sealed evidence entries. A recommendation references an actual option_id. Missing current fence/evidence/access is a blocker; do not borrow an identity or fabricate proof. Read the original operation using task-tracker sdlc critical-blocker operation --task <task-uuid> --key <exact-original-key>. Verify task/root/project/owner, assignment/execution/agent, role, requirements revision/hash and blocker ID/hash. Unknown acceptance requires original-key readback; retain the same exact body/key, without a blind resend or a new key. A held receipt is not a completed stage, PM return or Workflow completion. Leave the phase unfinished, report the held receipt or unresolved uncertainty and finish the native run. Fleet and Tracker own actual termination, release and guarded return; the agent never calls scheduler commands or invents terminal proof. Missing producer capability is an operator dependency, not permission for a generic status change. ",
+                  "description": "Decide routine technical details within approved requirements; record Review/Test defects without blocking the next role or requesting a Rework transition. Only requirements_contradiction or missing_business_decision that prevents safe progress requires PM business review. Read the current task-tracker sdlc context and lifecycle. Publish and read back sealed evidence for this actual assignment/execution/role using the authorized attachment commands. Submit the strict SubmitCriticalBlocker body with fence, current requirement_revision/content_hash, kind, question, rationale, options, recommendation, evidence and idempotency_key using task-tracker sdlc critical-blocker submit --task <task-uuid> --from-file -. Pass JSON on stdin. Its stable key is fleet-critical-blocker:<current-Tracker-assignment-uuid>, taken from the verified context assignment_id, never from a native run or another role result. Keep question <=4096 bytes, rationale <=8192 bytes, at most 8 options and 1..16 sealed evidence entries. A recommendation references an actual option_id. Missing current fence/evidence/access is a blocker; do not borrow an identity or fabricate proof. Read the original operation using task-tracker sdlc critical-blocker operation --task <task-uuid> --key <exact-original-key>. Verify task/root/project/owner, assignment/execution/agent, role, requirements revision/hash and blocker ID/hash. Unknown acceptance requires original-key readback; retain the same exact body/key, without a blind resend or a new key. A held receipt is not a completed stage, PM return or Workflow completion. Leave the phase unfinished, report the held receipt or unresolved uncertainty and finish the native run. Fleet and Tracker own actual termination, release and guarded return; the agent never calls scheduler commands or invents terminal proof. Missing producer capability is an operator dependency, not permission for a generic status change. ",
                   "skills": [
                     "project-workflow-executor",
                     "tracker-operator"
@@ -1472,7 +1500,7 @@
             {
               "checks": [
                 "Results identify actual candidate/environment and executed, failed and untested acceptance cases.",
-                "passed covers required acceptance; needs_rework includes immutable reproduction and expected/actual results.",
+                "passed covers required acceptance; rework includes immutable reproduction and expected/actual results. Both verdicts complete actual testing work without waiting for fixes and advance to DevOps.",
                 "The role result is ready for Workflow evaluation with actual evidence.",
                 "The proposed outcome and next stage/status comply with this single-task role."
               ],
@@ -1498,7 +1526,7 @@
                   ]
                 },
                 {
-                  "description": "PRECOMMIT ASSESSMENT ONLY: finish the current phase work and report actual inputs, outputs, checks, evidence and unresolved blockers. The report cannot contain its own future terminal receipt, future final comment or future Tracker transition. These are subsequent actions after acceptance. Missing, stale, mismatched or fabricated current work/evidence must not pass. Prepare result.role=tester with verdict passed|rework and report ArtifactReceipt from verified saved role artifacts and the exact assigned candidate. Reviewer/Tester may complete verification with a business rework verdict and real findings; do not pass a defective candidate to obtain acceptance of a correct verification report. ",
+                  "description": "PRECOMMIT ASSESSMENT ONLY: finish the current phase work and report actual inputs, outputs, checks, evidence and unresolved blockers. The report cannot contain its own future terminal receipt, future final comment or future Tracker transition. These are subsequent actions after acceptance. Missing, stale, mismatched or fabricated current work/evidence must not pass. Complete this final phase through its subsequent status action: AFTER accepted complete=true, follow the returned completion_instructions to save and read back the final Task summary, explicitly set the current assignment to Completed and verify its original operation receipt. The agent changes status; Tracker owns the next stage and its Ready reset after real native terminal. Do not finish at a complete=false phase: continue the next phase in this same run. Prepare result.role=tester with verdict passed|rework and report ArtifactReceipt from verified saved role artifacts and the exact assigned candidate. Reviewer/Tester may complete verification with a business rework verdict and real findings; do not pass a defective candidate to obtain acceptance of a correct verification report. ",
                   "skills": [
                     "project-workflow-executor",
                     "tracker-operator"
@@ -1517,7 +1545,7 @@
         "launch_profile": "single-task-v1-tester",
         "name": "single-task-tester"
       },
-      "previous_baseline_manifest_sha256": "2f16635c0f588d1f285393b4ad8c163119b4dba4b9918335c821f295e88a4f64",
+      "previous_baseline_manifest_sha256": "a6d82abf1c7d3965b452e29783bd7a1adc093bcf9f460aa36f4060bf78eba70a",
       "role_key": "tester",
       "skill_names": [
         "deployed-acceptance",
@@ -1544,7 +1572,8 @@
             {
               "checks": [
                 "The returned Workflow step is admitted in the assigned namespace.",
-                "The one Tracker task, current stage/status and input references match."
+                "The one Tracker task, current stage/status and input references match.",
+                "The agent explicitly started this assignment and verified InProgress before business work."
               ],
               "code": "DO-DEPLOY-01",
               "description": "single-task-v1: devops/delivery; Workflow step and task context.",
@@ -1567,7 +1596,7 @@
                   ]
                 },
                 {
-                  "description": "This preset works on ONE Tracker task throughout. Never create children, decomposition cards, parent/dependency links for a delivery DAG, aggregate work or integration barriers. Do not activate integration or integration_rework modes. The Architect mode key decomposition means architecture and an implementation plan inside this task only. Stages are Draft, Backlog, Analysis, Architecture, Development, Review, Testing, Rework, Deployment. Status is separately Ready, InProgress or Completed; waiting_reason and runtime/agent state are separate observations, never substitute statuses. Only a real Tracker receipt establishes a business transition; explicitly Start the current stage as InProgress before business work, but never choose the stage or borrow a scheduler lease. Use the ordinary terminal with project-workflow, task-tracker and cicd-cli as actually installed and authorized. Do not modify original Hermes, install skills or infer capabilities from their names. Existing skill names are references, not authorization to execute legacy multi-task instructions.",
+                  "description": "This preset works on ONE Tracker task throughout. Never create children, decomposition cards, parent/dependency links for a delivery DAG, aggregate work or integration barriers. Do not activate integration or integration_rework modes. The Architect mode key decomposition means architecture and an implementation plan inside this task only. Stages are Draft, Backlog, Analysis, Architecture, Development, Review, Testing, Rework, Deployment. Status is separately Ready, InProgress or Completed; waiting_reason and runtime/agent state are separate observations, never substitute statuses. Only a real Tracker receipt establishes a business transition; explicitly Start the current stage as InProgress before business work, but never choose the stage or borrow a scheduler lease. The final phase explicitly completes the current assignment after Workflow acceptance; the application then selects the next stage. Reviewer advances to Tester and Tester to DevOps even when findings exist. Automatic Rework is disabled; DevOps ends the chain. Use the ordinary terminal with project-workflow, task-tracker and cicd-cli as actually installed and authorized. Do not modify original Hermes, install skills or infer capabilities from their names. Existing skill names are references, not authorization to execute legacy multi-task instructions.",
                   "skills": [
                     "project-workflow-executor",
                     "tracker-operator"
@@ -1597,14 +1626,14 @@
               ],
               "instructions": [
                 {
-                  "description": "Verify the exact candidate SHA/artifact accepted by Review and Testing and the authorized deployment target. Through the installed cicd-cli inspect actual help and supported operations before invoking them; this preset does not invent build/deploy/health commands. Record immutable artifact provenance.",
+                  "description": "Verify the exact candidate SHA/artifact examined by Review and Testing and the authorized deployment target. Through the installed cicd-cli inspect actual help and supported operations before invoking them; this preset does not invent build/deploy/health commands. Record immutable artifact provenance.",
                   "skills": [
                     "project-workflow-executor",
                     "tracker-operator"
                   ]
                 },
                 {
-                  "description": "Build/release and deploy the approved artifact through the authorized existing CI/CD procedure. Read actual deployment receipt/target/revision, verify health and run deployed acceptance for this task. Preserve rollback references and report failed/unknown operations without claiming success.",
+                  "description": "Read the actual Reviewer/Tester verdicts, findings and limitations; completing their work does not certify defect-free code or grant a deployment permission. Build/release and deploy the assigned artifact through the authorized existing CI/CD procedure. Read actual deployment receipt/target/revision, verify health and run deployed acceptance for this task. Preserve rollback references and report failed/unknown operations without claiming success.",
                   "skills": [
                     "project-workflow-executor",
                     "tracker-operator"
@@ -1618,7 +1647,7 @@
                   ]
                 },
                 {
-                  "description": "Decide routine technical details within approved requirements; Review/Test defects use normal rework. Only requirements_contradiction or missing_business_decision that prevents safe progress requires PM business review. Read the current task-tracker sdlc context and lifecycle. Publish and read back sealed evidence for this actual assignment/execution/role using the authorized attachment commands. Submit the strict SubmitCriticalBlocker body with fence, current requirement_revision/content_hash, kind, question, rationale, options, recommendation, evidence and idempotency_key using task-tracker sdlc critical-blocker submit --task <task-uuid> --from-file -. Pass JSON on stdin. Its stable key is fleet-critical-blocker:<current-Tracker-assignment-uuid>, taken from the verified context assignment_id, never from a native run or another role result. Keep question <=4096 bytes, rationale <=8192 bytes, at most 8 options and 1..16 sealed evidence entries. A recommendation references an actual option_id. Missing current fence/evidence/access is a blocker; do not borrow an identity or fabricate proof. Read the original operation using task-tracker sdlc critical-blocker operation --task <task-uuid> --key <exact-original-key>. Verify task/root/project/owner, assignment/execution/agent, role, requirements revision/hash and blocker ID/hash. Unknown acceptance requires original-key readback; retain the same exact body/key, without a blind resend or a new key. A held receipt is not a completed stage, PM return or Workflow completion. Leave the phase unfinished, report the held receipt or unresolved uncertainty and finish the native run. Fleet and Tracker own actual termination, release and guarded return; the agent never calls scheduler commands or invents terminal proof. Missing producer capability is an operator dependency, not permission for a generic status change. ",
+                  "description": "Decide routine technical details within approved requirements; record Review/Test defects without blocking the next role or requesting a Rework transition. Only requirements_contradiction or missing_business_decision that prevents safe progress requires PM business review. Read the current task-tracker sdlc context and lifecycle. Publish and read back sealed evidence for this actual assignment/execution/role using the authorized attachment commands. Submit the strict SubmitCriticalBlocker body with fence, current requirement_revision/content_hash, kind, question, rationale, options, recommendation, evidence and idempotency_key using task-tracker sdlc critical-blocker submit --task <task-uuid> --from-file -. Pass JSON on stdin. Its stable key is fleet-critical-blocker:<current-Tracker-assignment-uuid>, taken from the verified context assignment_id, never from a native run or another role result. Keep question <=4096 bytes, rationale <=8192 bytes, at most 8 options and 1..16 sealed evidence entries. A recommendation references an actual option_id. Missing current fence/evidence/access is a blocker; do not borrow an identity or fabricate proof. Read the original operation using task-tracker sdlc critical-blocker operation --task <task-uuid> --key <exact-original-key>. Verify task/root/project/owner, assignment/execution/agent, role, requirements revision/hash and blocker ID/hash. Unknown acceptance requires original-key readback; retain the same exact body/key, without a blind resend or a new key. A held receipt is not a completed stage, PM return or Workflow completion. Leave the phase unfinished, report the held receipt or unresolved uncertainty and finish the native run. Fleet and Tracker own actual termination, release and guarded return; the agent never calls scheduler commands or invents terminal proof. Missing producer capability is an operator dependency, not permission for a generic status change. ",
                   "skills": [
                     "project-workflow-executor",
                     "tracker-operator"
@@ -1664,7 +1693,7 @@
                   ]
                 },
                 {
-                  "description": "PRECOMMIT ASSESSMENT ONLY: finish the current phase work and report actual inputs, outputs, checks, evidence and unresolved blockers. The report cannot contain its own future terminal receipt, future final comment or future Tracker transition. These are subsequent actions after acceptance. Missing, stale, mismatched or fabricated current work/evidence must not pass. Prepare result.role=devops with deployment and verification ArtifactReceipts; verification must cover exact artifact provenance, deployed health and acceptance, not only build success from verified saved role artifacts and the exact assigned candidate. Reviewer/Tester may complete verification with a business rework verdict and real findings; do not pass a defective candidate to obtain acceptance of a correct verification report. ",
+                  "description": "PRECOMMIT ASSESSMENT ONLY: finish the current phase work and report actual inputs, outputs, checks, evidence and unresolved blockers. The report cannot contain its own future terminal receipt, future final comment or future Tracker transition. These are subsequent actions after acceptance. Missing, stale, mismatched or fabricated current work/evidence must not pass. Complete this final phase through its subsequent status action: AFTER accepted complete=true, follow the returned completion_instructions to save and read back the final Task summary, explicitly set the current assignment to Completed and verify its original operation receipt. The agent changes status; Tracker owns the next stage and its Ready reset after real native terminal. Do not finish at a complete=false phase: continue the next phase in this same run. Prepare result.role=devops with deployment and verification ArtifactReceipts; verification must cover exact artifact provenance, deployed health and acceptance, not only build success from verified saved role artifacts and the exact assigned candidate. Reviewer/Tester may complete verification with a business rework verdict and real findings; do not pass a defective candidate to obtain acceptance of a correct verification report. ",
                   "skills": [
                     "project-workflow-executor",
                     "tracker-operator"
@@ -1683,7 +1712,7 @@
         "launch_profile": "single-task-v1-devops",
         "name": "single-task-devops"
       },
-      "previous_baseline_manifest_sha256": "2f16635c0f588d1f285393b4ad8c163119b4dba4b9918335c821f295e88a4f64",
+      "previous_baseline_manifest_sha256": "a6d82abf1c7d3965b452e29783bd7a1adc093bcf9f460aa36f4060bf78eba70a",
       "role_key": "devops",
       "skill_names": [
         "exact-sha-deployment",

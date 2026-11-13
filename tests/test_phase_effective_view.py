@@ -396,7 +396,7 @@ def test_configured_browser_read_only_history_and_no_writes(catalog, tmp_path, v
         assert headings.count() == (1 if instructions_only else 3)
         assert all(item["level"] == "3" and item["font"] == item["body"] for item in headings.evaluate_all(
             "nodes => nodes.map(node => ({level:node.dataset.level,font:getComputedStyle(node).fontSize,"
-            "body:getComputedStyle(node).getPropertyValue('--base-font-body').trim()}))"
+            "body:getComputedStyle(document.body).fontSize}))"
         ))
         lists = page.locator('#phaseEffectiveSections .base-prose[data-preserve-line-breaks="true"] ol, '
                              '#phaseEffectiveSections .base-prose[data-preserve-line-breaks="true"] ul')

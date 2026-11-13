@@ -8,8 +8,13 @@ import pytest
 from pydantic import ValidationError
 from sqlalchemy import select
 
-from project_workflow.application.catalog_publication import publish_packaged_catalog, read_revision, save_draft
-from project_workflow.domain.catalog_publication import CatalogDraft
+from project_workflow.application.catalog_publication import (
+    publish,
+    publish_packaged_catalog,
+    read_revision,
+    save_draft,
+)
+from project_workflow.domain.catalog_publication import CatalogDraft, CatalogPublish
 from project_workflow.domain.exceptions import ConflictError
 from project_workflow.domain.single_task_profile import (
     CATALOG_MANIFESTS,
@@ -27,6 +32,9 @@ from tests import test_single_task_installation as installation
 PREVIOUS_FIRST_STEP = "e502e0e1bed9f4a16e08423a4ac1f0162e5ef6b006d9a9a7540137ac0ec5c08f"
 FIRST_STEP_RELEASE = "852e0647ad8645c9c6280b21c1595b9efa6ff87754d07df8dcc92bcb04f76381"
 DEPLOYED_FIRST_STEP_RELEASE = "920379c0c86455148e6fae35e2007037595c2d1cc82116c392c575c4625ffd28"
+DEPLOYED_NATIVE_RELEASE = "a4248f93f5299b12cc9b0714d10b368645217c0a7718617c6658bf252f4624b7"
+PRIMARY_LINEAR_RELEASE = "3b56d64226d48d84082e43eb9ff45228a0aa6c2e1bc2640dd7389452cfcaa473"
+PREVIOUS_LINEAR_RELEASE = "a6d82abf1c7d3965b452e29783bd7a1adc093bcf9f460aa36f4060bf78eba70a"
 
 
 def test_first_step_profile_changes_only_opening_worker_description():
@@ -48,23 +56,26 @@ def test_first_step_profile_changes_only_opening_worker_description():
     assert expected == current
 
 
-def test_autonomous_design_release_preserves_phase_contracts_and_other_roles():
-    previous, _ = catalog.load_profile(FIRST_STEP_RELEASE)
-    current, _ = catalog.load_profile(DEPLOYED_FIRST_STEP_RELEASE)
+@pytest.mark.parametrize("previous_manifest,current_manifest", [
+    (FIRST_STEP_RELEASE, DEPLOYED_FIRST_STEP_RELEASE),
+    ("a6d82abf1c7d3965b452e29783bd7a1adc093bcf9f460aa36f4060bf78eba70a", None),
+])
+def test_profile_releases_preserve_role_bindings_and_phase_identities(previous_manifest, current_manifest):
+    previous, _ = catalog.load_profile(previous_manifest)
+    current, _ = catalog.load_profile(current_manifest) if current_manifest else catalog.load_profile()
     assert len(previous["workflows"]) == len(current["workflows"])
     for old_workflow, new_workflow in zip(previous["workflows"], current["workflows"], strict=True):
         role = old_workflow["role_key"]
         assert new_workflow["role_key"] == role
-        if role not in {"analyst", "architect"}:
-            assert old_workflow == new_workflow
-            continue
+        assert old_workflow["namespace"] == new_workflow["namespace"]
         for old_mode, new_mode in zip(old_workflow["modes"], new_workflow["modes"], strict=True):
             assert {key: value for key, value in old_mode.items() if key != "phases"} == {
                 key: value for key, value in new_mode.items() if key != "phases"
             }
             for old_phase, new_phase in zip(old_mode["phases"], new_mode["phases"], strict=True):
-                assert {key: value for key, value in old_phase.items() if key != "instructions"} == {
-                    key: value for key, value in new_phase.items() if key != "instructions"
+                changed_content = {"instructions", "checks", "evidence"}
+                assert {key: value for key, value in old_phase.items() if key not in changed_content} == {
+                    key: value for key, value in new_phase.items() if key not in changed_content
                 }
 
 
@@ -148,7 +159,7 @@ def all_rows(uow):
 
 
 @pytest.mark.parametrize("installed_manifest", [
-    DEPLOYED_FIRST_STEP_RELEASE,
+    DEPLOYED_FIRST_STEP_RELEASE, DEPLOYED_NATIVE_RELEASE, PRIMARY_LINEAR_RELEASE, PREVIOUS_LINEAR_RELEASE,
     "328815479d9ee782b901b8b9c7f4caecf8123b9b7ab9d8ca9c07d05e7c5c58f5",
 ])
 def test_packaged_publication_preserves_task_and_old_phases(monkeypatch, installed_manifest):
@@ -198,6 +209,75 @@ def test_packaged_publication_keeps_an_operator_draft(monkeypatch):
         assert all_rows(uow) == before
 
 
+@pytest.mark.parametrize("installed_manifest", [
+    DEPLOYED_FIRST_STEP_RELEASE, DEPLOYED_NATIVE_RELEASE, PRIMARY_LINEAR_RELEASE, PREVIOUS_LINEAR_RELEASE,
+])
+def test_packaged_publication_keeps_the_enrolled_agent_execution(monkeypatch, supervisor_llm, installed_manifest):
+    from tests._report_helpers import report_json
+
+    reader = catalog.load_profile
+    fixture = None
+    try:
+        with monkeypatch.context() as old_runtime:
+            old_runtime.setattr(catalog, "load_profile", lambda digest=installed_manifest: reader(digest))
+            fixture = protocol.configured.__wrapped__(monkeypatch, SimpleNamespace(param=("developer", "initial")))
+            context = next(fixture)
+            enrolled = protocol.enroll(context)
+            before = protocol.step(context).json()
+        with SAUnitOfWork() as uow:
+            selected = publish_packaged_catalog(uow, installed_manifest)
+            assert selected.instruction_manifest_sha256 == MANIFEST_SHA256
+        assert protocol.step(context).json() == before
+        supervisor_llm("PASS")
+        command = {"report": report_json("Verified work after packaged catalog publication"),
+                   "operation_key": "retained-agent-step", "expected_version": 1}
+        response = protocol.step(context, **command)
+        assert response.status_code == 200, response.text
+        assert response.json()["result"]["execution_ref"] == enrolled["execution_ref"]
+        assert protocol.step(context, **command).json() == response.json()
+        with SAUnitOfWork() as uow:
+            task = uow.tasks.get_by_key(context[1]["task"], project_id=context[1]["namespace_id"])
+            assert task.mode_id == enrolled["mode_id"]
+            assert uow.workflows.get_mode(task.mode_id).catalog_version < (
+                uow.workflows.get_by_id(task.workflow_id).active_catalog_version)
+    finally:
+        if fixture is not None:
+            fixture.close()
+
+
+@pytest.mark.parametrize("published", [False, True], ids=["draft", "custom-publication"])
+def test_packaged_publication_current_family_keeps_operator_changes(monkeypatch, published):
+    installed = install_retained(monkeypatch, MANIFEST_SHA256)
+    workflow_id = int(installed.bindings[-1].workflow_id)
+    with SAUnitOfWork() as uow:
+        workflow = uow.workflows.get_by_id(workflow_id)
+        assert workflow is not None
+        active = read_revision(uow, workflow, workflow.active_catalog_version, selected=True)
+        active["modes"][0]["name"] += " (operator change)"
+        draft = save_draft(uow, workflow_id, CatalogDraft(
+            expected_version=active["catalog_version"], expected_sha256=active["content_sha256"], modes=active["modes"],
+        ))
+        if published:
+            publish(uow, workflow_id, draft["catalog_version"], CatalogPublish(
+                expected_version=active["catalog_version"], expected_sha256=active["content_sha256"],
+                draft_sha256=draft["content_sha256"], operation_key="publish-operator-change",
+            ), publisher_subject="catalog-test-admin")
+        assert catalog.observe_installation(uow).instruction_manifest_sha256 == MANIFEST_SHA256
+        before = all_rows(uow)
+        for expected_manifest in (MANIFEST_SHA256, DEPLOYED_FIRST_STEP_RELEASE):
+            assert publish_packaged_catalog(uow, expected_manifest) == installed
+            assert all_rows(uow) == before
+
+
+@pytest.mark.parametrize("expected_manifest", [MANIFEST_SHA256, DEPLOYED_FIRST_STEP_RELEASE])
+def test_packaged_publication_clean_current_family_is_unchanged(monkeypatch, expected_manifest):
+    installed = install_retained(monkeypatch, MANIFEST_SHA256)
+    with SAUnitOfWork() as uow:
+        before = all_rows(uow)
+        assert publish_packaged_catalog(uow, expected_manifest) == installed
+        assert all_rows(uow) == before
+
+
 @pytest.mark.parametrize("manifest", [key for key, source in CATALOG_MANIFESTS.items()
                                      if source.execution_protocol is None])
 def test_retained_native_profile_is_readable_but_cannot_enroll_new_execution(monkeypatch, manifest):
@@ -208,6 +288,13 @@ def test_retained_native_profile_is_readable_but_cannot_enroll_new_execution(mon
         with SAUnitOfWork() as uow:
             before = all_rows(uow)
             assert catalog.observe_installation(uow) == original
+            workflow = uow.workflows.get_by_id(int(original.bindings[-1].workflow_id))
+            active = read_revision(uow, workflow, workflow.active_catalog_version, selected=True)
+            with pytest.raises(ConflictError, match="does not support configured-cli-v1 publication"):
+                save_draft(uow, workflow.id, CatalogDraft(
+                    expected_version=active["catalog_version"], expected_sha256=active["content_sha256"],
+                    modes=active["modes"]))
+            assert all_rows(uow) == before
         response = client.post("/internal/runtime/assign", headers=protocol.WRITER, json=request)
         assert response.status_code == 409, response.text
         with SAUnitOfWork() as uow:

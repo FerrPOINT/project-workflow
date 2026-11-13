@@ -53,21 +53,15 @@ RESULTS = {
 TARGETS = {
     "analyst": "Architecture / Ready",
     "architect": "Development / Ready",
-    "developer": "Review / Ready for both initial and rework, followed by fresh Testing",
-    "reviewer": (
-        "Testing / Ready for approved; Rework / Ready for rework while cycle < 3; "
-        "on rework at cycle 3 preserve Review / Completed with waiting_reason=rework_limit_reached and runtime=Terminal"
-    ),
-    "tester": (
-        "Deployment / Ready for passed; Rework / Ready for rework while cycle < 3; "
-        "on rework at cycle 3 preserve Testing / Completed with waiting_reason=rework_limit_reached "
-        "and runtime=Terminal"
-    ),
+    "developer": "Review / Ready",
+    "reviewer": "Testing / Ready for both approved and rework",
+    "tester": "Deployment / Ready for both passed and rework",
     "devops": "Deployment / Completed",
 }
 
 CRITICAL_BUSINESS_REVIEW = (
-    'Decide routine technical details within approved requirements; Review/Test defects use normal rework. '
+    'Decide routine technical details within approved requirements; record Review/Test defects without '
+    'blocking the next role or requesting a Rework transition. '
     'Only requirements_contradiction or missing_business_decision that prevents safe progress requires PM '
     'business review. Read the current task-tracker sdlc context and lifecycle. Publish and read back sealed '
     'evidence for this actual assignment/execution/role using the authorized attachment commands. Submit the '
@@ -251,8 +245,10 @@ ROLE_SOURCE_EVIDENCE = {
         "AFTER Developer Complete. Read task-tracker sdlc result read --task <task-uuid> --result "
         "<accepted-developer-result-uuid>; require source=delivery, matching task/cycle, role=developer and "
         "previous_stage=Development|Rework, next_stage=Review and exact candidate commit_sha, then read the "
-        "sealed changes/checks and their workspace provenance. The Reviewer's own sealed acknowledgment "
-        "report records actual review work and findings; Tracker owns the predecessor links. Do not amend "
+        "sealed changes/checks and their workspace provenance. The Reviewer's own sealed review report "
+        "records actual review work and findings; Tracker owns the predecessor links. Record the verified "
+        "candidate SHA, approved source coordinates and actual pipeline/workspace receipt references "
+        "as review evidence without copying predecessor result IDs. Do not amend "
         "Developer artifacts to insert a future ID or wait for your own future accepted Reviewer result. "
     ),
     "tester": (
@@ -630,9 +626,9 @@ def completion_instruction(role: str) -> str:
             )
             + f"{TARGETS[role]}"
             + (
-                ". Only an actual next-stage handoff resets Ready; at the Rework limit and final DevOps "
-                "completion keep Completed. Repaired candidates repeat Review and Testing; honor the server "
-                "Rework limit. Never borrow"
+                ". Only an actual next-stage handoff resets Ready; final DevOps completion keeps Completed "
+                "and ends the chain. Reviewer and Tester preserve their actual verdict and findings; both "
+                "outcomes advance to the next role. Automatic Rework is disabled. Never borrow"
                 " scheduler credentials, choose a new stage or manufacture evidence."
             )
         )
@@ -677,6 +673,11 @@ def terminal_instruction(role: str) -> str:
         "evidence and unresolved blockers. The report cannot contain its own future terminal receipt, "
         "future final comment or future Tracker transition. These are subsequent actions after acceptance. "
         "Missing, stale, mismatched or fabricated current work/evidence must not pass. "
+        "Complete this final phase through its subsequent status action: AFTER accepted complete=true, "
+        "follow the returned completion_instructions to save and read back the final Task summary, "
+        "explicitly set the current assignment to Completed and verify its original operation receipt. "
+        "The agent changes status; Tracker owns the next stage and its Ready reset after real native "
+        "terminal. Do not finish at a complete=false phase: continue the next phase in this same run. "
     )
     if role == "project_manager":
         return common + (
@@ -698,9 +699,12 @@ def terminal_instruction(role: str) -> str:
         )
     if role == "reviewer":
         return common + (
-            "Prepare the typed Reviewer result with verdict approved and the verified acknowledgment report. "
-            "The report records the existing Tracker comment ID, exact candidate and Testing / Ready handoff. "
-            "An acknowledgment does not certify independent code review or acceptance testing. "
+            "Prepare result.role=reviewer with verdict approved|rework and report ArtifactReceipt from "
+            "the verified saved review. Include every linked PR/base/head SHA, requirement coverage, "
+            "actual ready CI, persisted PR comments and limitations. Reread the full PR set and SHA "
+            "before this report and review changed parts. Defects do not prevent completion of actual "
+            "review work; never replace rework with approved. After agent completion and native terminal, "
+            "Tracker advances to Testing / Ready for either verdict; no Rework loop is enabled. "
         )
     return common + (
         f"Prepare {RESULTS[role]} from verified saved role artifacts and the exact assigned candidate. "

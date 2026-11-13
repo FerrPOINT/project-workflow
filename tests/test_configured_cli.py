@@ -531,6 +531,7 @@ def test_first_phase_validates_actual_response_without_copying_it_into_report(co
     assert contract["required_checks"] == [
         "The returned Workflow step is admitted in the assigned namespace.",
         "The one Tracker task, current stage/status and input references match.",
+        "The agent explicitly started this assignment and verified InProgress before business work.",
     ]
     assert contract["required_evidence"] == ["Actual first Workflow step response and task/input references."]
 
