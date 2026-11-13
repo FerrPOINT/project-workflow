@@ -56,7 +56,9 @@ class OpenAICompatibleClient:
         settings = config.get_settings()
         self.base_url = (base_url or settings.OPENAI_BASE_URL).rstrip("/")
         self.model = model or settings.OPENAI_MODEL
-        self.timeout = timeout or settings.OPENAI_TIMEOUT
+        self.timeout = settings.OPENAI_TIMEOUT if timeout is None else timeout
+        if self.timeout is not None and self.timeout <= 0:
+            raise ValueError("timeout must be positive")
         self.max_tokens = settings.OPENAI_MAX_TOKENS if max_tokens is None else max_tokens
         if self.max_tokens is not None and self.max_tokens <= 0:
             raise ValueError("max_tokens must be positive")

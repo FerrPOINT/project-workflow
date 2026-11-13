@@ -72,10 +72,58 @@ class TestOpenAICompatibleClient:
         client = OpenAICompatibleClient()
         assert client.base_url == "http://192.168.10.1:4000/v1"
         assert client.model == "app-test"
-        assert client.timeout == 1200
+        assert client.timeout is None
         assert client.max_tokens is None
         assert client.api_key == ""
         assert client.reasoning_effort == "high"
+
+    @pytest.mark.parametrize("value,expected", [(None, None), ("", None), ("  ", None), ("1200", 1200)])
+    def test_optional_timeout_setting(self, monkeypatch, value, expected):
+        from project_workflow.config import Settings
+
+        if value is None:
+            monkeypatch.delenv("OPENAI_TIMEOUT", raising=False)
+        else:
+            monkeypatch.setenv("OPENAI_TIMEOUT", value)
+        settings = Settings(_env_file=None, DATABASE_URL="sqlite://")
+        assert settings.OPENAI_TIMEOUT == expected
+
+    @pytest.mark.parametrize("value", ["0", "-1", "not-a-number"])
+    def test_explicit_timeout_setting_requires_positive_integer(self, monkeypatch, value):
+        from pydantic import ValidationError
+
+        from project_workflow.config import Settings
+
+        monkeypatch.setenv("OPENAI_TIMEOUT", value)
+        with pytest.raises(ValidationError):
+            Settings(_env_file=None, DATABASE_URL="sqlite://")
+
+    @pytest.mark.parametrize("timeout", [0, -1])
+    def test_invalid_timeout_override_cannot_fall_back_to_settings(self, monkeypatch, timeout):
+        from project_workflow.config import get_settings
+
+        monkeypatch.setenv("OPENAI_TIMEOUT", "1200")
+        get_settings.cache_clear()
+        with pytest.raises(ValueError, match="timeout must be positive"):
+            OpenAICompatibleClient(timeout=timeout)
+
+    @pytest.mark.parametrize("setting,override,expected", [(None, None, None), ("", None, None),
+                                                           ("1200", None, 1200), ("1200", 17, 17)])
+    def test_read_timeout_wire_contract(self, monkeypatch, setting, override, expected):
+        from project_workflow.config import get_settings
+
+        if setting is None:
+            monkeypatch.delenv("OPENAI_TIMEOUT", raising=False)
+        else:
+            monkeypatch.setenv("OPENAI_TIMEOUT", setting)
+        get_settings.cache_clear()
+        client = OpenAICompatibleClient(base_url="https://provider.invalid/v1", timeout=override)
+        with patch("project_workflow.infrastructure.llm.requests.post") as post:
+            post.return_value = MagicMock(status_code=200, headers={}, json=lambda **_kwargs: response_body("{}"))
+            client.respond("system", "report", response_format=PromptBuilder.response_schema([]))
+        post.assert_called_once()
+        assert post.call_args.kwargs["timeout"] == (30, expected)
+        assert post.call_args.kwargs["allow_redirects"] is False
 
     @pytest.mark.parametrize("value,expected", [(None, None), ("", None), ("  ", None), ("1200", 1200)])
     def test_optional_max_tokens_setting(self, monkeypatch, value, expected):
