@@ -179,8 +179,20 @@ def test_existing_router_authorizes_readback_and_rejects_drift(database, monkeyp
         assert response.headers["Cache-Control"] == "no-store"
         assert response.json()["installation"] == installation.model_dump(mode="json", by_alias=True)
         tools = response.json()["installation"]["required_tools"]
-        assert tools["project_manager"] == ["tracker", "workflow"]
-        assert tools["analyst"] == ["tracker", "workflow", "forge", "wiki", "searxng", "tavily"]
+        assert tools == {
+            "project_manager": ["tracker", "workflow"],
+            "analyst": ["tracker", "workflow", "forge", "wiki", "searxng", "tavily"],
+            "architect": ["tracker", "workflow", "forge"],
+            "developer": ["tracker", "workflow", "forge"],
+            "reviewer": ["tracker", "workflow", "forge"],
+            "tester": ["tracker", "workflow", "forge"],
+            "devops": ["tracker", "workflow", "forge"],
+        }
+        catalog_bytes, manifest_bytes = build_single_task_profile.render()
+        assert (build_single_task_profile.ROOT / build_single_task_profile.CATALOG_PATH).read_bytes() == catalog_bytes
+        assert (build_single_task_profile.ROOT / build_single_task_profile.MANIFEST_PATH).read_bytes() == manifest_bytes
+        for workflow in json.loads(catalog_bytes)["workflows"]:
+            assert ("forge" in tools[workflow["role_key"]]) == ("forge-operator" in workflow["skill_names"])
         binding = installation.bindings[0]
         binding_path = "/internal/runtime/profiles/single-task-v1/namespace-bindings/"
         response = client.get(binding_path + binding.namespace_id, headers=headers)

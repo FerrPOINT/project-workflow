@@ -12,7 +12,10 @@ from project_workflow.domain.base_binding import DatabaseId
 PROFILE = "single-task-v1"
 PROFESSION_TOOL_REQUIREMENTS = {
     "analyst": ("forge", "wiki", "searxng", "tavily"),
+    "architect": ("forge",),
     "developer": ("forge",),
+    "reviewer": ("forge",),
+    "tester": ("forge",),
     "devops": ("forge",),
 }
 CATALOG_SHA256 = "333a2ca0a87bbbc88a505fa99cd170b074620cbc7fad21e374076a8192515bb0"
