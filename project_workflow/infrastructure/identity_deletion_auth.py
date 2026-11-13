@@ -1,4 +1,4 @@
-"""Fresh coordinator PAT proof, retaining its original wall and monotonic lifetime."""
+"""Fresh coordinator identity and its independently bounded deletion-command proof."""
 
 import time
 from dataclasses import dataclass
@@ -7,7 +7,7 @@ from typing import Literal
 from uuid import UUID
 
 import httpx
-from pydantic import BaseModel, ConfigDict, Field, StrictStr, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, StrictStr, ValidationError, field_validator
 
 from project_workflow.config import get_settings
 from project_workflow.domain.identity_deletion import validate_issuer
@@ -15,6 +15,8 @@ from project_workflow.infrastructure.db.identity_deletion import OwnerError
 from project_workflow.infrastructure.namespace_auth import _root, unique_object
 from project_workflow.infrastructure.platform_auth import confirm_access
 from project_workflow.infrastructure.platform_namespace import is_personal_token
+
+_CONFIRMATION_SECONDS = 60
 
 
 class _Introspection(BaseModel):
@@ -24,12 +26,19 @@ class _Introspection(BaseModel):
     display_name: StrictStr
     scopes: list[StrictStr] = Field(max_length=100)
     observed_at: datetime
-    expires_at: datetime
+    expires_at: datetime | None
     # Current Auth always emits role; include_lifetime also emits subject_role.
     # Neither an absent kind nor a contradictory pair establishes authority.
     role: Literal["user", "admin", "service_account"]
     subject_role: Literal["user", "admin", "service_account"]
     application_access: dict[StrictStr, object] | None = None
+
+    @field_validator("expires_at", mode="before")
+    @classmethod
+    def expiry_is_timestamp_or_null(cls, value):
+        if value is not None and not isinstance(value, str):
+            raise ValueError("Invalid credential expiry")
+        return value
 
 
 @dataclass(frozen=True)
@@ -37,15 +46,21 @@ class Authority:
     issuer: str
     deadline: float
     observed_at: float
-    expires_at: float
+    expires_at: float | None
+
+    @property
+    def confirmation_expires_at(self) -> float:
+        """The existing command proof expires independently of its root credential."""
+        until = self.observed_at + _CONFIRMATION_SECONDS
+        return until if self.expires_at is None else min(until, self.expires_at)
 
     def current(self) -> bool:
         now = time.time()
-        return time.monotonic() < self.deadline and self.observed_at - 1 <= now < self.expires_at
+        return time.monotonic() < self.deadline and self.observed_at - 1 <= now < self.confirmation_expires_at
 
     def remaining(self) -> float:
         """Intersect the original clocks; querying the DB never renews this permit."""
-        return max(0.0, min(self.deadline - time.monotonic(), self.expires_at - time.time()))
+        return max(0.0, min(self.deadline - time.monotonic(), self.confirmation_expires_at - time.time()))
 
 
 async def authorize(authorization: str | None, overall_deadline: float) -> Authority:
@@ -90,11 +105,15 @@ async def authorize(authorization: str | None, overall_deadline: float) -> Autho
                 raise ValueError("Inconsistent canonical application principal")
         if (str(UUID(proof.sub)) not in registered or proof.subject_role != "service_account"
                 or "project-workflow:identity-lifecycle" not in proof.scopes
-                or proof.observed_at.tzinfo is None or proof.expires_at.tzinfo is None):
+                or proof.observed_at.tzinfo is None
+                or proof.expires_at is not None and proof.expires_at.tzinfo is None):
             raise OwnerError("identity_deletion_access_denied", 403)
-        observed, expires = proof.observed_at.timestamp(), proof.expires_at.timestamp()
-        authority = Authority(issuer, min(overall_deadline, started + expires - observed,
-                                          started + 60), observed, expires)
+        observed = proof.observed_at.timestamp()
+        expires = None if proof.expires_at is None else proof.expires_at.timestamp()
+        deadline = min(overall_deadline, started + _CONFIRMATION_SECONDS)
+        if expires is not None:
+            deadline = min(deadline, started + expires - observed)
+        authority = Authority(issuer, deadline, observed, expires)
         if not authority.current() or proof.observed_at > datetime.now(timezone.utc):
             raise OwnerError("identity_deletion_authority_expired", 401)
         return authority

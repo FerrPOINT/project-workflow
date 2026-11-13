@@ -71,7 +71,8 @@ def introspection():
             "observed_at": now.isoformat(), "expires_at": (now + timedelta(minutes=5)).isoformat()}
 
 
-@pytest.mark.parametrize("change,status", [({}, 200), ({"role": "admin", "subject_role": "admin"}, 403),
+@pytest.mark.parametrize("change,status", [({}, 200), ({"expires_at": None}, 200),
+    ({"role": "admin", "subject_role": "admin"}, 403),
     ({"role": "user", "subject_role": "user"}, 403),
     ({"role": "admin"}, 503), ({"subject_role": "admin"}, 503),
     ({"scopes": ["project-workflow:write"]}, 403), ({"sub": str(uuid4())}, 403),
@@ -160,15 +161,20 @@ def test_jwt_never_substitutes_and_redirect_is_not_followed(monkeypatch):
     assert rejected.value.status == 503 and len(calls) == 1
 
 
-def test_actual_router_private_contract_no_store_and_no_human_sso(monkeypatch):
+@pytest.mark.parametrize("persistent", [False, True])
+def test_actual_router_private_contract_no_store_and_no_human_sso(monkeypatch, persistent):
     from project_workflow.interfaces.ui.routes import identity_deletion_api as route
-    wire(monkeypatch, introspection())
+    payload = introspection()
+    if persistent:
+        payload["expires_at"] = None
+    wire(monkeypatch, payload)
     monkeypatch.setenv("AUTH_SESSION_SECRET", "fixture-signing-secret-32-characters-long")
     config.get_settings.cache_clear()
     effects = []
 
     def effect(action, request, authority):
         assert isinstance(authority, Authority) and authority.current()
+        assert (authority.expires_at is None) is persistent
         effects.append(action)
         return ReferenceSummary(request=request, revision=1, reference_count=0)
 
@@ -276,13 +282,15 @@ def test_owner_registration_preserves_configuration_administrator_dependencies()
     assert not any(dependency.call is require_administrator for dependency in owner_route.dependant.dependencies)
 
 
-def test_transaction_receipt_uses_original_remaining_after_database_anchor_response(monkeypatch):
+@pytest.mark.parametrize("source_remaining", [5.0, None])
+def test_transaction_receipt_uses_original_remaining_after_database_anchor_response(monkeypatch, source_remaining):
     from project_workflow.infrastructure.db.identity_deletion import _authorize_transaction
 
     clocks = {"monotonic": 100.0, "wall": datetime(2030, 1, 1, tzinfo=timezone.utc).timestamp()}
     monkeypatch.setattr(time, "monotonic", lambda: clocks["monotonic"])
     monkeypatch.setattr(time, "time", lambda: clocks["wall"])
-    proof = Authority(ISSUER, 110.0, clocks["wall"] - 1, clocks["wall"] + 5)
+    proof = Authority(ISSUER, 110.0, clocks["wall"] - 1,
+                      None if source_remaining is None else clocks["wall"] + source_remaining)
     anchor = datetime.fromtimestamp(clocks["wall"], timezone.utc)
     writes = []
 
@@ -299,10 +307,12 @@ def test_transaction_receipt_uses_original_remaining_after_database_anchor_respo
             writes.append((str(statement), parameters))
 
     _authorize_transaction(Connection(), proof)
-    assert writes[0][1]["until"] == anchor + timedelta(seconds=2)
+    remaining = 7.0 if source_remaining is None else 2.0
+    assert writes[0][1]["until"] == anchor + timedelta(seconds=remaining)
     assert writes[0][1]["id"] == writes[1][1]["id"]
     assert proof.deadline == 110.0
-    assert proof.remaining() == 2.0
+    assert proof.remaining() == remaining
+    assert proof.expires_at == (None if source_remaining is None else clocks["wall"] + 2)
 
 
 @pytest.mark.parametrize("variant", ["uppercase", "compact", "braces"])
@@ -330,3 +340,71 @@ def test_nil_subject_wire_forms_remain_invalid(subject):
     payload["identity"]["subject"] = subject
     with pytest.raises(ValidationError):
         DeletionRequest.model_validate(payload)
+
+
+@pytest.mark.parametrize("invalid", [False, 0, 1, {}, [], "", "not-a-date"])
+def test_optional_coordinator_expiry_rejects_malformed_values(monkeypatch, invalid):
+    calls = wire(monkeypatch, introspection() | {"expires_at": invalid})
+    with pytest.raises(OwnerError) as rejected:
+        asyncio.run(authorize("Bearer pdlc_pat_fixture", time.monotonic() + 9))
+    assert rejected.value.status == 503 and len(calls) == 1
+
+
+def test_optional_coordinator_expiry_is_required_on_the_wire(monkeypatch):
+    payload = introspection()
+    del payload["expires_at"]
+    calls = wire(monkeypatch, payload)
+    with pytest.raises(OwnerError) as rejected:
+        asyncio.run(authorize("Bearer pdlc_pat_fixture", time.monotonic() + 9))
+    assert rejected.value.status == 503 and len(calls) == 1
+
+
+@pytest.mark.parametrize("finite_seconds", [None, 30])
+def test_root_expiry_is_distinct_from_the_original_command_deadline(monkeypatch, finite_seconds):
+    from types import SimpleNamespace
+
+    from project_workflow.infrastructure import identity_deletion_auth as owner_auth
+
+    payload = introspection()
+    observed = datetime.fromisoformat(payload["observed_at"])
+    payload["expires_at"] = (None if finite_seconds is None else
+                             (observed + timedelta(seconds=finite_seconds)).isoformat())
+    wire(monkeypatch, payload)
+    clocks = {"monotonic": 100.0, "wall": observed.timestamp()}
+    monkeypatch.setattr(owner_auth, "time", SimpleNamespace(
+        monotonic=lambda: clocks["monotonic"], time=lambda: clocks["wall"]))
+    proof = asyncio.run(authorize("Bearer pdlc_pat_fixture", 190.0))
+    assert proof.expires_at == (None if finite_seconds is None else observed.timestamp() + finite_seconds)
+    assert proof.deadline == 100.0 + (60 if finite_seconds is None else finite_seconds)
+    clocks["monotonic"] += 31
+    clocks["wall"] += 31
+    assert proof.current() is (finite_seconds is None)
+    original = proof.deadline
+    clocks["monotonic"] = 161.0
+    assert not proof.current() and proof.remaining() == 0
+    assert proof.deadline == original
+
+
+@pytest.mark.parametrize("change", [{"sub": str(uuid4())}, {"scopes": ["project-workflow:write"]},
+                                    {"role": "user", "subject_role": "user"}])
+def test_persistent_coordinator_still_requires_registered_machine_scope(monkeypatch, change):
+    calls = wire(monkeypatch, introspection() | {"expires_at": None} | change)
+    with pytest.raises(OwnerError) as rejected:
+        asyncio.run(authorize("Bearer pdlc_pat_fixture", time.monotonic() + 9))
+    assert rejected.value.status == 403 and len(calls) == 1
+
+
+def test_revoked_persistent_coordinator_remains_unauthorized(monkeypatch):
+    calls = wire(monkeypatch, introspection() | {"expires_at": None}, status=401)
+    with pytest.raises(OwnerError) as rejected:
+        asyncio.run(authorize("Bearer pdlc_pat_fixture", time.monotonic() + 9))
+    assert rejected.value.status == 401 and len(calls) == 1
+
+
+def test_persistent_root_does_not_extend_a_stale_command_confirmation(monkeypatch):
+    payload = introspection() | {"expires_at": None}
+    payload["observed_at"] = (datetime.now(timezone.utc) - timedelta(seconds=61)).isoformat()
+    wire(monkeypatch, payload)
+    with pytest.raises(OwnerError) as rejected:
+        asyncio.run(authorize("Bearer pdlc_pat_fixture", time.monotonic() + 9))
+    assert rejected.value.status == 401
