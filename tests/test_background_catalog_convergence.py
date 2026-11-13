@@ -19,7 +19,7 @@ from project_workflow.infrastructure.db.session import (
 )
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 
-TARGET = "0033_background_catalog_convergence"
+TARGET = "0033_background_convergence"
 
 
 def snapshot(engine):

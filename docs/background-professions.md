@@ -200,7 +200,7 @@ PostgreSQL: 182 неизменённых PASS и два PASS после обно
 ## Интеграция с основной веткой, 2026-11-14
 
 Сохранены обе исходные миграции `0032_current_source_baseline` и
-`0032_current_source_defaults`. Новая `0033_background_catalog_convergence`
+`0032_current_source_defaults`. Новая `0033_background_convergence`
 объединяет их через штатный `scripts/init_db.py` / `ensure_migrated`.
 Это переход только вперёд: прежние строки, IDs, receipts и опубликованные
 оператором инструкции сохраняются. Поддерживаются целостные каталоги обеих

@@ -358,13 +358,13 @@ def _converge_background_catalog_history(connection: Connection, alembic_cfg: Co
     the equivalent parent, in the same transaction as the forward merge.
     """
     main = "0032_current_source_baseline"
-    if database_revisions(connection) == {"0033_background_catalog_convergence"}:
+    if database_revisions(connection) == {"0033_background_convergence"}:
         return
     if database_revisions(connection) == {"0032_current_source_defaults"}:
         from importlib import import_module
 
         convergence = import_module(
-            "project_workflow.infrastructure.db.migrations.versions.0033_background_catalog_convergence"
+            "project_workflow.infrastructure.db.migrations.versions.0033_background_convergence"
         )
         convergence.converge_catalog(connection)
     # Keep the accepted main cutover for older installations. Starting from
@@ -401,7 +401,7 @@ def run_alembic_command(
 
     def migrate(connection: Connection) -> None:
         alembic_cfg.attributes["connection"] = connection
-        if cmd == "upgrade" and revision in ("head", "0033_background_catalog_convergence"):
+        if cmd == "upgrade" and revision in ("head", "0033_background_convergence"):
             _converge_background_catalog_history(connection, alembic_cfg)
         getattr(command, cmd)(alembic_cfg, revision)
         if cmd == "downgrade" and revision == "base" and connection.dialect.name == "postgresql":

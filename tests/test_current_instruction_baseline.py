@@ -25,7 +25,7 @@ from tests.test_stage_start_catalog_cutover import snapshot
 PREVIOUS = "852e0647ad8645c9c6280b21c1595b9efa6ff87754d07df8dcc92bcb04f76381"
 PREVIOUS_REVISION = "0031_explicit_stage_start"
 TARGET = "d035a0ddb06436714b76e40bc8cb68084203011f53dd52436732367690940e85"
-TARGET_REVISION = "0033_background_catalog_convergence"
+TARGET_REVISION = "0033_background_convergence"
 
 
 @pytest.fixture

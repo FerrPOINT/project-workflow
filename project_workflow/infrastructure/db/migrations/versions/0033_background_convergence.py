@@ -10,7 +10,7 @@ from project_workflow.infrastructure.db.managed_catalog import ManagedMode, _per
 from project_workflow.infrastructure.db.session import DatabaseRecreateRequired, _metadata_is_current
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 
-revision = "0033_background_catalog_convergence"
+revision = "0033_background_convergence"
 down_revision = ("0032_current_source_baseline", "0032_current_source_defaults")
 branch_labels = None
 depends_on = None
