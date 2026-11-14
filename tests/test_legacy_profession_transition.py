@@ -222,26 +222,30 @@ def test_transition_refuses_customized_ambiguous_or_active_legacy_before_writes(
         engine.dispose()
 
 
+def assert_current_installation_unchanged(engine, monkeypatch):
+    run_alembic_command("upgrade", engine, "0032_current_source_baseline")
+    with SAUnitOfWork(engine) as uow:
+        binding = ensure_single_task_catalog(uow).bindings[0]
+        mode = binding.modes[0]
+        task = uow.tasks.create({"project_id": int(binding.namespace_id), "workflow_id": int(binding.workflow_id),
+            "mode_id": int(mode.mode_id), "task_key": "CURRENT-1", "status": "active",
+            "current_phase_id": int(mode.phase_ids[0])})
+        uow.record_step(task_id=task, phase_id=int(mode.phase_ids[0]), verdict="partial",
+            worker_report="Current immutable accepted history", covered_item_ids=[], missing_item_ids=[],
+            blocker_messages=[], evaluation_snapshot={}, supervisor_response={})
+    before = snapshot(engine)
+    monkeypatch.setattr(init_db, "get_engine", lambda _url: engine)
+    assert init_db.main() == 0
+    after = snapshot(engine)
+    assert {name: rows for name, rows in after.items() if name != "alembic_version"} == {
+        name: rows for name, rows in before.items() if name != "alembic_version"}
+    assert init_db.main() == 0
+    assert snapshot(engine) == after
+
+
 def test_existing_current_pdlc_professions_and_active_history_are_unchanged(tmp_path, monkeypatch):
     engine = sa.create_engine(f"sqlite:///{tmp_path / 'current.db'}")
     try:
-        run_alembic_command("upgrade", engine, "0032_current_source_baseline")
-        with SAUnitOfWork(engine) as uow:
-            binding = ensure_single_task_catalog(uow).bindings[0]
-            mode = binding.modes[0]
-            task = uow.tasks.create({"project_id": int(binding.namespace_id), "workflow_id": int(binding.workflow_id),
-                "mode_id": int(mode.mode_id), "task_key": "CURRENT-1", "status": "active",
-                "current_phase_id": int(mode.phase_ids[0])})
-            uow.record_step(task_id=task, phase_id=int(mode.phase_ids[0]), verdict="partial",
-                worker_report="Current immutable accepted history", covered_item_ids=[], missing_item_ids=[],
-                blocker_messages=[], evaluation_snapshot={}, supervisor_response={})
-        before = snapshot(engine)
-        monkeypatch.setattr(init_db, "get_engine", lambda _url: engine)
-        assert init_db.main() == 0
-        after = snapshot(engine)
-        assert {name: rows for name, rows in after.items() if name != "alembic_version"} == {
-            name: rows for name, rows in before.items() if name != "alembic_version"}
-        assert init_db.main() == 0
-        assert snapshot(engine) == after
+        assert_current_installation_unchanged(engine, monkeypatch)
     finally:
         engine.dispose()
