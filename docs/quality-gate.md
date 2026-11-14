@@ -399,10 +399,12 @@ one-path binding snapshots byte-for-byte after newline normalization; the
 binding exporter removed one extra terminal newline. The full generated schema
 contains 47 paths. All eleven committed Python Playwright browser cases passed
 on `c3a973b`, with zero skips and unchanged source, using controlled HTTP/SQLite
-peers and Chromium 1208. One POSIX provenance case remains open.
+peers and Chromium 1208. The POSIX executable-mode case also passed on Linux
+on `e8de52a`, using an exact Git export, the unchanged Base QA tools recipe and
+disposable scratch. All fifteen original non-PG skips now have passing receipts.
 
 See [compact source evidence](evidence/background-v1-source-20261114.json).
-Recorded skips, exact-artifact installation and real-agent acceptance remain
+Exact-artifact installation and real-agent acceptance remain
 separate checks; these controlled evaluator/SQLite tests do not prove them.
 
 ## References

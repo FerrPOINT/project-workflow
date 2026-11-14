@@ -58,10 +58,10 @@
     "workflow-package-f70d497b1b",
     "workflow-27a2dd28a2",
     "workflow-schema-cbe0656733",
-    "workflow-browser-382bb5a9a1"
+    "workflow-browser-382bb5a9a1",
+    "workflow-posix-d01b1916b4"
   ],
   "remaining": [
-    "One POSIX executable-mode case skipped on Windows",
     "Final artifacts, isolated Compose/Kubernetes installation and real-agent acceptance"
   ],
   "real_pinned_package": {
@@ -87,7 +87,7 @@
     },
     "posix_git_mode": {
       "count": 1,
-      "state": "open, skipped on Windows"
+      "state": "passed separately on Linux: one case, zero skips, exact Git export and disposable scratch"
     }
   },
   "application_clock_postgres": {
@@ -140,6 +140,29 @@
     "receipt_id": "workflow-browser-382bb5a9a1",
     "playwright": "1.58.0",
     "chromium_revision": "1208",
+    "live_installation": false
+  },
+  "posix_provenance": {
+    "source": "e8de52a4d072a2419eabf6854a70d115cbea699c",
+    "source_archive_sha256": "4459851f80c2d40e87fec81edb8e951a5fb2da49c943a202ea82ce206f16dbd4",
+    "tools_recipe_base": "ee9463317e4e7c8a78d053231fa2811bf5174d2d",
+    "tools_recipe_sha256": "210a41ecc0a4dee6e661d5143278babd2875780d4cde19443114dc908b962245",
+    "node_parent": "sha256:26bef4bdfbf2c584e5f0d110c308237a4105b7280f3b74396080701d6a441631",
+    "scope": "One committed POSIX provenance regression; no application runtime or model",
+    "build_exit_code": 0,
+    "tools_image": "sha256:e9722b709f484908fef44e891354711395cd342b893f48ced3591c8100521f22",
+    "exit_code": 0,
+    "counts": {
+      "tests": 1,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "source_unchanged": true,
+    "qualified": true,
+    "owned_resources_cleaned": true,
+    "receipt_id": "workflow-posix-d01b1916b4",
+    "pytest_cache_warning": "Read-only source prevents .pytest_cache creation; test and all assertions passed",
     "live_installation": false
   }
 }
