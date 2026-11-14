@@ -7,7 +7,9 @@ from uuid import uuid4
 
 import pytest
 from alembic.autogenerate import compare_metadata
+from alembic.config import Config
 from alembic.migration import MigrationContext
+from alembic.script import ScriptDirectory
 from sqlalchemy import MetaData, create_engine, inspect, select, text
 from sqlalchemy.exc import IntegrityError, OperationalError, SQLAlchemyError
 from sqlalchemy.pool import NullPool, StaticPool
@@ -111,8 +113,13 @@ def test_repository_has_one_linear_migration_head():
         "0030_analyst_baseline_ledger.py",
         "0031_explicit_stage_start.py",
         "0032_current_source_baseline.py",
+        "0033_profession_transition.py",
     ]
-    assert migration_head() == "0032_current_source_baseline"
+    assert migration_head() == "0033_profession_transition"
+    migration_config = Config()
+    migration_config.set_main_option("script_location", str(versions.parent))
+    revisions = ScriptDirectory.from_config(migration_config).walk_revisions()
+    assert all(0 < len(item.revision) <= 32 for item in revisions), "Alembic version_num is VARCHAR(32)"
 
 
 def test_pm_upgrade_preserves_existing_resource_contexts(tmp_path):

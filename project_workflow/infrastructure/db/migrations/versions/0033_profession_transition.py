@@ -5,7 +5,7 @@ from alembic import op
 from project_workflow.infrastructure.db.legacy_profession_transition import adopt_legacy_professions
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 
-revision = "0033_legacy_profession_transition"
+revision = "0033_profession_transition"
 down_revision = "0032_current_source_baseline"
 branch_labels = None
 depends_on = None

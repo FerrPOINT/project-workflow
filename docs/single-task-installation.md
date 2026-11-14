@@ -84,7 +84,7 @@ Installed binding не является runtime admission или Tracker transit
 
 ## Переход С Прежнего Base-Каталога
 
-Миграция `0033_legacy_profession_transition` выполняется штатным `scripts.init_db`
+Миграция `0033_profession_transition` выполняется штатным `scripts.init_db`
 в общей транзакции миграции и bootstrap. Для точного опубликованного Base-v4
 (`hermes-sdlc:*`, active catalog4) она сохраняет IDs существующих профессий,
 добавляет current workflows с sealed baseline и переключает на них default
