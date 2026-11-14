@@ -33,15 +33,15 @@ function Initialize-SharedCli {
 }
 
 function Invoke-Test {
-    Invoke-Checked ($Uv + @("pytest", "-q", "--timeout=60"))
+    Invoke-Checked ($Uv + @("python", "-B", "-m", "scripts.run_pytest", "-q", "--timeout=60"))
 }
 
 function Invoke-TestIntegration {
-    Invoke-Checked ($Uv + @("pytest", "-q", "-m", "integration", "--timeout=120"))
+    Invoke-Checked ($Uv + @("python", "-B", "-m", "scripts.run_pytest", "-q", "-m", "integration", "--timeout=120"))
 }
 
 function Invoke-Coverage {
-    Invoke-Checked ($Uv + @("pytest", "--cov=project_workflow", "--cov-report=term", "--timeout=60"))
+    Invoke-Checked ($Uv + @("python", "-B", "-m", "scripts.run_pytest", "--cov=project_workflow", "--cov-report=term", "--timeout=60"))
 }
 
 function Invoke-Lint {
@@ -52,7 +52,7 @@ function Invoke-Lint {
 function Invoke-Warnings {
     Invoke-Checked (
         $Uv + @(
-            "pytest",
+            "python", "-B", "-m", "scripts.run_pytest",
             "-q",
             "--timeout=60",
             "-W",
@@ -79,9 +79,8 @@ switch ($Target) {
     "lint" { Invoke-Lint }
     "quality" {
         Invoke-Checked @("python", "-B", "scripts/check_repository_hygiene.py", "--index")
-        Invoke-Test
-        Invoke-TestIntegration
         Invoke-Coverage
+        Invoke-TestIntegration
         Invoke-Lint
     }
     "warnings" { Invoke-Warnings }

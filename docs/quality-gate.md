@@ -6,6 +6,26 @@ GitHub Actions удалены из репозитория. Все обязате
 
 ## Базовый gate
 
+Штатные Make и PowerShell entrypoints запускают `python -B -m scripts.run_pytest`.
+Каждый запуск владеет отдельным коротким scratch-каталогом и квитанцией в
+`.local/pytest-runs/<operation>/result.json`. После штатного завершения scratch
+удаляется, а для отказа сохраняется JUnit-диагностика до 4 MiB. При потере процесса
+квитанция остаётся `active` вместе с fixtures: это неизвестный исход, а не успех
+и не разрешение удалять их вслепую. В Base-managed операции scratch находится
+в её проверенном `TMPDIR`; внешние цели ссылок не изменяются.
+Ошибка уборки даёт ненулевой `exit_code` и `cleanup: recovery_required`; исходный
+результат pytest хранится отдельно в `pytest_exit_code`.
+
+`quality` исполняет non-PG tests один раз с coverage и прежним порогом 94%,
+затем отдельный PostgreSQL gate и lint. Отдельные `test`, `coverage` и `warnings`
+остаются доступны; повтор того же полного non-PG набора ради coverage не нужен.
+Прямой scoped запуск через тот же runner:
+
+```bash
+uv run --isolated --with-requirements constraints.txt --all-extras python -B -m scripts.run_pytest -q tests/test_configured_cli_transport.py --timeout=60
+```
+
+
 Перед тестами проверить экспорт общего namespace из чистого sibling Base,
 закреплённого в `.base-revision`:
 
