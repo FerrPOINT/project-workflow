@@ -1,0 +1,168 @@
+{
+  "schema": "workflow-background-source-qualification/v1",
+  "date": "2026-11-14",
+  "baseline_commit": "24aad5dc35e68e6ffaa2780148eaf88e125c787f",
+  "unchanged_production_tree": "bf66b6eba109bc9575374e20f85f4b1376ac5def",
+  "python": "3.12",
+  "cli_sdk": "25b0b2aafaa9feaa854ca86f11043ff825842229",
+  "baseline": {
+    "background_catalog_postgres": {
+      "passed": 9
+    },
+    "complete_postgres": {
+      "passed": 217,
+      "skipped": 1,
+      "missing_input": "WORKFLOW_APPLICATION_CLOCK_TEST_URL for request_clock_fixture"
+    },
+    "non_postgres": {
+      "passed": 5003,
+      "failed": 4,
+      "skipped": 15,
+      "coverage_percent": 93.90252285694645
+    },
+    "ruff": "PASS",
+    "mypy": {
+      "result": "PASS",
+      "files": 185
+    }
+  },
+  "repair": {
+    "scope": "Tests only; production and original migrations unchanged",
+    "passed": 36,
+    "new_background_negative_cases": 21,
+    "test_lf_sha256": {
+      "tests/test_background_execution.py": "190d1480491cc65ff6c6850791f1735bba789df8a9e2024bd7252cdf134548a0",
+      "tests/test_profession_execution_membership_migration.py": "02767434c909a849449e2decea5ae6d7862eca89df5ec72aefb88e473eda9daa",
+      "tests/test_retained_pm_migrations.py": "c82332cdf0f2589bd8ea5c15789466564c7a476625a4e7c5a5245a7808188171",
+      "tests/test_session_and_templates.py": "db729355340567f1b77d739c55e695b12a97d0505d8947b9b76a50f5479ee6d1",
+      "tests/test_small_modules.py": "1bd0f43eeec3f8b4f565c3e4f2c0f43b6f923601cb8e141b9033cc39b9cf3e31"
+    },
+    "non_postgres_combined_coverage": {
+      "covered_lines": 13675,
+      "num_statements": 14547,
+      "percent_covered": 94.00563690107926,
+      "percent_covered_display": "94.0056",
+      "missing_lines": 872,
+      "excluded_lines": 15,
+      "percent_statements_covered": 94.00563690107926,
+      "percent_statements_covered_display": "94.0056"
+    },
+    "coverage_threshold_percent": 94,
+    "coverage_exclusions_changed": false,
+    "source_unchanged_during_run": true,
+    "ruff": "PASS"
+  },
+  "receipt_ids": [
+    "workflow-6ba6c9b0dd",
+    "workflow-delta-6a538e0344",
+    "workflow-package-f70d497b1b",
+    "workflow-27a2dd28a2",
+    "workflow-schema-cbe0656733",
+    "workflow-browser-382bb5a9a1",
+    "workflow-posix-d01b1916b4"
+  ],
+  "remaining": [
+    "Final artifacts, isolated Compose/Kubernetes installation and real-agent acceptance"
+  ],
+  "real_pinned_package": {
+    "passed": 3,
+    "receipt_id": "workflow-package-f70d497b1b",
+    "installed_runtime": false,
+    "auth_http": "controlled peer",
+    "pins": [
+      "4b9b4c9297a13fb28a6ba2039af2f7cb719f2f58",
+      "6e1d190ecd15b772b1066c472f864b8becb3f97a",
+      "4e5647d3a3015c26be8f5a390c4d5537d1d10d02"
+    ],
+    "preparation": "agent-skills directory; exact missing package blobs materialized in existing partial Git object cache without checkout/index changes"
+  },
+  "baseline_skip_classification": {
+    "real_pinned_package": {
+      "count": 3,
+      "state": "passed separately"
+    },
+    "python_playwright": {
+      "count": 11,
+      "state": "passed separately: eleven cases, zero skips, controlled HTTP/SQLite"
+    },
+    "posix_git_mode": {
+      "count": 1,
+      "state": "passed separately on Linux: one case, zero skips, exact Git export and disposable scratch"
+    }
+  },
+  "application_clock_postgres": {
+    "passed": 1,
+    "source_commit": "b9564acd0db1090f3341de89a6df78e3e4a14df2",
+    "receipt_id": "workflow-27a2dd28a2",
+    "source_unchanged": true,
+    "owned_postgres_cleaned": true
+  },
+  "composed_postgres": {
+    "passed": 218,
+    "skipped": 0,
+    "scope": "217 complete baseline cases and the missing application-clock case; unchanged production tree; nine catalog cases are included, not additional"
+  },
+  "generated_api": {
+    "receipt_id": "workflow-schema-cbe0656733",
+    "generated_from_actual_models": true,
+    "source_cli_sdk": "25b0b2aafaa9feaa854ca86f11043ff825842229",
+    "tracked_snapshots": {
+      "runtime": {
+        "sha256": "67b170cbb2e36e9b15f867050ec6866d47f9ef12ca85f7fc56f0650c1478e088",
+        "paths": 7,
+        "semantic_matches_tracked": true,
+        "normalized_bytes_match": true
+      },
+      "base-binding": {
+        "sha256": "aabc85dcb2625036ea5d2137834811a5d796ee488af8016e7dd1a7c97ac63a3b",
+        "paths": 1,
+        "semantic_matches_tracked": true,
+        "normalized_bytes_match": true
+      }
+    },
+    "full_paths": 47,
+    "full_schema_sha256": "51733595525d3eb59529a8ec26361a1879273eea521d81ce54c5cfcae600393f",
+    "base_binding_change": "Actual exporter normalized the terminal newline only; parsed model content is unchanged"
+  },
+  "automated_browser": {
+    "sha": "c3a973beb148464fa49e76493f4bca4e9efcf46e",
+    "scope": "Committed automated browser tests; controlled HTTP/SQLite, not live installation",
+    "seconds": 43.3,
+    "exit_code": 0,
+    "counts": {
+      "tests": 11,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "source_unchanged": true,
+    "qualified": true,
+    "receipt_id": "workflow-browser-382bb5a9a1",
+    "playwright": "1.58.0",
+    "chromium_revision": "1208",
+    "live_installation": false
+  },
+  "posix_provenance": {
+    "source": "e8de52a4d072a2419eabf6854a70d115cbea699c",
+    "source_archive_sha256": "4459851f80c2d40e87fec81edb8e951a5fb2da49c943a202ea82ce206f16dbd4",
+    "tools_recipe_base": "ee9463317e4e7c8a78d053231fa2811bf5174d2d",
+    "tools_recipe_sha256": "210a41ecc0a4dee6e661d5143278babd2875780d4cde19443114dc908b962245",
+    "node_parent": "sha256:26bef4bdfbf2c584e5f0d110c308237a4105b7280f3b74396080701d6a441631",
+    "scope": "One committed POSIX provenance regression; no application runtime or model",
+    "build_exit_code": 0,
+    "tools_image": "sha256:e9722b709f484908fef44e891354711395cd342b893f48ced3591c8100521f22",
+    "exit_code": 0,
+    "counts": {
+      "tests": 1,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "source_unchanged": true,
+    "qualified": true,
+    "owned_resources_cleaned": true,
+    "receipt_id": "workflow-posix-d01b1916b4",
+    "pytest_cache_warning": "Read-only source prevents .pytest_cache creation; test and all assertions passed",
+    "live_installation": false
+  }
+}

@@ -76,7 +76,7 @@ class ManagedMode(_CatalogModel):
     key: str
     name: str
     mode_order: int = Field(gt=0)
-    execution_scopes: list[Literal["business", "delivery", "aggregate"]] = Field(min_length=1)
+    execution_scopes: list[Literal["business", "delivery", "aggregate", "background"]] = Field(min_length=1)
     phases: list[_SeedPhase] = Field(min_length=1)
 
     @field_validator("key", "name")
@@ -565,7 +565,8 @@ def _persist_mode(
     mode: ManagedMode,
     catalog_version: int,
 ) -> None:
-    tech_policy = "forbidden" if role_key in {"project_manager", "analyst", "architect"} else "required"
+    tech_policy = ("forbidden" if role_key in {"project_manager", "analyst", "architect", "bug_searcher", "refactorer"}
+                   else "required")
     mode_id = uow.workflows.create_mode(
         {
             "workflow_id": workflow_id,
@@ -758,7 +759,8 @@ def _assert_existing_workflow(
             mode.mode_order,
             expected.role_key,
             tuple(mode.execution_scopes or []),
-            "forbidden" if expected.role_key in {"project_manager", "analyst", "architect"} else "required",
+            "forbidden" if expected.role_key in {
+                "project_manager", "analyst", "architect", "bug_searcher", "refactorer"} else "required",
         )
         for mode in expected.modes
     ]

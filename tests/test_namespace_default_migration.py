@@ -29,15 +29,23 @@ def test_migration_entrypoint_creates_current_namespace_defaults_and_is_repeatab
                     "SELECT p.id,p.cli_command,p.workflow_id,w.key,w.name "
                     "FROM projects p JOIN workflows w ON w.id=p.workflow_id ORDER BY p.id"
                 ))]
-                assert len(before) == 7
-                assert len({row[2] for row in before}) == 7
+                assert len(before) == 9
+                assert len({row[2] for row in before}) == 9
                 assert all(row[4] == "Дефолтный" for row in before)
+                single_task_rows = [row for row in before if row[3].startswith("single-task-v1:")]
+                assert len(single_task_rows) == 7
                 assert all(row[1] == "workflow-single-task-" + row[3].split(":", 1)[1].replace("_", "-")
-                           for row in before)
+                           for row in single_task_rows)
+                assert {(row[1], row[3]) for row in before if row not in single_task_rows} == {
+                    ("workflow-bug_searcher", "fleet:background:bug_searcher"),
+                    ("workflow-refactorer", "fleet:background:refactorer"),
+                }
                 assert connection.execute(text("SELECT count(*) FROM phases")).scalar_one() > 0
             with SAUnitOfWork(engine) as uow:
                 installation = observe_installation(uow)
-                assert {int(item.namespace_id) for item in installation.bindings} == {row[0] for row in before}
+                assert {int(item.namespace_id) for item in installation.bindings} == {
+                    row[0] for row in single_task_rows
+                }
             assert main() == 0
             with engine.connect() as connection:
                 assert [tuple(row) for row in connection.execute(text(

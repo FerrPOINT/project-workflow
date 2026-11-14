@@ -8,6 +8,10 @@ let workflowReadRevision = 0;
 let workflowCommittedUrl = location.pathname + location.search + location.hash;
 const workflowInitialRole = config.canAdminister;
 function initializeWorkflowPhases(root=document){
+{% if can_administer %}
+  const catalog=backgroundCatalogState();
+  if(catalog)backgroundCatalogControls(catalog,catalog.unknown?'Есть публикация с неизвестным результатом. Сверьте исходную операцию.':null);
+{% endif %}
   window.PdlcBaseUI.initMenus?.(root);
   root.querySelectorAll('select[data-base-choice]').forEach(control=>window.PdlcChoice?.initChoice(control));
   root.querySelectorAll('textarea[data-base-autosize]').forEach(control=>window.PdlcTextarea?.initTextareaAutosize(control));

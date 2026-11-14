@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -68,16 +68,21 @@ class TestSessionSQLiteBranches:
         fake_conn.cursor.side_effect = AttributeError("no cursor")
         _set_sqlite_pragma(fake_conn, MagicMock(dialect=MagicMock(name="sqlite")))
 
-    def test_run_alembic_command(self, tmp_path):
+    def test_run_alembic_command_keeps_the_callers_connection_transaction(self, tmp_path):
         from sqlalchemy import create_engine
 
-        from project_workflow.infrastructure.db.session import run_alembic_command
+        from project_workflow.infrastructure.db.session import database_revisions, migration_head, run_alembic_command
 
         engine = create_engine(f"sqlite:///{tmp_path}/alembic.db")
         try:
-            with patch("project_workflow.infrastructure.db.session.command") as mock_cmd:
-                run_alembic_command("upgrade", engine)
-                mock_cmd.upgrade.assert_called_once()
+            # SQLite's historical batch DDL suspends foreign keys before the
+            # transaction. The new data-only join can use its caller's connection.
+            run_alembic_command("upgrade", engine, "0032_current_source_baseline")
+            with engine.begin() as connection:
+                run_alembic_command("upgrade", connection)
+                assert connection.in_transaction()
+                assert database_revisions(connection) == {migration_head()}
+            assert database_revisions(engine) == {migration_head()}
         finally:
             engine.dispose()
 

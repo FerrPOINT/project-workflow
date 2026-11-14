@@ -53,6 +53,7 @@ from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from project_workflow.infrastructure.llm import OpenAICompatibleClient
 from project_workflow.interfaces.ui.app import create_app
 from tests._report_helpers import report_json
+from tests.test_background_catalog_convergence import HISTORIES as BACKGROUND_HISTORIES
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -303,7 +304,7 @@ def test_pm_ownership_catalog_lock_order_and_incomplete_schema(pg_url, winner):
     assert not schema_is_ready(engine)
     with pytest.raises(DatabaseRecreateRequired):
         ensure_migrated(engine)
-    assert database_revisions(engine) == {"0032_current_source_baseline"}
+    assert database_revisions(engine) == {"0033_background_convergence"}
 
 
 @pytest.mark.integration
@@ -535,7 +536,7 @@ class TestPostgresInitialMigration:
             version = conn.execute(
                 text("SELECT version_num FROM project_workflow.alembic_version")
             ).scalar_one()
-        assert version == migration_head() == "0032_current_source_baseline"
+        assert version == migration_head() == "0033_background_convergence"
         assert schema_is_ready(engine) is True
 
     def test_managed_bootstrap_serializes_with_public_catalog_creation(self, pg_url):
@@ -1207,6 +1208,7 @@ class TestPostgresInitialMigration:
         engine = get_engine(pg_url)
         with SAUnitOfWork(engine) as uow:
             installation = observe_installation(uow)
+        assert installation.namespaces == installation.workflows == 7
         with engine.connect() as conn:
             counts = {
                 table: conn.execute(
@@ -1215,9 +1217,21 @@ class TestPostgresInitialMigration:
                 for table in ("workflows", "projects", "workflow_modes", "phases", "tasks")
             }
         assert counts == {
-            "workflows": installation.workflows, "projects": installation.namespaces,
-            "workflow_modes": installation.modes, "phases": installation.phases, "tasks": 0,
+            "workflows": installation.workflows + 2, "projects": installation.namespaces + 2,
+            # The editable v1 rows remain history; each background workflow has
+            # one new immutable published baseline selected for future runs.
+            "workflow_modes": installation.modes + 4, "phases": installation.phases + 20, "tasks": 0,
         }
+        with engine.connect() as conn:
+            active_modes = conn.execute(text("SELECT count(*) FROM project_workflow.workflow_modes m "
+                "JOIN project_workflow.workflows w ON w.id=m.workflow_id "
+                "WHERE m.catalog_version=w.active_catalog_version")).scalar_one()
+            active_phases = conn.execute(text("SELECT count(*) FROM project_workflow.phases p "
+                "JOIN project_workflow.workflow_modes m ON m.id=p.mode_id "
+                "JOIN project_workflow.workflows w ON w.id=m.workflow_id "
+                "WHERE m.catalog_version=w.active_catalog_version")).scalar_one()
+        assert active_modes == installation.modes + 2
+        assert active_phases == installation.phases + 10
 
     def test_two_concurrent_init_processes_are_idempotent(self, pg_url):
         env = os.environ.copy()
@@ -1238,7 +1252,8 @@ class TestPostgresInitialMigration:
         uow = SAUnitOfWork(pg_url)
         assert {project.cli_command for project in uow.projects.list()} == {
             f"workflow-single-task-{role}" for role in (
-                "project-manager", "analyst", "architect", "developer", "reviewer", "tester", "devops")}
+                "project-manager", "analyst", "architect", "developer", "reviewer", "tester", "devops")
+        } | {"workflow-bug_searcher", "workflow-refactorer"}
         assert len([workflow for workflow in uow.workflows.list() if workflow.is_default]) == 1
         uow.close()
 
@@ -2395,3 +2410,28 @@ def test_retired_phase_edges_do_not_block_deletion_and_rollback_is_atomic(pg_url
             service.delete_phase(second["id"])
         assert service.get_phase(second["id"]) is not None
         assert service.get_phase(second["id"])["rollback_target_phase_id"] == third["id"]
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("history", BACKGROUND_HISTORIES)
+def test_released_background_and_main_catalogs_converge_on_postgres(pg_url, monkeypatch, history):
+    from tests.test_background_catalog_convergence import (
+        published_catalog_history,
+        test_convergence_preserves_both_published_catalog_histories,
+    )
+
+    with published_catalog_history(get_engine(pg_url), monkeypatch, history) as predecessor:
+        test_convergence_preserves_both_published_catalog_histories(predecessor)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("history", BACKGROUND_HISTORIES)
+@pytest.mark.parametrize("invalid", ["schema", "publication"])
+def test_invalid_background_catalog_convergence_rolls_back_on_postgres(pg_url, monkeypatch, history, invalid):
+    from tests.test_background_catalog_convergence import (
+        published_catalog_history,
+        test_convergence_refuses_incompatible_schema_or_publication_without_stamping,
+    )
+
+    with published_catalog_history(get_engine(pg_url), monkeypatch, history) as predecessor:
+        test_convergence_refuses_incompatible_schema_or_publication_without_stamping(predecessor, invalid)

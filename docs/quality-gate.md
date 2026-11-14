@@ -1,5 +1,34 @@
 # Quality Gate
 
+## Дефолты фоновых профессий — 2026-11-09
+
+Холодный platform bootstrap теперь создаёт девять профессий: семь прежних
+стадийных и две фоновые. Только семь входят в sealed single-task installation;
+её bindings, восемь режимов и 33 фазы не расширяются фоновыми стадиями.
+В пустой БД активный каталог содержит девять workflow, десять режимов, 43 фазы
+и не создаёт задач. Версионирование фоновых workflow сохраняет первые редактируемые
+строки как историю и создаёт неизменяемую опубликованную редакцию: физически
+хранятся 12 режимов и 53 фазы. Исторические результаты первоначальных дефолтов
+относятся к прежней модели без публикаций; их evidence сохраняется.
+Standalone по-прежнему не заполняется неявно.
+Регрессии повторной/конкурентной инициализации проверяют оба inventory отдельно.
+
+Git-экспорт для QA обязан сохранять байты и Unix modes: на Windows использовать
+`git -c core.autocrlf=false archive`, извлекать tar в Linux либо восстанавливать
+исходные executable modes. Синтетические Git hooks требуют исполняемого scratch.
+Два архивных отчёта v18 записаны с CRLF и закреплены их исходными raw SHA-256;
+точечные `-text` attributes сохраняют эти байты. Значения хешей и JSON-содержание
+не пересчитываются ради проверки.
+
+Ошибка глубины JSON проверяется управляемым `RecursionError` декодера, аналогично
+ошибке разбора provider envelope: поддерживаемая глубина зависит от сборки Python.
+Проверки технического результата, отсутствия продвижения, единственного вызова и
+отсутствия повторов сохранены. Предметный лимит глубины или длины не добавляется.
+
+Основной gate coverage остаётся 94%. Сбор coverage у целевой регрессии сам по себе
+не является прохождением общего порога; объединять можно только datasets с теми
+же исполняемыми исходниками и отдельно проверять общий отчёт.
+
 Этот файл фиксирует обязательный локальный quality gate для `project-workflow`.
 GitHub Actions удалены из репозитория. Все обязательные проверки выполняются
 локально штатными командами ниже; workflows и обновления Actions не добавляются.
@@ -336,8 +365,47 @@ python scripts/install_namespace_clis.py --bin-dir <dir>
 
 Скрипт читает неймспейсы из PostgreSQL, создаёт wrapper-команды из
 `cli_command`, выставляет `PROJECT_WORKFLOW_NAMESPACE_ID=<id>` и вызывает
-только `project-workflow step/history`. `project-workflow` не получает новых
-публичных команд: wrapper names являются пользовательской CLI-командой нужного неймспейса.
+только `project-workflow step/history`. Этот генератор не создаёт отдельные
+подкоманды для каждой профессии: wrapper names являются пользовательскими
+ярлыками существующих команд в нужном неймспейсе.
+
+## Background Integration Qualification, 2026-11-14
+
+Production tree `bf66b6eba109bc9575374e20f85f4b1376ac5def` is unchanged from
+`24aad5d`. Its owned PostgreSQL baseline passed 217 cases, including the nine
+background catalog cases. The missing application-clock case subsequently
+passed on `b9564ac` with its own `request_clock_fixture`: 218 cases qualified
+in total, with unchanged production inputs and verified owned cleanup.
+Ruff and mypy pass.
+
+The original non-PostgreSQL run records 5003 passed, four failed and 15 skipped,
+with 93.9025% coverage. Test-only corrections retain the current forward-only
+barrier and verify its unchanged schema/history. Programmatic migration tests
+now exercise the actual Engine and caller-owned Connection instead of counting
+internal Alembic calls. The Connection case prepares historical SQLite batch
+DDL through the Engine before testing the new data-only join.
+
+The four repaired cases, 11 existing background cases and 21 new negative cases
+pass together: 36 passed. The new cases check foreign identity/publication,
+changed custody, stale versions, missing conclusions, invalid history selectors
+and canonical operation keys, with unchanged stored rows and valid neighboring
+reads. Appending this scoped non-PostgreSQL run to the unchanged-production
+baseline yields 13675/14547 statements, **94.0056%**, above the unchanged 94%
+gate without new exclusions. This is composite evidence, not a new full run.
+
+Three real pinned Base package cases also pass with controlled HTTP/SQLite
+peers. Actual OpenAPI exporters match the tracked seven-path runtime and
+one-path binding snapshots byte-for-byte after newline normalization; the
+binding exporter removed one extra terminal newline. The full generated schema
+contains 47 paths. All eleven committed Python Playwright browser cases passed
+on `c3a973b`, with zero skips and unchanged source, using controlled HTTP/SQLite
+peers and Chromium 1208. The POSIX executable-mode case also passed on Linux
+on `e8de52a`, using an exact Git export, the unchanged Base QA tools recipe and
+disposable scratch. All fifteen original non-PG skips now have passing receipts.
+
+See [compact source evidence](evidence/background-v1-source-20261114.json).
+Exact-artifact installation and real-agent acceptance remain
+separate checks; these controlled evaluator/SQLite tests do not prove them.
 
 ## References
 

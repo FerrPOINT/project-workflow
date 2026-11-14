@@ -5,7 +5,7 @@ import pytest
 from sqlalchemy import create_engine, delete, inspect, select
 
 from project_workflow.infrastructure.db.models import ProfessionWorkflow
-from project_workflow.infrastructure.db.session import ensure_migrated, run_alembic_command
+from project_workflow.infrastructure.db.session import database_revisions, ensure_migrated, run_alembic_command
 from project_workflow.infrastructure.db.single_task_catalog import ensure_single_task_catalog
 from project_workflow.infrastructure.db.uow import SAUnitOfWork
 from tests._historical_catalog import historical_catalog
@@ -19,7 +19,13 @@ def test_fresh_database_tasks_keep_independent_profession_and_workflow_constrain
         assert not any(k["referred_table"] == "profession_workflows" for k in keys)
         assert any(k["referred_table"] == "projects" and k["constrained_columns"] == ["project_id"] for k in keys)
         assert any(k["referred_table"] == "workflows" for k in keys)
-        run_alembic_command("downgrade", engine, "0020_configured_cli_catalog")
+        revisions = database_revisions(engine)
+        with pytest.raises(RuntimeError, match="Configured catalog is forward-only"):
+            run_alembic_command("downgrade", engine, "0020_configured_cli_catalog")
+        assert database_revisions(engine) == revisions
+        assert inspect(engine).get_foreign_keys("tasks") == keys
+        with engine.connect() as connection:
+            assert connection.exec_driver_sql("PRAGMA foreign_keys").scalar_one() == 1
         ensure_migrated(engine)
     finally:
         engine.dispose()

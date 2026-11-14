@@ -149,7 +149,8 @@ def _effective_phase_view(phase: dict[str, Any], namespace_id: int | None) -> di
 
 def _pm_workflow_write_error(workflow_id: int) -> JSONResponse | None:
     workflow = _app_state.get_uow().workflows.get_by_id(workflow_id)
-    if workflow is not None and isinstance(workflow.key, str) and workflow.key.startswith("single-task-v1:"):
+    if (workflow is not None and isinstance(workflow.key, str)
+            and workflow.key.startswith(("single-task-v1:", "fleet:background:"))):
         # Refuse even if the catalog already drifted; a raw save is not a publisher.
         message = ("Configured PM catalog is historical/read-only" if workflow.key == "single-task-v1:project_manager"
                    else "Configured catalog is historical/read-only; use explicit revision publication")

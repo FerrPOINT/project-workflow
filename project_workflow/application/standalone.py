@@ -96,7 +96,7 @@ def start(uow: SAUnitOfWork, command: StandaloneStep) -> dict[str, Any]:
     workflow = uow.workflows.lock(command.workflow_id)
     if project is None or workflow is None or project.workflow_id != workflow.id:
         raise ConflictError("Explicit namespace/workflow selection does not match")
-    if workflow.key and workflow.key.startswith(("single-task-v1:", "hermes-sdlc", "base-sdlc")):
+    if workflow.key and workflow.key.startswith(("single-task-v1:", "hermes-sdlc", "base-sdlc", "fleet:background:")):
         raise ConflictError("Platform catalog requires platform admission")
     mode = uow.workflows.get_mode_by_key(workflow.id, command.mode_key)
     if mode is None:

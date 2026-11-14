@@ -16,6 +16,7 @@ from project_workflow.build_provenance import (
     BuildProvenanceError,
     load_build_provenance,
 )
+from project_workflow.domain.background import BackgroundStep
 from project_workflow.domain.base_binding import DatabaseId
 from project_workflow.domain.configured_cli import (
     ConfiguredArtifactReadback,
@@ -247,6 +248,9 @@ def runtime_catalog(
             }
             with SAUnitOfWork() as uow:
                 installation = observe_installation(uow)
+                from project_workflow.infrastructure.db.background_professions import background_catalog
+
+                background = background_catalog(uow)
                 return {
                     "ok": True,
                     "namespaces": [
@@ -255,12 +259,12 @@ def runtime_catalog(
                          **namespace_themes[int(binding.namespace_id)],
                          "workflow_id": int(binding.workflow_id)}
                         for binding in installation.bindings
-                    ],
+                    ] + [{**item, **namespace_themes[item["id"]]} for item in background["namespaces"]],
                     "workflows": [
                         {"id": int(binding.workflow_id), "key": binding.workflow_key,
                          "name": config.MANAGED_NAMESPACE_WORKFLOW_NAME}
                         for binding in installation.bindings
-                    ],
+                    ] + background["workflows"],
                 }
         except (ValueError, KeyError):
             return _error("Single-task installation missing or divergent", 503)
@@ -304,13 +308,50 @@ def runtime_assign(
     return configured_cli_api.assign(payload, authorization)
 
 
+def runtime_background_catalog(namespace_id: int, workflow_id: int,
+                               authorization: str | None = Header(default=None)) -> dict[str, Any] | JSONResponse:
+    """Catalog-only readback of the selected immutable background publication."""
+    from project_workflow.application.catalog_publication import read_revision
+    from project_workflow.domain.exceptions import ConflictError
+
+    from . import configured_cli_api
+
+    try:
+        if config.get_settings().PROJECT_WORKFLOW_MODE != "platform":
+            return _error("Background catalog requires platform mode", 403)
+        credential = _authorized_service_credential(authorization)
+        if credential is None:
+            return _error("Catalog credential required", 401)
+        if credential.kind != "catalog":
+            return _error("Dedicated catalog reader required", 403)
+        with SAUnitOfWork() as uow:
+            uow.lock_catalog_state(shared=True)
+            namespace = uow.projects.get_by_id(namespace_id)
+            workflow = uow.workflows.get_by_id(workflow_id)
+            if (namespace is None or workflow is None or namespace.code not in {"BUG_SEARCHER", "REFACTORER"}
+                    or not uow.workflows.belongs_to_profession(workflow_id, namespace_id)
+                    or workflow.key != f"fleet:background:{namespace.code.lower()}"):
+                raise ConflictError("Background namespace/workflow ownership mismatch")
+            revision = read_revision(uow, workflow, workflow.active_catalog_version, selected=True)
+            return {"ok": True, "namespace_id": namespace_id, "profession": namespace.code,
+                    "cli_command": namespace.cli_command, **revision}
+    except configured_cli_api._REQUEST_ERRORS as exc:
+        return configured_cli_api.error(exc)
+
+
 def runtime_step(
-    payload: ConfiguredStep | StandaloneStep,
+    payload: ConfiguredStep | StandaloneStep | BackgroundStep,
     authorization: str | None = Header(default=None),
 ) -> dict[str, Any] | JSONResponse:
     from project_workflow.config import get_settings
 
     from . import configured_cli_api
+    if isinstance(payload, BackgroundStep):
+        from . import background_cli_api
+
+        if get_settings().PROJECT_WORKFLOW_MODE != "platform":
+            return _error("Background execution requires platform mode", 422)
+        return background_cli_api.step(payload, authorization)
     if get_settings().PROJECT_WORKFLOW_MODE == "standalone":
         from project_workflow.application import standalone
         from project_workflow.infrastructure.db.uow import SAUnitOfWork
@@ -333,7 +374,7 @@ def runtime_step(
 
 
 def runtime_history(
-    task: str = Query(...),
+    task: str | None = Query(default=None),
     n: int | None = Query(default=None, ge=1, le=200),
     authorization: str | None = Header(default=None),
     interaction_protocol: Literal["configured-cli-v1"] = Query(...),
@@ -343,12 +384,30 @@ def runtime_history(
     assignment_operation_key: str | None = Query(default=None, min_length=1, max_length=128),
     projection: Literal["fleet-summary-v1", "evaluator-diagnostics-v1"] | None = Query(default=None),
     before_history_id: DatabaseId | None = Query(default=None),
+    background_run: str | None = Query(default=None),
 ) -> dict[str, Any] | JSONResponse:
     """Read configured operations or retained history through the same authority."""
     from project_workflow.config import get_settings
 
     from . import configured_cli_api
 
+    if background_run is not None:
+        from project_workflow.domain.namespace_ownership import canonical_uuid
+
+        from . import background_cli_api
+
+        try:
+            canonical_uuid(background_run)
+            if (get_settings().PROJECT_WORKFLOW_MODE != "platform" or task is not None
+                    or execution_ref is not None or assignment_operation_key is not None or projection is not None):
+                raise ValueError("Background history cannot select a Tracker or standalone execution")
+            return background_cli_api.history(background_run, namespace_id, authorization, n=n or 200,
+                operation_key=operation_key,
+                before_history_id=int(before_history_id) if before_history_id is not None else None)
+        except ValueError:
+            return _error("Invalid background history selector", 422)
+    if task is None:
+        return _error("Explicit task or background run required", 422)
     if get_settings().PROJECT_WORKFLOW_MODE == "standalone":
         from project_workflow.application import standalone
         from project_workflow.infrastructure.db.uow import SAUnitOfWork

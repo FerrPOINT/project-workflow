@@ -57,6 +57,9 @@ def main(argv: list[str] | None = None) -> int:
                     from project_workflow.infrastructure.db.single_task_catalog import ensure_single_task_catalog
 
                     readback = ensure_single_task_catalog(uow)
+                    from project_workflow.infrastructure.db.background_professions import ensure_background_professions
+
+                    ensure_background_professions(uow)
     except DatabaseRecreateRequired as exc:
         print(str(exc), file=sys.stderr)
         return exc.exit_code

@@ -9,6 +9,7 @@ from typing import Any
 import requests
 from sqlalchemy.exc import IntegrityError
 
+from ..domain.background import BackgroundFence
 from ..domain.configured_cli import ConfiguredCliFence
 from ..domain.exceptions import ConcurrentTransitionError
 from ..domain.phase_report import PhaseReport, PhaseReportFormatError
@@ -318,7 +319,7 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
     item_ids = [item_id for item_id, _ in evaluation_items]
     item_text = dict(evaluation_items)
     configured = (engine.runtime_fence
-                  if isinstance(engine.runtime_fence, (ConfiguredCliFence, StandaloneFence)) else None)
+                  if isinstance(engine.runtime_fence, (ConfiguredCliFence, StandaloneFence, BackgroundFence)) else None)
     delegation_allowed = configured is None and current_contract.delegate_agent is not None
     system = PromptBuilder.SYSTEM_PROMPT
     prompt_version = PromptBuilder.PROMPT_VERSION
@@ -628,6 +629,10 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
         from ..application.standalone import prepare_history as prepare_local_history
 
         prepare_local_history(runtime_fence, run_data)
+    elif isinstance(runtime_fence, BackgroundFence):
+        from ..application.background import prepare_history as prepare_background_history
+
+        prepare_background_history(runtime_fence, run_data)
 
     try:
         step_history_id = engine.db.record_step(**run_data)
@@ -647,10 +652,14 @@ def evaluate_llm_report(report: str, phase: Phase, engine: Any) -> dict[str, Any
             from ..application.standalone import finish_history as finish_local_history
 
             finish_local_history(engine.db, runtime_fence, step_history_id, result)
+        elif isinstance(runtime_fence, BackgroundFence):
+            from ..application.background import finish_history as finish_background_history
+
+            finish_background_history(engine.db, runtime_fence, step_history_id, result)
         engine.db.commit()
     except IntegrityError:
         engine.db.rollback()
-        if isinstance(getattr(engine, "runtime_fence", None), (ConfiguredCliFence, StandaloneFence)):
+        if isinstance(getattr(engine, "runtime_fence", None), (ConfiguredCliFence, StandaloneFence, BackgroundFence)):
             raise
         replayed = _replay(engine, task_id, phase_id, fingerprint)
         if replayed is not None:
