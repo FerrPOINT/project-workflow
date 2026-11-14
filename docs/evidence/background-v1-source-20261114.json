@@ -57,10 +57,10 @@
     "workflow-delta-6a538e0344",
     "workflow-package-f70d497b1b",
     "workflow-27a2dd28a2",
-    "workflow-schema-cbe0656733"
+    "workflow-schema-cbe0656733",
+    "workflow-browser-382bb5a9a1"
   ],
   "remaining": [
-    "Eleven committed Python Playwright cases; dependencies and cached Chromium1208 prepared, execution pending shared host slot",
     "One POSIX executable-mode case skipped on Windows",
     "Final artifacts, isolated Compose/Kubernetes installation and real-agent acceptance"
   ],
@@ -83,7 +83,7 @@
     },
     "python_playwright": {
       "count": 11,
-      "state": "Baseline runner dependency absent; pinned dependency and matching cached engine now prepared, execution pending"
+      "state": "passed separately: eleven cases, zero skips, controlled HTTP/SQLite"
     },
     "posix_git_mode": {
       "count": 1,
@@ -123,5 +123,23 @@
     "full_paths": 47,
     "full_schema_sha256": "51733595525d3eb59529a8ec26361a1879273eea521d81ce54c5cfcae600393f",
     "base_binding_change": "Actual exporter normalized the terminal newline only; parsed model content is unchanged"
+  },
+  "automated_browser": {
+    "sha": "c3a973beb148464fa49e76493f4bca4e9efcf46e",
+    "scope": "Committed automated browser tests; controlled HTTP/SQLite, not live installation",
+    "seconds": 43.3,
+    "exit_code": 0,
+    "counts": {
+      "tests": 11,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "source_unchanged": true,
+    "qualified": true,
+    "receipt_id": "workflow-browser-382bb5a9a1",
+    "playwright": "1.58.0",
+    "chromium_revision": "1208",
+    "live_installation": false
   }
 }

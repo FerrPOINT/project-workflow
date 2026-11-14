@@ -397,8 +397,9 @@ Three real pinned Base package cases also pass with controlled HTTP/SQLite
 peers. Actual OpenAPI exporters match the tracked seven-path runtime and
 one-path binding snapshots byte-for-byte after newline normalization; the
 binding exporter removed one extra terminal newline. The full generated schema
-contains 47 paths. Browser dependencies and matching cached Chromium are ready;
-eleven committed browser cases and one POSIX provenance case remain open.
+contains 47 paths. All eleven committed Python Playwright browser cases passed
+on `c3a973b`, with zero skips and unchanged source, using controlled HTTP/SQLite
+peers and Chromium 1208. One POSIX provenance case remains open.
 
 See [compact source evidence](evidence/background-v1-source-20261114.json).
 Recorded skips, exact-artifact installation and real-agent acceptance remain
